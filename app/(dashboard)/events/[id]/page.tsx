@@ -9,7 +9,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
   const [{ data: event }, { data: talentDetails }, { data: opportunities }, { data: talents }, { data: brands }] = await Promise.all([
     supabase.from('events').select('*').eq('id', id).single(),
     supabase.from('talent_event_details')
-      .select('*, talent:talents(id,name,category,status)')
+      .select('id, talent_id, carpet_date, hotel, ticket, driver, airport_transfer, makeup, hair, dress, jewelry, shoes, content, agent_contact, extra_notes, talent:talents(id,name,category,status)')
       .eq('event_id', id)
       .order('created_at'),
     supabase.from('opportunities')

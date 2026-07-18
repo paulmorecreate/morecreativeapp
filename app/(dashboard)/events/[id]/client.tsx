@@ -37,11 +37,20 @@ const priorityOpts = [
 
 type TalentDetail = {
   id: string
+  talent_id: string
   carpet_date: string | null
   hotel: string | null
+  ticket: string | null
+  driver: string | null
+  airport_transfer: string | null
+  makeup: string | null
+  hair: string | null
   dress: string | null
   jewelry: string | null
+  shoes: string | null
+  content: string | null
   agent_contact: string | null
+  extra_notes: string | null
   talent: { id: string; name: string; category: string | null; status: string | null } | null
 }
 
@@ -55,6 +64,23 @@ type Opportunity = {
 
 type SimpleRecord = { id: string; name: string }
 
+const emptyScheduleForm = {
+  talent_id: '',
+  carpet_date: '',
+  hotel: '',
+  ticket: '',
+  driver: '',
+  airport_transfer: '',
+  makeup: '',
+  hair: '',
+  dress: '',
+  jewelry: '',
+  shoes: '',
+  content: '',
+  agent_contact: '',
+  extra_notes: '',
+}
+
 type Props = {
   event: Event
   talentDetails: TalentDetail[]
@@ -65,14 +91,10 @@ type Props = {
 
 export function EventDetailClient({ event, talentDetails, opportunities, talents, brands }: Props) {
   const router = useRouter()
+
+  // Event edit modal
   const [open, setOpen] = useState(false)
-  const [oppOpen, setOppOpen] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [oppForm, setOppForm] = useState({
-    talent_id: '', brand_id: '', type: '',
-    status: 'prospect', priority: 'medium', estimated_value: '',
-    follow_up: '', notes: '',
-  })
   const [form, setForm] = useState({
     name: event.name ?? '',
     location: event.location ?? '',
@@ -81,14 +103,87 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
     notes: event.notes ?? '',
   })
 
+  // Talent schedule modal (null = closed, 'add' = adding new, TalentDetail = editing)
+  const [scheduleTarget, setScheduleTarget] = useState<null | 'add' | TalentDetail>(null)
+  const [scheduleForm, setScheduleForm] = useState(emptyScheduleForm)
+
+  // Opportunity modal
+  const [oppOpen, setOppOpen] = useState(false)
+  const [oppForm, setOppForm] = useState({
+    talent_id: '', brand_id: '', type: '',
+    status: 'prospect', priority: 'medium', estimated_value: '',
+    follow_up: '', notes: '',
+  })
+
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
   }
 
+  function schedField(k: keyof typeof scheduleForm) {
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+      setScheduleForm(f => ({ ...f, [k]: e.target.value }))
+  }
+
   function oppField(k: keyof typeof oppForm) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setOppForm(f => ({ ...f, [k]: e.target.value }))
+  }
+
+  function openAddSchedule() {
+    setScheduleForm(emptyScheduleForm)
+    setScheduleTarget('add')
+  }
+
+  function openEditSchedule(detail: TalentDetail) {
+    setScheduleForm({
+      talent_id: detail.talent_id,
+      carpet_date: detail.carpet_date ?? '',
+      hotel: detail.hotel ?? '',
+      ticket: detail.ticket ?? '',
+      driver: detail.driver ?? '',
+      airport_transfer: detail.airport_transfer ?? '',
+      makeup: detail.makeup ?? '',
+      hair: detail.hair ?? '',
+      dress: detail.dress ?? '',
+      jewelry: detail.jewelry ?? '',
+      shoes: detail.shoes ?? '',
+      content: detail.content ?? '',
+      agent_contact: detail.agent_contact ?? '',
+      extra_notes: detail.extra_notes ?? '',
+    })
+    setScheduleTarget(detail)
+  }
+
+  async function handleScheduleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    const supabase = createClient()
+    const payload = {
+      talent_id: scheduleForm.talent_id || null,
+      event_id: event.id,
+      carpet_date: scheduleForm.carpet_date || null,
+      hotel: scheduleForm.hotel || null,
+      ticket: scheduleForm.ticket || null,
+      driver: scheduleForm.driver || null,
+      airport_transfer: scheduleForm.airport_transfer || null,
+      makeup: scheduleForm.makeup || null,
+      hair: scheduleForm.hair || null,
+      dress: scheduleForm.dress || null,
+      jewelry: scheduleForm.jewelry || null,
+      shoes: scheduleForm.shoes || null,
+      content: scheduleForm.content || null,
+      agent_contact: scheduleForm.agent_contact || null,
+      extra_notes: scheduleForm.extra_notes || null,
+    }
+    if (scheduleTarget === 'add') {
+      await supabase.from('talent_event_details').insert(payload)
+    } else if (scheduleTarget && scheduleTarget !== 'add') {
+      await supabase.from('talent_event_details').update(payload).eq('id', scheduleTarget.id)
+    }
+    setSaving(false)
+    setScheduleTarget(null)
+    router.refresh()
   }
 
   async function handleOppSubmit(e: React.FormEvent) {
@@ -128,6 +223,9 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
     router.refresh()
   }
 
+  const isEditing = scheduleTarget && scheduleTarget !== 'add'
+  const editingTalentName = isEditing ? (scheduleTarget as TalentDetail).talent?.name : null
+
   return (
     <div>
       <div className="mb-6">
@@ -154,7 +252,7 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
           </div>
           <Button variant="secondary" onClick={() => setOpen(true)}>
             <Pencil className="w-3.5 h-3.5" />
-            Edit
+            Edit Event
           </Button>
         </div>
       </div>
@@ -170,13 +268,20 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
         )}
 
         <div className={event.notes ? 'col-span-2' : 'col-span-3'}>
+          {/* Talent Schedule */}
           <div className="bg-white rounded-xl border border-gray-200 mb-5">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Talent Schedule</h2>
-              <span className="text-xs text-gray-400">{talentDetails.length} talents</span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-400">{talentDetails.length} talents</span>
+                <Button variant="secondary" onClick={openAddSchedule}>
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Talent
+                </Button>
+              </div>
             </div>
             {!talentDetails.length && (
-              <p className="px-5 py-4 text-sm text-gray-400">No talent details added yet.</p>
+              <p className="px-5 py-4 text-sm text-gray-400">No talents added yet. Click "Add Talent" to start building the schedule.</p>
             )}
             {talentDetails.length > 0 && (
               <div className="overflow-x-auto">
@@ -189,11 +294,12 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
                       <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">Dress</th>
                       <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">Jewelry</th>
                       <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">Agent</th>
+                      <th className="px-4 py-3" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {talentDetails.map(detail => (
-                      <tr key={detail.id} className="hover:bg-gray-50/50">
+                      <tr key={detail.id} className="hover:bg-gray-50/50 group">
                         <td className="px-4 py-3">
                           <Link href={`/talents/${detail.talent?.id}`} className="font-medium text-gray-900 hover:text-black">
                             {detail.talent?.name ?? '—'}
@@ -208,6 +314,14 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
                         <td className="px-4 py-3 text-gray-600 text-xs">{detail.dress ?? '—'}</td>
                         <td className="px-4 py-3 text-gray-600 text-xs">{detail.jewelry ?? '—'}</td>
                         <td className="px-4 py-3 text-gray-600 text-xs">{detail.agent_contact ?? '—'}</td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => openEditSchedule(detail)}
+                            className="text-gray-300 hover:text-gray-600 transition-colors opacity-0 group-hover:opacity-100"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -216,6 +330,7 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
             )}
           </div>
 
+          {/* Opportunities */}
           <div className="bg-white rounded-xl border border-gray-200">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Opportunities</h2>
@@ -247,6 +362,94 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
         </div>
       </div>
 
+      {/* Talent Schedule Modal */}
+      <Modal
+        open={scheduleTarget !== null}
+        onClose={() => setScheduleTarget(null)}
+        title={isEditing ? `Edit — ${editingTalentName}` : 'Add Talent to Schedule'}
+      >
+        <form onSubmit={handleScheduleSubmit} className="space-y-4">
+          {!isEditing && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Talent</label>
+              <Select
+                value={scheduleForm.talent_id}
+                onChange={schedField('talent_id')}
+                options={talents.map(t => ({ value: t.id, label: t.name }))}
+                placeholder="Select talent…"
+              />
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Carpet Date</label>
+              <Input value={scheduleForm.carpet_date} onChange={schedField('carpet_date')} placeholder="e.g. 14th May, 9PM" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Hotel</label>
+              <Input value={scheduleForm.hotel} onChange={schedField('hotel')} placeholder="Hotel name / room" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Ticket</label>
+              <Input value={scheduleForm.ticket} onChange={schedField('ticket')} placeholder="Ticket details" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Driver</label>
+              <Input value={scheduleForm.driver} onChange={schedField('driver')} placeholder="Driver name / contact" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Airport Transfer</label>
+              <Input value={scheduleForm.airport_transfer} onChange={schedField('airport_transfer')} placeholder="Arrival / departure details" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Agent Contact</label>
+              <Input value={scheduleForm.agent_contact} onChange={schedField('agent_contact')} placeholder="Name, phone, email" />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Dress</label>
+              <Input value={scheduleForm.dress} onChange={schedField('dress')} placeholder="Brand / look" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Jewelry</label>
+              <Input value={scheduleForm.jewelry} onChange={schedField('jewelry')} placeholder="Brand / pieces" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Shoes</label>
+              <Input value={scheduleForm.shoes} onChange={schedField('shoes')} placeholder="Brand / style" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Makeup</label>
+              <Input value={scheduleForm.makeup} onChange={schedField('makeup')} placeholder="Artist / brand" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Hair</label>
+              <Input value={scheduleForm.hair} onChange={schedField('hair')} placeholder="Stylist / look" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Content Plan</label>
+            <Input value={scheduleForm.content} onChange={schedField('content')} placeholder="e.g. GRWM, carpet video, BTS" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Extra Notes</label>
+            <Textarea value={scheduleForm.extra_notes} onChange={schedField('extra_notes')} rows={2} placeholder="Anything else…" />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setScheduleTarget(null)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : isEditing ? 'Save Changes' : 'Add to Schedule'}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Add Opportunity Modal */}
       <Modal open={oppOpen} onClose={() => setOppOpen(false)} title="Add Opportunity">
         <form onSubmit={handleOppSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
@@ -292,6 +495,7 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
         </form>
       </Modal>
 
+      {/* Edit Event Modal */}
       <Modal open={open} onClose={() => setOpen(false)} title="Edit Event">
         <form onSubmit={handleSave} className="space-y-4">
           <div className="space-y-1.5">
