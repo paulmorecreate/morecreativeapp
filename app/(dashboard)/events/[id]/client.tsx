@@ -178,7 +178,7 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
     }
     if (scheduleTarget === 'add') {
       await supabase.from('talent_event_details').insert(payload)
-    } else if (scheduleTarget && scheduleTarget !== 'add') {
+    } else if (scheduleTarget && typeof scheduleTarget === 'object') {
       await supabase.from('talent_event_details').update(payload).eq('id', scheduleTarget.id)
     }
     setSaving(false)
@@ -223,7 +223,7 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
     router.refresh()
   }
 
-  const isEditing = scheduleTarget && scheduleTarget !== 'add'
+  const isEditing = scheduleTarget !== null && typeof scheduleTarget === 'object'
   const editingTalentName = isEditing ? (scheduleTarget as TalentDetail).talent?.name : null
 
   return (
