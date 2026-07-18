@@ -6,7 +6,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
   const { id } = await params
   const supabase = await createClient()
 
-  const [{ data: event }, { data: talentDetails }, { data: opportunities }] = await Promise.all([
+  const [{ data: event }, { data: talentDetails }, { data: opportunities }, { data: talents }, { data: brands }] = await Promise.all([
     supabase.from('events').select('*').eq('id', id).single(),
     supabase.from('talent_event_details')
       .select('*, talent:talents(id,name,category,status)')
@@ -16,6 +16,8 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
       .select('*, talent:talents(name), brand:brands(name)')
       .eq('event_id', id)
       .order('created_at', { ascending: false }),
+    supabase.from('talents').select('id, name').order('name'),
+    supabase.from('brands').select('id, name').order('name'),
   ])
 
   if (!event) notFound()
@@ -25,6 +27,8 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
       event={event}
       talentDetails={(talentDetails ?? []) as any}
       opportunities={(opportunities ?? []) as any}
+      talents={talents ?? []}
+      brands={brands ?? []}
     />
   )
 }

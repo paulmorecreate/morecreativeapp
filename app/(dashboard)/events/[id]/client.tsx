@@ -3,14 +3,37 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, MapPin, Calendar, Pencil } from 'lucide-react'
+import { ArrowLeft, MapPin, Calendar, Pencil, Plus } from 'lucide-react'
 import { Event } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input, Textarea } from '@/components/ui/input'
+import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 import { formatDate } from '@/lib/utils'
+
+const statusOpts = [
+  { value: 'prospect', label: 'Prospect' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'confirmed', label: 'Confirmed' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'cancelled', label: 'Cancelled' },
+]
+
+const typeOpts = [
+  { value: 'showroom', label: 'Showroom' },
+  { value: 'carpet', label: 'Red Carpet' },
+  { value: 'campaign', label: 'Campaign' },
+  { value: 'photoshoot', label: 'Photoshoot' },
+  { value: 'cover', label: 'Magazine Cover' },
+  { value: 'collaboration', label: 'Collaboration' },
+]
+
+const priorityOpts = [
+  { value: 'high', label: 'High' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'low', label: 'Low' },
+]
 
 type TalentDetail = {
   id: string
@@ -30,16 +53,26 @@ type Opportunity = {
   brand: { name: string } | null
 }
 
+type SimpleRecord = { id: string; name: string }
+
 type Props = {
   event: Event
   talentDetails: TalentDetail[]
   opportunities: Opportunity[]
+  talents: SimpleRecord[]
+  brands: SimpleRecord[]
 }
 
-export function EventDetailClient({ event, talentDetails, opportunities }: Props) {
+export function EventDetailClient({ event, talentDetails, opportunities, talents, brands }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
+  const [oppOpen, setOppOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [oppForm, setOppForm] = useState({
+    talent_id: '', brand_id: '', type: '',
+    status: 'prospect', priority: 'medium', estimated_value: '',
+    follow_up: '', notes: '',
+  })
   const [form, setForm] = useState({
     name: event.name ?? '',
     location: event.location ?? '',
@@ -51,6 +84,32 @@ export function EventDetailClient({ event, talentDetails, opportunities }: Props
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
+  }
+
+  function oppField(k: keyof typeof oppForm) {
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+      setOppForm(f => ({ ...f, [k]: e.target.value }))
+  }
+
+  async function handleOppSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    const supabase = createClient()
+    await supabase.from('opportunities').insert({
+      event_id: event.id,
+      talent_id: oppForm.talent_id || null,
+      brand_id: oppForm.brand_id || null,
+      type: oppForm.type || null,
+      status: oppForm.status,
+      priority: oppForm.priority,
+      estimated_value: oppForm.estimated_value ? parseFloat(oppForm.estimated_value) : null,
+      follow_up: oppForm.follow_up || null,
+      notes: oppForm.notes || null,
+    })
+    setSaving(false)
+    setOppOpen(false)
+    setOppForm({ talent_id: '', brand_id: '', type: '', status: 'prospect', priority: 'medium', estimated_value: '', follow_up: '', notes: '' })
+    router.refresh()
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -160,7 +219,13 @@ export function EventDetailClient({ event, talentDetails, opportunities }: Props
           <div className="bg-white rounded-xl border border-gray-200">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Opportunities</h2>
-              <span className="text-xs text-gray-400">{opportunities.length}</span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-400">{opportunities.length}</span>
+                <Button variant="secondary" onClick={() => setOppOpen(true)}>
+                  <Plus className="w-3.5 h-3.5" />
+                  Add
+                </Button>
+              </div>
             </div>
             <div className="divide-y divide-gray-50">
               {!opportunities.length && (
@@ -181,6 +246,51 @@ export function EventDetailClient({ event, talentDetails, opportunities }: Props
           </div>
         </div>
       </div>
+
+      <Modal open={oppOpen} onClose={() => setOppOpen(false)} title="Add Opportunity">
+        <form onSubmit={handleOppSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Talent</label>
+              <Select value={oppForm.talent_id} onChange={oppField('talent_id')} options={talents.map(t => ({ value: t.id, label: t.name }))} placeholder="Select talent…" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Brand</label>
+              <Select value={oppForm.brand_id} onChange={oppField('brand_id')} options={brands.map(b => ({ value: b.id, label: b.name }))} placeholder="Select brand…" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Type</label>
+            <Select value={oppForm.type} onChange={oppField('type')} options={typeOpts} placeholder="Select type…" />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Status</label>
+              <Select value={oppForm.status} onChange={oppField('status')} options={statusOpts} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Priority</label>
+              <Select value={oppForm.priority} onChange={oppField('priority')} options={priorityOpts} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Value (€)</label>
+              <Input type="number" value={oppForm.estimated_value} onChange={oppField('estimated_value')} placeholder="0" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Follow-up</label>
+            <Input value={oppForm.follow_up} onChange={oppField('follow_up')} placeholder="What needs to happen next?" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Notes</label>
+            <Textarea value={oppForm.notes} onChange={oppField('notes')} rows={2} />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setOppOpen(false)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : 'Add Opportunity'}</Button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Edit Event">
         <form onSubmit={handleSave} className="space-y-4">
