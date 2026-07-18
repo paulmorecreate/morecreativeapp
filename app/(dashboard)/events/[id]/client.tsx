@@ -299,7 +299,7 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {talentDetails.map(detail => (
-                      <tr key={detail.id} className="hover:bg-gray-50/50 group">
+                      <tr key={detail.id} className="hover:bg-gray-50/50">
                         <td className="px-4 py-3">
                           <Link href={`/talents/${detail.talent?.id}`} className="font-medium text-gray-900 hover:text-black">
                             {detail.talent?.name ?? '—'}
@@ -317,7 +317,7 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
                         <td className="px-4 py-3 text-right">
                           <button
                             onClick={() => openEditSchedule(detail)}
-                            className="text-gray-300 hover:text-gray-600 transition-colors opacity-0 group-hover:opacity-100"
+                            className="text-gray-300 hover:text-gray-600 transition-colors"
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
