@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, Pencil } from 'lucide-react'
 import { Opportunity } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -48,12 +48,59 @@ export function OpportunitiesClient({ opportunities, talents, brands, events }: 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [open, setOpen] = useState(false)
+  const [editOpp, setEditOpp] = useState<Opportunity | null>(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
     talent_id: '', brand_id: '', event_id: '', type: '',
     status: 'prospect', priority: 'medium', estimated_value: '',
     follow_up: '', notes: '',
   })
+  const [editForm, setEditForm] = useState({
+    talent_id: '', brand_id: '', event_id: '', type: '',
+    status: 'prospect', priority: 'medium', estimated_value: '',
+    follow_up: '', notes: '',
+  })
+
+  function openEdit(opp: Opportunity) {
+    setEditForm({
+      talent_id: opp.talent_id ?? '',
+      brand_id: opp.brand_id ?? '',
+      event_id: opp.event_id ?? '',
+      type: opp.type ?? '',
+      status: opp.status ?? 'prospect',
+      priority: opp.priority ?? 'medium',
+      estimated_value: opp.estimated_value != null ? String(opp.estimated_value) : '',
+      follow_up: opp.follow_up ?? '',
+      notes: opp.notes ?? '',
+    })
+    setEditOpp(opp)
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editOpp) return
+    setSaving(true)
+    const supabase = createClient()
+    await supabase.from('opportunities').update({
+      talent_id: editForm.talent_id || null,
+      brand_id: editForm.brand_id || null,
+      event_id: editForm.event_id || null,
+      type: editForm.type || null,
+      status: editForm.status,
+      priority: editForm.priority,
+      estimated_value: editForm.estimated_value ? parseFloat(editForm.estimated_value) : null,
+      follow_up: editForm.follow_up || null,
+      notes: editForm.notes || null,
+    }).eq('id', editOpp.id)
+    setSaving(false)
+    setEditOpp(null)
+    router.refresh()
+  }
+
+  function editField(k: keyof typeof editForm) {
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+      setEditForm(f => ({ ...f, [k]: e.target.value }))
+  }
 
   const filtered = opportunities.filter(o => {
     const talentName = (o.talent as { name: string } | null)?.name ?? ''
@@ -139,12 +186,13 @@ export function OpportunitiesClient({ opportunities, talents, brands, events }: 
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Status</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Priority</th>
               <th className="text-right px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Value</th>
+              <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">
+                <td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-400">
                   {search || statusFilter ? 'No results.' : 'No opportunities yet.'}
                 </td>
               </tr>
@@ -165,6 +213,11 @@ export function OpportunitiesClient({ opportunities, talents, brands, events }: 
                 <td className="px-4 py-3"><Badge value={opp.priority} /></td>
                 <td className="px-4 py-3 text-right text-gray-600 font-medium">
                   {opp.estimated_value ? formatCurrency(opp.estimated_value) : <span className="text-gray-300">—</span>}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <button onClick={() => openEdit(opp)} className="text-gray-300 hover:text-gray-600 transition-colors">
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
                 </td>
               </tr>
             ))}
@@ -234,6 +287,57 @@ export function OpportunitiesClient({ opportunities, talents, brands, events }: 
           <div className="flex gap-3 pt-1">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)} className="flex-1">Cancel</Button>
             <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : 'Add Opportunity'}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={!!editOpp} onClose={() => setEditOpp(null)} title="Edit Opportunity">
+        <form onSubmit={handleEdit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Talent</label>
+              <Select value={editForm.talent_id} onChange={editField('talent_id')} options={talents.map(t => ({ value: t.id, label: t.name }))} placeholder="Select talent…" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Brand</label>
+              <Select value={editForm.brand_id} onChange={editField('brand_id')} options={brands.map(b => ({ value: b.id, label: b.name }))} placeholder="Select brand…" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Event</label>
+              <Select value={editForm.event_id} onChange={editField('event_id')} options={events.map(e => ({ value: e.id, label: e.name }))} placeholder="Select event…" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Type</label>
+              <Select value={editForm.type} onChange={editField('type')} options={typeOpts} placeholder="Select type…" />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Status</label>
+              <Select value={editForm.status} onChange={editField('status')} options={statusOpts} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Priority</label>
+              <Select value={editForm.priority} onChange={editField('priority')} options={priorityOpts} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Value (€)</label>
+              <Input type="number" value={editForm.estimated_value} onChange={editField('estimated_value')} placeholder="0" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Follow-up</label>
+            <Input value={editForm.follow_up} onChange={editField('follow_up')} placeholder="What needs to happen next?" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Notes</label>
+            <Textarea value={editForm.notes} onChange={editField('notes')} rows={2} placeholder="Context, details…" />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setEditOpp(null)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : 'Save Changes'}</Button>
           </div>
         </form>
       </Modal>
