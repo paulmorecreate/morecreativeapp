@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, MessageCircle } from 'lucide-react'
+import { Plus, MessageCircle, Pencil } from 'lucide-react'
 import { Conversation } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -35,6 +35,8 @@ export function ConversationsClient({ conversations }: { conversations: Conversa
   const [statusFilter, setStatusFilter] = useState('open')
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [editConvo, setEditConvo] = useState<Conversation | null>(null)
+  const [editConvoForm, setEditConvoForm] = useState({ channel: 'note', content: '', follow_up: '', status: 'open' })
   const [form, setForm] = useState({
     entity_type: 'brand', entity_id: '', channel: 'note',
     content: '', follow_up: '', status: 'open',
@@ -47,6 +49,32 @@ export function ConversationsClient({ conversations }: { conversations: Conversa
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
+  }
+
+  function editConvoField(k: keyof typeof editConvoForm) {
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+      setEditConvoForm(f => ({ ...f, [k]: e.target.value }))
+  }
+
+  function openEditConvo(c: Conversation) {
+    setEditConvoForm({ channel: c.channel ?? 'note', content: c.content ?? '', follow_up: c.follow_up ?? '', status: c.status ?? 'open' })
+    setEditConvo(c)
+  }
+
+  async function handleEditConvo(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editConvo) return
+    setSaving(true)
+    const supabase = createClient()
+    await supabase.from('conversations').update({
+      channel: editConvoForm.channel || null,
+      content: editConvoForm.content || null,
+      follow_up: editConvoForm.follow_up || null,
+      status: editConvoForm.status,
+    }).eq('id', editConvo.id)
+    setSaving(false)
+    setEditConvo(null)
+    router.refresh()
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -101,7 +129,7 @@ export function ConversationsClient({ conversations }: { conversations: Conversa
           <div className="text-center py-16 text-gray-400 text-sm">No conversations.</div>
         )}
         {filtered.map(c => (
-          <div key={c.id} className="bg-white rounded-xl border border-gray-200 px-5 py-4">
+          <div key={c.id} className="bg-white rounded-xl border border-gray-200 px-5 py-4 group">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-2">
@@ -119,11 +147,43 @@ export function ConversationsClient({ conversations }: { conversations: Conversa
                   </p>
                 )}
               </div>
-              <Badge value={c.status} />
+              <div className="flex items-center gap-2 shrink-0">
+                <Badge value={c.status} />
+                <button onClick={() => openEditConvo(c)} className="text-gray-200 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         ))}
       </div>
+
+      <Modal open={!!editConvo} onClose={() => setEditConvo(null)} title="Edit Conversation">
+        <form onSubmit={handleEditConvo} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Channel</label>
+              <Select value={editConvoForm.channel} onChange={editConvoField('channel')} options={channelOpts} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Status</label>
+              <Select value={editConvoForm.status} onChange={editConvoField('status')} options={statusOpts} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Content</label>
+            <Textarea value={editConvoForm.content} onChange={editConvoField('content')} rows={3} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Follow-up required</label>
+            <Input value={editConvoForm.follow_up} onChange={editConvoField('follow_up')} placeholder="What needs to happen next?" />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setEditConvo(null)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : 'Save Changes'}</Button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Log Conversation">
         <form onSubmit={handleSubmit} className="space-y-4">

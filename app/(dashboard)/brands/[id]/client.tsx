@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ExternalLink, Pencil } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Pencil, Plus } from 'lucide-react'
 import { Brand, Opportunity, Conversation } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,19 @@ import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 import { formatDate, formatCurrency } from '@/lib/utils'
+
+const channelOpts = [
+  { value: 'email', label: 'Email' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'call', label: 'Call' },
+  { value: 'meeting', label: 'Meeting' },
+  { value: 'note', label: 'Note' },
+]
+
+const convoStatusOpts = [
+  { value: 'open', label: 'Open' },
+  { value: 'resolved', label: 'Resolved' },
+]
 
 const categoryOpts = [
   { value: 'showroom', label: 'Showroom' },
@@ -35,6 +48,11 @@ export function BrandDetailClient({ brand, opportunities, conversations }: Props
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [logConvoOpen, setLogConvoOpen] = useState(false)
+  const [editConvo, setEditConvo] = useState<Conversation | null>(null)
+  const [convoSaving, setConvoSaving] = useState(false)
+  const [convoForm, setConvoForm] = useState({ channel: 'note', content: '', follow_up: '', status: 'open' })
+  const [editConvoForm, setEditConvoForm] = useState({ channel: 'note', content: '', follow_up: '', status: 'open' })
   const [form, setForm] = useState({
     name: brand.name ?? '',
     link: brand.link ?? '',
@@ -50,6 +68,55 @@ export function BrandDetailClient({ brand, opportunities, conversations }: Props
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
+  }
+
+  function convoField(k: keyof typeof convoForm) {
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+      setConvoForm(f => ({ ...f, [k]: e.target.value }))
+  }
+
+  function editConvoField(k: keyof typeof editConvoForm) {
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+      setEditConvoForm(f => ({ ...f, [k]: e.target.value }))
+  }
+
+  async function handleLogConvo(e: React.FormEvent) {
+    e.preventDefault()
+    setConvoSaving(true)
+    const supabase = createClient()
+    await supabase.from('conversations').insert({
+      entity_type: 'brand',
+      entity_id: brand.id,
+      channel: convoForm.channel || null,
+      content: convoForm.content || null,
+      follow_up: convoForm.follow_up || null,
+      status: convoForm.status,
+    })
+    setConvoSaving(false)
+    setLogConvoOpen(false)
+    setConvoForm({ channel: 'note', content: '', follow_up: '', status: 'open' })
+    router.refresh()
+  }
+
+  function openEditConvo(c: Conversation) {
+    setEditConvoForm({ channel: c.channel ?? 'note', content: c.content ?? '', follow_up: c.follow_up ?? '', status: c.status ?? 'open' })
+    setEditConvo(c)
+  }
+
+  async function handleEditConvo(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editConvo) return
+    setConvoSaving(true)
+    const supabase = createClient()
+    await supabase.from('conversations').update({
+      channel: editConvoForm.channel || null,
+      content: editConvoForm.content || null,
+      follow_up: editConvoForm.follow_up || null,
+      status: editConvoForm.status,
+    }).eq('id', editConvo.id)
+    setConvoSaving(false)
+    setEditConvo(null)
+    router.refresh()
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -155,18 +222,26 @@ export function BrandDetailClient({ brand, opportunities, conversations }: Props
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200">
-            <div className="px-5 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Conversations</h2>
+              <button onClick={() => setLogConvoOpen(true)} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700">
+                <Plus className="w-3 h-3" /> Log
+              </button>
             </div>
             <div className="divide-y divide-gray-50">
               {!conversations?.length && (
                 <p className="px-5 py-4 text-sm text-gray-400">No conversations logged.</p>
               )}
               {conversations?.map(c => (
-                <div key={c.id} className="px-5 py-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Badge value={c.status} />
-                    <span className="text-xs text-gray-400 capitalize">{c.channel ?? 'note'} · {formatDate(c.created_at)}</span>
+                <div key={c.id} className="px-5 py-3 group">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <Badge value={c.status} />
+                      <span className="text-xs text-gray-400 capitalize">{c.channel ?? 'note'} · {formatDate(c.created_at)}</span>
+                    </div>
+                    <button onClick={() => openEditConvo(c)} className="text-gray-200 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Pencil className="w-3 h-3" />
+                    </button>
                   </div>
                   {c.content && <p className="text-sm text-gray-700">{c.content}</p>}
                   {c.follow_up && <p className="text-xs text-amber-600 mt-1">↳ {c.follow_up}</p>}
@@ -176,6 +251,60 @@ export function BrandDetailClient({ brand, opportunities, conversations }: Props
           </div>
         </div>
       </div>
+
+      <Modal open={logConvoOpen} onClose={() => setLogConvoOpen(false)} title="Log Conversation">
+        <form onSubmit={handleLogConvo} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Channel</label>
+              <Select value={convoForm.channel} onChange={convoField('channel')} options={channelOpts} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Status</label>
+              <Select value={convoForm.status} onChange={convoField('status')} options={convoStatusOpts} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Content</label>
+            <Textarea value={convoForm.content} onChange={convoField('content')} rows={3} placeholder="What was discussed / what happened?" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Follow-up required</label>
+            <Input value={convoForm.follow_up} onChange={convoField('follow_up')} placeholder="What needs to happen next?" />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setLogConvoOpen(false)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={convoSaving} className="flex-1">{convoSaving ? 'Saving…' : 'Log It'}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={!!editConvo} onClose={() => setEditConvo(null)} title="Edit Conversation">
+        <form onSubmit={handleEditConvo} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Channel</label>
+              <Select value={editConvoForm.channel} onChange={editConvoField('channel')} options={channelOpts} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Status</label>
+              <Select value={editConvoForm.status} onChange={editConvoField('status')} options={convoStatusOpts} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Content</label>
+            <Textarea value={editConvoForm.content} onChange={editConvoField('content')} rows={3} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Follow-up required</label>
+            <Input value={editConvoForm.follow_up} onChange={editConvoField('follow_up')} placeholder="What needs to happen next?" />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setEditConvo(null)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={convoSaving} className="flex-1">{convoSaving ? 'Saving…' : 'Save Changes'}</Button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Edit Brand">
         <form onSubmit={handleSave} className="space-y-4">
