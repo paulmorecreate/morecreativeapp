@@ -79,7 +79,7 @@ export default async function DashboardPage() {
               <p className="px-5 py-4 text-sm text-gray-400">No high priority opportunities.</p>
             )}
             {recentOpps?.map(opp => (
-              <Link key={opp.id} href="/opportunities" className="flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors">
+              <Link key={opp.id} href={`/opportunities/${opp.id}`} className="flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors">
                 <div className="min-w-0">
                   <div className="text-sm font-medium text-gray-900 truncate">
                     {(opp.talent as { name: string } | null)?.name ?? '—'} × {(opp.brand as { name: string } | null)?.name ?? '—'}

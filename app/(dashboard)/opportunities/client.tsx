@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Plus, Search, Pencil } from 'lucide-react'
 import { Opportunity } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
@@ -198,7 +199,7 @@ export function OpportunitiesClient({ opportunities, talents, brands, events }: 
               </tr>
             )}
             {filtered.map(opp => (
-              <tr key={opp.id} className="hover:bg-gray-50/50 transition-colors">
+              <tr key={opp.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => router.push(`/opportunities/${opp.id}`)}>
                 <td className="px-4 py-3 font-medium text-gray-900">
                   {(opp.talent as { name: string } | null)?.name ?? <span className="text-gray-300">—</span>}
                 </td>
@@ -214,8 +215,8 @@ export function OpportunitiesClient({ opportunities, talents, brands, events }: 
                 <td className="px-4 py-3 text-right text-gray-600 font-medium">
                   {opp.estimated_value ? formatCurrency(opp.estimated_value) : <span className="text-gray-300">—</span>}
                 </td>
-                <td className="px-4 py-3 text-right">
-                  <button onClick={() => openEdit(opp)} className="text-gray-300 hover:text-gray-600 transition-colors">
+                <td className="px-4 py-3 text-right" onClick={e => { e.stopPropagation(); openEdit(opp) }}>
+                  <button className="text-gray-300 hover:text-gray-600 transition-colors">
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
                 </td>
