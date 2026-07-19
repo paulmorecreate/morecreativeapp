@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag } from 'lucide-react'
+import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag, Trash2, CheckCircle2, Circle } from 'lucide-react'
 import { Event, ProjectCategory } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,8 @@ import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 import { formatDate } from '@/lib/utils'
+
+// ─── Option lists ─────────────────────────────────────────────────────────────
 
 const oppStatusOpts = [
   { value: 'prospect', label: 'Prospect' },
@@ -40,6 +42,8 @@ const projectStatusOpts = [
   { value: 'completed', label: 'Completed' },
 ]
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 type TalentDetail = {
   id: string
   talent_id: string
@@ -67,23 +71,30 @@ type Opportunity = {
   brand: { name: string } | null
 }
 
+type ShowTalent = {
+  id: string
+  talent_id: string
+  accepted: boolean
+  notes: string | null
+  talent: { id: string; name: string; category: string | null; status: string | null } | null
+}
+
+type BrandShow = {
+  id: string
+  brand_id: string
+  show_date: string | null
+  show_time: string | null
+  notes: string | null
+  brand: { id: string; name: string } | null
+  project_brand_talents: ShowTalent[]
+}
+
 type SimpleRecord = { id: string; name: string }
 
 const emptyScheduleForm = {
-  talent_id: '',
-  carpet_date: '',
-  hotel: '',
-  ticket: '',
-  driver: '',
-  airport_transfer: '',
-  makeup: '',
-  hair: '',
-  dress: '',
-  jewelry: '',
-  shoes: '',
-  content: '',
-  agent_contact: '',
-  extra_notes: '',
+  talent_id: '', carpet_date: '', hotel: '', ticket: '', driver: '',
+  airport_transfer: '', makeup: '', hair: '', dress: '', jewelry: '',
+  shoes: '', content: '', agent_contact: '', extra_notes: '',
 }
 
 type Props = {
@@ -93,11 +104,15 @@ type Props = {
   talents: SimpleRecord[]
   brands: SimpleRecord[]
   categories: ProjectCategory[]
+  brandShows: BrandShow[]
 }
 
-export function ProjectDetailClient({ project, talentDetails, opportunities, talents, brands, categories }: Props) {
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export function ProjectDetailClient({ project, talentDetails, opportunities, talents, brands, categories, brandShows }: Props) {
   const router = useRouter()
 
+  // Project edit
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
@@ -109,138 +124,207 @@ export function ProjectDetailClient({ project, talentDetails, opportunities, tal
     status: project.status ?? 'active',
     notes: project.notes ?? '',
   })
-
   const categoryOpts = categories.map(c => ({ value: c.name, label: c.name }))
 
+  // Talent schedule
   const [scheduleTarget, setScheduleTarget] = useState<null | 'add' | TalentDetail>(null)
   const [scheduleForm, setScheduleForm] = useState(emptyScheduleForm)
 
+  // Opportunities
   const [oppOpen, setOppOpen] = useState(false)
   const [oppForm, setOppForm] = useState({
     talent_id: '', brand_id: '', type: '',
-    status: 'prospect', priority: 'medium', estimated_value: '',
-    follow_up: '', notes: '',
+    status: 'prospect', priority: 'medium', estimated_value: '', follow_up: '', notes: '',
   })
+
+  // Brand shows — add/edit show
+  const [showModal, setShowModal] = useState<null | 'add' | BrandShow>(null)
+  const [showForm, setShowForm] = useState({ brand_id: '', show_date: '', show_time: '', notes: '' })
+
+  // Brand shows — add/edit talent in show
+  const [talentModal, setTalentModal] = useState<null | { projectBrandId: string; entry?: ShowTalent }>(null)
+  const [talentForm, setTalentForm] = useState({ talent_id: '', accepted: false, notes: '' })
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
   }
-
   function schedField(k: keyof typeof scheduleForm) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setScheduleForm(f => ({ ...f, [k]: e.target.value }))
   }
-
   function oppField(k: keyof typeof oppForm) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setOppForm(f => ({ ...f, [k]: e.target.value }))
   }
-
-  function openAddSchedule() {
-    setScheduleForm(emptyScheduleForm)
-    setScheduleTarget('add')
+  function showField(k: keyof typeof showForm) {
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+      setShowForm(f => ({ ...f, [k]: e.target.value }))
+  }
+  function talentField(k: keyof typeof talentForm) {
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+      setTalentForm(f => ({ ...f, [k]: e.target.value }))
   }
 
+  // Talent schedule
+  function openAddSchedule() { setScheduleForm(emptyScheduleForm); setScheduleTarget('add') }
   function openEditSchedule(detail: TalentDetail) {
     setScheduleForm({
-      talent_id: detail.talent_id,
-      carpet_date: detail.carpet_date ?? '',
-      hotel: detail.hotel ?? '',
-      ticket: detail.ticket ?? '',
-      driver: detail.driver ?? '',
-      airport_transfer: detail.airport_transfer ?? '',
-      makeup: detail.makeup ?? '',
-      hair: detail.hair ?? '',
-      dress: detail.dress ?? '',
-      jewelry: detail.jewelry ?? '',
-      shoes: detail.shoes ?? '',
-      content: detail.content ?? '',
-      agent_contact: detail.agent_contact ?? '',
-      extra_notes: detail.extra_notes ?? '',
+      talent_id: detail.talent_id, carpet_date: detail.carpet_date ?? '',
+      hotel: detail.hotel ?? '', ticket: detail.ticket ?? '', driver: detail.driver ?? '',
+      airport_transfer: detail.airport_transfer ?? '', makeup: detail.makeup ?? '',
+      hair: detail.hair ?? '', dress: detail.dress ?? '', jewelry: detail.jewelry ?? '',
+      shoes: detail.shoes ?? '', content: detail.content ?? '',
+      agent_contact: detail.agent_contact ?? '', extra_notes: detail.extra_notes ?? '',
     })
     setScheduleTarget(detail)
   }
 
   async function handleScheduleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setSaving(true)
+    e.preventDefault(); setSaving(true)
     const supabase = createClient()
     const payload = {
-      talent_id: scheduleForm.talent_id || null,
-      event_id: project.id,
-      carpet_date: scheduleForm.carpet_date || null,
-      hotel: scheduleForm.hotel || null,
-      ticket: scheduleForm.ticket || null,
-      driver: scheduleForm.driver || null,
-      airport_transfer: scheduleForm.airport_transfer || null,
-      makeup: scheduleForm.makeup || null,
-      hair: scheduleForm.hair || null,
-      dress: scheduleForm.dress || null,
-      jewelry: scheduleForm.jewelry || null,
-      shoes: scheduleForm.shoes || null,
-      content: scheduleForm.content || null,
-      agent_contact: scheduleForm.agent_contact || null,
+      talent_id: scheduleForm.talent_id || null, event_id: project.id,
+      carpet_date: scheduleForm.carpet_date || null, hotel: scheduleForm.hotel || null,
+      ticket: scheduleForm.ticket || null, driver: scheduleForm.driver || null,
+      airport_transfer: scheduleForm.airport_transfer || null, makeup: scheduleForm.makeup || null,
+      hair: scheduleForm.hair || null, dress: scheduleForm.dress || null,
+      jewelry: scheduleForm.jewelry || null, shoes: scheduleForm.shoes || null,
+      content: scheduleForm.content || null, agent_contact: scheduleForm.agent_contact || null,
       extra_notes: scheduleForm.extra_notes || null,
     }
-    if (scheduleTarget === 'add') {
-      await supabase.from('talent_event_details').insert(payload)
-    } else if (scheduleTarget && typeof scheduleTarget === 'object') {
+    if (scheduleTarget === 'add') await supabase.from('talent_event_details').insert(payload)
+    else if (scheduleTarget && typeof scheduleTarget === 'object')
       await supabase.from('talent_event_details').update(payload).eq('id', scheduleTarget.id)
-    }
-    setSaving(false)
-    setScheduleTarget(null)
-    router.refresh()
+    setSaving(false); setScheduleTarget(null); router.refresh()
   }
 
+  // Opportunities
   async function handleOppSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setSaving(true)
+    e.preventDefault(); setSaving(true)
     const supabase = createClient()
     await supabase.from('opportunities').insert({
-      event_id: project.id,
-      talent_id: oppForm.talent_id || null,
-      brand_id: oppForm.brand_id || null,
-      type: oppForm.type || null,
-      status: oppForm.status,
-      priority: oppForm.priority,
+      event_id: project.id, talent_id: oppForm.talent_id || null,
+      brand_id: oppForm.brand_id || null, type: oppForm.type || null,
+      status: oppForm.status, priority: oppForm.priority,
       estimated_value: oppForm.estimated_value ? parseFloat(oppForm.estimated_value) : null,
-      follow_up: oppForm.follow_up || null,
-      notes: oppForm.notes || null,
+      follow_up: oppForm.follow_up || null, notes: oppForm.notes || null,
     })
-    setSaving(false)
-    setOppOpen(false)
+    setSaving(false); setOppOpen(false)
     setOppForm({ talent_id: '', brand_id: '', type: '', status: 'prospect', priority: 'medium', estimated_value: '', follow_up: '', notes: '' })
     router.refresh()
   }
 
+  // Project edit
   async function handleSave(e: React.FormEvent) {
-    e.preventDefault()
-    setSaving(true)
+    e.preventDefault(); setSaving(true)
     const supabase = createClient()
     await supabase.from('events').update({
-      name: form.name || null,
-      location: form.location || null,
-      category: form.category || null,
-      start_date: form.start_date || null,
-      end_date: form.end_date || null,
-      status: form.status,
-      notes: form.notes || null,
+      name: form.name || null, location: form.location || null,
+      category: form.category || null, start_date: form.start_date || null,
+      end_date: form.end_date || null, status: form.status, notes: form.notes || null,
     }).eq('id', project.id)
-    setSaving(false)
-    setOpen(false)
+    setSaving(false); setOpen(false); router.refresh()
+  }
+
+  // Brand shows
+  function openAddShow() {
+    setShowForm({ brand_id: '', show_date: '', show_time: '', notes: '' })
+    setShowModal('add')
+  }
+  function openEditShow(show: BrandShow) {
+    setShowForm({
+      brand_id: show.brand_id,
+      show_date: show.show_date ?? '',
+      show_time: show.show_time ?? '',
+      notes: show.notes ?? '',
+    })
+    setShowModal(show)
+  }
+
+  async function handleShowSubmit(e: React.FormEvent) {
+    e.preventDefault(); setSaving(true)
+    const supabase = createClient()
+    const payload = {
+      project_id: project.id,
+      brand_id: showForm.brand_id || null,
+      show_date: showForm.show_date || null,
+      show_time: showForm.show_time || null,
+      notes: showForm.notes || null,
+    }
+    if (showModal === 'add') {
+      await supabase.from('project_brands').insert(payload)
+    } else if (showModal && typeof showModal === 'object') {
+      await supabase.from('project_brands').update(payload).eq('id', showModal.id)
+    }
+    setSaving(false); setShowModal(null); router.refresh()
+  }
+
+  async function deleteShow(id: string) {
+    const supabase = createClient()
+    await supabase.from('project_brands').delete().eq('id', id)
     router.refresh()
   }
 
-  const isEditing = scheduleTarget !== null && typeof scheduleTarget === 'object'
-  const editingTalentName = isEditing ? (scheduleTarget as TalentDetail).talent?.name : null
+  // Show talents
+  function openAddTalent(projectBrandId: string) {
+    setTalentForm({ talent_id: '', accepted: false, notes: '' })
+    setTalentModal({ projectBrandId })
+  }
+  function openEditTalent(projectBrandId: string, entry: ShowTalent) {
+    setTalentForm({ talent_id: entry.talent_id, accepted: entry.accepted, notes: entry.notes ?? '' })
+    setTalentModal({ projectBrandId, entry })
+  }
+
+  async function handleTalentSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!talentModal) return
+    setSaving(true)
+    const supabase = createClient()
+    const payload = {
+      project_brand_id: talentModal.projectBrandId,
+      talent_id: talentForm.talent_id || null,
+      accepted: talentForm.accepted,
+      notes: talentForm.notes || null,
+    }
+    if (talentModal.entry) {
+      await supabase.from('project_brand_talents').update(payload).eq('id', talentModal.entry.id)
+    } else {
+      await supabase.from('project_brand_talents').insert(payload)
+    }
+    setSaving(false); setTalentModal(null); router.refresh()
+  }
+
+  async function removeTalentFromShow(id: string) {
+    const supabase = createClient()
+    await supabase.from('project_brand_talents').delete().eq('id', id)
+    router.refresh()
+  }
+
+  async function toggleAccepted(entry: ShowTalent) {
+    const supabase = createClient()
+    await supabase.from('project_brand_talents').update({ accepted: !entry.accepted }).eq('id', entry.id)
+    router.refresh()
+  }
+
+  const isEditingSchedule = scheduleTarget !== null && typeof scheduleTarget === 'object'
+  const editingTalentName = isEditingSchedule ? (scheduleTarget as TalentDetail).talent?.name : null
+  const isEditingShow = showModal !== null && typeof showModal === 'object'
+
+  // Talents not yet in a given show
+  function availableTalentsForShow(show: BrandShow) {
+    const linked = new Set(show.project_brand_talents.map(t => t.talent_id))
+    return talents.filter(t => !linked.has(t.id))
+  }
 
   return (
     <div>
+      {/* ── Header ── */}
       <div className="mb-6">
         <Link href="/projects" className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 mb-4">
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Projects
+          <ArrowLeft className="w-3.5 h-3.5" /> Projects
         </Link>
         <div className="flex items-start justify-between">
           <div>
@@ -270,12 +354,130 @@ export function ProjectDetailClient({ project, talentDetails, opportunities, tal
             </div>
           </div>
           <Button variant="secondary" onClick={() => setOpen(true)}>
-            <Pencil className="w-3.5 h-3.5" />
-            Edit Project
+            <Pencil className="w-3.5 h-3.5" /> Edit Project
           </Button>
         </div>
       </div>
 
+      {/* ── Brand Shows ── */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-gray-900">Brand Shows</h2>
+          <Button variant="secondary" onClick={openAddShow}>
+            <Plus className="w-3.5 h-3.5" /> Add Brand Show
+          </Button>
+        </div>
+
+        {brandShows.length === 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 px-5 py-8 text-center text-sm text-gray-400">
+            No brand shows yet. Add a brand to start building the lineup.
+          </div>
+        )}
+
+        <div className="space-y-4">
+          {brandShows.map(show => {
+            const available = availableTalentsForShow(show)
+            return (
+              <div key={show.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                {/* Show header */}
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50/40">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <Link href={`/brands/${show.brand?.id}`} className="text-sm font-semibold text-gray-900 hover:text-black">
+                      {show.brand?.name ?? '—'}
+                    </Link>
+                    {show.show_date && (
+                      <span className="text-xs text-gray-500 flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        {formatDate(show.show_date)}
+                        {show.show_time && <span className="ml-1 text-gray-400">· {show.show_time}</span>}
+                      </span>
+                    )}
+                    {show.notes && (
+                      <span className="text-xs text-gray-400 truncate max-w-xs">{show.notes}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => openAddTalent(show.id)}
+                      className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                    >
+                      <Plus className="w-3 h-3" /> Add Talent
+                    </button>
+                    <button onClick={() => openEditShow(show)} className="text-gray-300 hover:text-gray-600 p-1">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => deleteShow(show.id)} className="text-gray-300 hover:text-red-500 p-1">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Talent rows */}
+                {show.project_brand_talents.length === 0 ? (
+                  <p className="px-5 py-3 text-xs text-gray-400">No talents added to this show yet.</p>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-50">
+                        <th className="text-left px-5 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Talent</th>
+                        <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide w-28">Accepted</th>
+                        <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Notes</th>
+                        <th className="px-4 py-2 w-16" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {show.project_brand_talents.map(entry => (
+                        <tr key={entry.id} className="group hover:bg-gray-50/50">
+                          <td className="px-5 py-3">
+                            <Link href={`/talents/${entry.talent?.id}`} className="font-medium text-gray-900 hover:text-black">
+                              {entry.talent?.name ?? '—'}
+                            </Link>
+                            <div className="flex gap-1 mt-0.5">
+                              <Badge value={entry.talent?.category} />
+                              <Badge value={entry.talent?.status} />
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => toggleAccepted(entry)}
+                              className={`inline-flex items-center gap-1.5 text-xs font-medium transition-colors ${
+                                entry.accepted
+                                  ? 'text-emerald-600'
+                                  : 'text-gray-400 hover:text-gray-600'
+                              }`}
+                            >
+                              {entry.accepted
+                                ? <CheckCircle2 className="w-4 h-4" />
+                                : <Circle className="w-4 h-4" />
+                              }
+                              {entry.accepted ? 'Accepted' : 'Pending'}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-500">
+                            {entry.notes ?? <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => openEditTalent(show.id, entry)} className="text-gray-300 hover:text-gray-600">
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                              <button onClick={() => removeTalentFromShow(entry.id)} className="text-gray-300 hover:text-red-500">
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── Talent Schedule + Opportunities ── */}
       <div className="grid grid-cols-3 gap-6">
         {project.notes && (
           <div className="col-span-1">
@@ -294,13 +496,12 @@ export function ProjectDetailClient({ project, talentDetails, opportunities, tal
               <div className="flex items-center gap-3">
                 <span className="text-xs text-gray-400">{talentDetails.length} talents</span>
                 <Button variant="secondary" onClick={openAddSchedule}>
-                  <Plus className="w-3.5 h-3.5" />
-                  Add Talent
+                  <Plus className="w-3.5 h-3.5" /> Add Talent
                 </Button>
               </div>
             </div>
             {!talentDetails.length && (
-              <p className="px-5 py-4 text-sm text-gray-400">No talents added yet. Click "Add Talent" to start building the schedule.</p>
+              <p className="px-5 py-4 text-sm text-gray-400">No talents added yet.</p>
             )}
             {talentDetails.length > 0 && (
               <div className="overflow-x-auto">
@@ -353,8 +554,7 @@ export function ProjectDetailClient({ project, talentDetails, opportunities, tal
               <div className="flex items-center gap-3">
                 <span className="text-xs text-gray-400">{opportunities.length}</span>
                 <Button variant="secondary" onClick={() => setOppOpen(true)}>
-                  <Plus className="w-3.5 h-3.5" />
-                  Add
+                  <Plus className="w-3.5 h-3.5" /> Add
                 </Button>
               </div>
             </div>
@@ -378,22 +578,100 @@ export function ProjectDetailClient({ project, talentDetails, opportunities, tal
         </div>
       </div>
 
+      {/* ── Modals ── */}
+
+      {/* Add/Edit Brand Show */}
+      <Modal
+        open={showModal !== null}
+        onClose={() => setShowModal(null)}
+        title={isEditingShow ? 'Edit Brand Show' : 'Add Brand Show'}
+      >
+        <form onSubmit={handleShowSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Brand</label>
+            <Select
+              value={showForm.brand_id}
+              onChange={showField('brand_id')}
+              options={brands.map(b => ({ value: b.id, label: b.name }))}
+              placeholder="Select brand…"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Show Date</label>
+              <Input type="date" value={showForm.show_date} onChange={showField('show_date')} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Show Time</label>
+              <Input value={showForm.show_time} onChange={showField('show_time')} placeholder="e.g. 2:30 PM" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Notes</label>
+            <Textarea value={showForm.notes} onChange={showField('notes')} rows={2} placeholder="Any context about this show…" />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setShowModal(null)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : isEditingShow ? 'Save Changes' : 'Add Show'}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Add/Edit Talent to Show */}
+      <Modal
+        open={talentModal !== null}
+        onClose={() => setTalentModal(null)}
+        title={talentModal?.entry ? `Edit — ${talentModal.entry.talent?.name}` : 'Add Talent to Show'}
+      >
+        <form onSubmit={handleTalentSubmit} className="space-y-4">
+          {!talentModal?.entry && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Talent</label>
+              <Select
+                value={talentForm.talent_id}
+                onChange={talentField('talent_id')}
+                options={
+                  talentModal
+                    ? availableTalentsForShow(brandShows.find(s => s.id === talentModal.projectBrandId)!).map(t => ({ value: t.id, label: t.name }))
+                    : []
+                }
+                placeholder="Select talent…"
+              />
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Notes</label>
+            <Textarea value={talentForm.notes} onChange={talentField('notes')} rows={2} placeholder="Any notes about this talent for this show…" />
+          </div>
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={talentForm.accepted}
+              onChange={e => setTalentForm(f => ({ ...f, accepted: e.target.checked }))}
+              className="rounded border-gray-300 w-4 h-4 accent-black"
+            />
+            <span className="text-sm text-gray-700">Brand has accepted this talent</span>
+          </label>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setTalentModal(null)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={saving || (!talentModal?.entry && !talentForm.talent_id)} className="flex-1">
+              {saving ? 'Saving…' : talentModal?.entry ? 'Save Changes' : 'Add Talent'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
       {/* Talent Schedule Modal */}
       <Modal
         open={scheduleTarget !== null}
         onClose={() => setScheduleTarget(null)}
-        title={isEditing ? `Edit — ${editingTalentName}` : 'Add Talent to Schedule'}
+        title={isEditingSchedule ? `Edit — ${editingTalentName}` : 'Add Talent to Schedule'}
       >
         <form onSubmit={handleScheduleSubmit} className="space-y-4">
-          {!isEditing && (
+          {!isEditingSchedule && (
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">Talent</label>
-              <Select
-                value={scheduleForm.talent_id}
-                onChange={schedField('talent_id')}
-                options={talents.map(t => ({ value: t.id, label: t.name }))}
-                placeholder="Select talent…"
-              />
+              <Select value={scheduleForm.talent_id} onChange={schedField('talent_id')} options={talents.map(t => ({ value: t.id, label: t.name }))} placeholder="Select talent…" />
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
@@ -460,7 +738,7 @@ export function ProjectDetailClient({ project, talentDetails, opportunities, tal
           </div>
           <div className="flex gap-3 pt-1">
             <Button type="button" variant="secondary" onClick={() => setScheduleTarget(null)} className="flex-1">Cancel</Button>
-            <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : isEditing ? 'Save Changes' : 'Add to Schedule'}</Button>
+            <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : isEditingSchedule ? 'Save Changes' : 'Add to Schedule'}</Button>
           </div>
         </form>
       </Modal>
