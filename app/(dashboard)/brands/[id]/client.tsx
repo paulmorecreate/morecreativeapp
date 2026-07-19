@@ -4,13 +4,13 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, Star, AlertTriangle } from 'lucide-react'
-import { Brand, Opportunity, Conversation, Contact, Industry } from '@/lib/supabase/types'
+import { Brand, Conversation, Contact, Industry } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
-import { formatDate, formatCurrency } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
 
 const channelOpts = [
   { value: 'email', label: 'Email' },
@@ -45,15 +45,22 @@ const COUNTRIES = [
   'South Korea','Spain','Sweden','Switzerland','Turkey','UAE','UK','USA',
 ].map(c => ({ value: c, label: c }))
 
+type BrandProject = {
+  id: string
+  show_date: string | null
+  show_time: string | null
+  project: { id: string; name: string; start_date: string | null; location: string | null; status: string; category: string | null } | null
+}
+
 type Props = {
   brand: Brand
-  opportunities: (Opportunity & { talent?: { name: string } | null; event?: { name: string } | null })[]
+  brandProjects: BrandProject[]
   conversations: Conversation[]
   contacts: Contact[]
   industries: Industry[]
 }
 
-export function BrandDetailClient({ brand, opportunities, conversations, contacts, industries }: Props) {
+export function BrandDetailClient({ brand, brandProjects, conversations, contacts, industries }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -345,28 +352,26 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
             </div>
           </div>
 
-          {/* Opportunities */}
+          {/* Projects */}
           <div className="bg-white rounded-xl border border-gray-200">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h2 className="text-sm font-semibold text-gray-900">Opportunities</h2>
-              <span className="text-xs text-gray-400">{opportunities?.length ?? 0}</span>
+              <h2 className="text-sm font-semibold text-gray-900">Projects</h2>
+              <span className="text-xs text-gray-400">{brandProjects.length}</span>
             </div>
             <div className="divide-y divide-gray-50">
-              {!opportunities?.length && (
-                <p className="px-5 py-4 text-sm text-gray-400">No opportunities linked.</p>
+              {!brandProjects.length && (
+                <p className="px-5 py-4 text-sm text-gray-400">Not linked to any projects yet.</p>
               )}
-              {opportunities?.map(opp => (
-                <Link key={opp.id} href={`/opportunities/${opp.id}`} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50/50 transition-colors">
+              {brandProjects.map(bp => (
+                <Link key={bp.id} href={`/projects/${bp.project?.id}`} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50/50 transition-colors">
                   <div>
-                    <div className="text-sm font-medium text-gray-900">
-                      {opp.talent?.name ?? 'No talent'} — {opp.type ?? 'No type'}
+                    <div className="text-sm font-medium text-gray-900">{bp.project?.name ?? '—'}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      {bp.project?.location ?? '—'}
+                      {bp.show_date && <span className="ml-2">· Show: {formatDate(bp.show_date)}{bp.show_time ? ` ${bp.show_time}` : ''}</span>}
                     </div>
-                    <div className="text-xs text-gray-400 mt-0.5">{opp.event?.name ?? '—'}</div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {opp.estimated_value && <span className="text-xs text-gray-500">{formatCurrency(opp.estimated_value)}</span>}
-                    <Badge value={opp.status} />
-                  </div>
+                  <Badge value={bp.project?.status} />
                 </Link>
               ))}
             </div>

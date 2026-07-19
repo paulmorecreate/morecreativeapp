@@ -4,13 +4,13 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, Star, Info } from 'lucide-react'
-import { Talent, Opportunity, TalentEventDetail, Conversation, TalentContact, TalentCategory } from '@/lib/supabase/types'
+import { Talent, TalentEventDetail, Conversation, TalentContact, TalentCategory } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
-import { formatDate, formatCurrency, truncate } from '@/lib/utils'
+import { formatDate, truncate } from '@/lib/utils'
 
 const COUNTRIES = [
   'Australia','Austria','Belgium','Brazil','Canada','China','Denmark','Finland',
@@ -38,9 +38,19 @@ type AgentLink = {
   agent: { id: string; name: string; agent_type: string | null } | null
 }
 
+type TalentProject = {
+  id: string
+  project_brand: {
+    id: string
+    show_date: string | null
+    project: { id: string; name: string; start_date: string | null; location: string | null; status: string; category: string | null } | null
+    brand: { id: string; name: string } | null
+  } | null
+}
+
 type Props = {
   talent: Talent
-  opportunities: (Opportunity & { brand?: { name: string } | null; event?: { name: string } | null })[]
+  talentProjects: TalentProject[]
   eventDetails: (TalentEventDetail & { event?: { name: string } | null })[]
   conversations: Conversation[]
   agentLinks: AgentLink[]
@@ -48,7 +58,7 @@ type Props = {
   talentCategories: TalentCategory[]
 }
 
-export function TalentDetailClient({ talent, opportunities, eventDetails, conversations, agentLinks, talentContacts, talentCategories }: Props) {
+export function TalentDetailClient({ talent, talentProjects, eventDetails, conversations, agentLinks, talentContacts, talentCategories }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -333,25 +343,25 @@ export function TalentDetailClient({ talent, opportunities, eventDetails, conver
             </div>
           </div>
 
-          {/* Opportunities */}
+          {/* Projects */}
           <div className="bg-white rounded-xl border border-gray-200">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h2 className="text-sm font-semibold text-gray-900">Opportunities</h2>
-              <span className="text-xs text-gray-400">{opportunities?.length ?? 0}</span>
+              <h2 className="text-sm font-semibold text-gray-900">Projects</h2>
+              <span className="text-xs text-gray-400">{talentProjects.length}</span>
             </div>
             <div className="divide-y divide-gray-50">
-              {!opportunities?.length && <p className="px-5 py-4 text-sm text-gray-400">No opportunities linked.</p>}
-              {opportunities?.map(opp => (
-                <div key={opp.id} className="px-5 py-3 flex items-center justify-between">
+              {!talentProjects.length && <p className="px-5 py-4 text-sm text-gray-400">Not linked to any projects yet.</p>}
+              {talentProjects.map(tp => (
+                <Link key={tp.id} href={`/projects/${tp.project_brand?.project?.id}`} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50/50 transition-colors">
                   <div>
-                    <div className="text-sm font-medium text-gray-900">{opp.brand?.name ?? 'No brand'} — {opp.type ?? 'No type'}</div>
-                    <div className="text-xs text-gray-400 mt-0.5">{opp.event?.name ?? '—'}</div>
+                    <div className="text-sm font-medium text-gray-900">{tp.project_brand?.project?.name ?? '—'}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      {tp.project_brand?.brand?.name ?? '—'}
+                      {tp.project_brand?.show_date && <span className="ml-2">· {formatDate(tp.project_brand.show_date)}</span>}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {opp.estimated_value && <span className="text-xs text-gray-500">{formatCurrency(opp.estimated_value)}</span>}
-                    <Badge value={opp.status} />
-                  </div>
-                </div>
+                  <Badge value={tp.project_brand?.project?.status} />
+                </Link>
               ))}
             </div>
           </div>

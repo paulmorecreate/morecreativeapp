@@ -6,12 +6,11 @@ export default async function TalentPage({ params }: { params: Promise<{ id: str
   const { id } = await params
   const supabase = await createClient()
 
-  const [{ data: talent }, { data: opportunities }, { data: eventDetails }, { data: conversations }, { data: agentLinks }, { data: talentContacts }, { data: talentCategories }] = await Promise.all([
+  const [{ data: talent }, { data: talentProjects }, { data: eventDetails }, { data: conversations }, { data: agentLinks }, { data: talentContacts }, { data: talentCategories }] = await Promise.all([
     supabase.from('talents').select('*').eq('id', id).single(),
-    supabase.from('opportunities')
-      .select('*, brand:brands(name), event:events(name)')
-      .eq('talent_id', id)
-      .order('created_at', { ascending: false }),
+    supabase.from('project_brand_talents')
+      .select('id, project_brand:project_brands(id, show_date, project:events(id, name, start_date, location, status, category), brand:brands(id, name))')
+      .eq('talent_id', id),
     supabase.from('talent_event_details')
       .select('*, event:events(name)')
       .eq('talent_id', id),
@@ -35,7 +34,7 @@ export default async function TalentPage({ params }: { params: Promise<{ id: str
   return (
     <TalentDetailClient
       talent={talent}
-      opportunities={(opportunities ?? []) as any}
+      talentProjects={(talentProjects ?? []) as any}
       eventDetails={(eventDetails ?? []) as any}
       conversations={conversations ?? []}
       agentLinks={(agentLinks ?? []) as any}
