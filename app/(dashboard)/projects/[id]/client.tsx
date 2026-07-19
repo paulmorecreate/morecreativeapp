@@ -448,7 +448,6 @@ export function ProjectDetailClient({ project, talentDetails, opportunities, tal
                             </Link>
                             <div className="flex gap-1 mt-0.5">
                               <Badge value={entry.talent?.category} />
-                              <Badge value={entry.talent?.status} />
                             </div>
                           </td>
                           <td className="px-4 py-3">
@@ -540,7 +539,6 @@ export function ProjectDetailClient({ project, talentDetails, opportunities, tal
                           </Link>
                           <div className="flex items-center gap-1 mt-0.5">
                             <Badge value={detail.talent?.category} />
-                            <Badge value={detail.talent?.status} />
                           </div>
                         </td>
                         <td className="px-4 py-3 text-gray-600 text-xs">{detail.carpet_date ?? '—'}</td>

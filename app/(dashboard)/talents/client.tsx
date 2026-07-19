@@ -23,13 +23,6 @@ const COUNTRIES = [
   'South Korea','Spain','Sweden','Switzerland','Turkey','UAE','UK','USA',
 ].map(c => ({ value: c, label: c }))
 
-const statusOpts = [
-  { value: 'confirmed', label: 'Confirmed' },
-  { value: 'prospect', label: 'Prospect' },
-  { value: 'available', label: 'Available' },
-  { value: 'cancelled', label: 'Cancelled' },
-]
-
 type Props = {
   talents: TalentRow[]
   talentCategories: TalentCategory[]
@@ -38,13 +31,12 @@ type Props = {
 export function TalentsClient({ talents, talentCategories }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
     name: '', ig_link: '', tiktok_link: '', ig_followers: '', tiktok_followers: '',
-    category: '', status: 'prospect', country: '', notes: '',
+    category: '', country: '', notes: '',
   })
 
   const categoryOpts = talentCategories.map(c => ({ value: c.name, label: c.name }))
@@ -57,9 +49,8 @@ export function TalentsClient({ talents, talentCategories }: Props) {
       t.name.toLowerCase().includes(q) ||
       agentName.toLowerCase().includes(q) ||
       primaryContact.toLowerCase().includes(q)
-    const matchStatus = !statusFilter || t.status === statusFilter
     const matchCat = !categoryFilter || t.category === categoryFilter
-    return matchSearch && matchStatus && matchCat
+    return matchSearch && matchCat
   })
 
   function field(k: keyof typeof form) {
@@ -78,13 +69,12 @@ export function TalentsClient({ talents, talentCategories }: Props) {
       ig_followers: form.ig_followers || null,
       tiktok_followers: form.tiktok_followers || null,
       category: form.category || null,
-      status: form.status || null,
       country: form.country || null,
       notes: form.notes || null,
     })
     setSaving(false)
     setOpen(false)
-    setForm({ name: '', ig_link: '', tiktok_link: '', ig_followers: '', tiktok_followers: '', category: '', status: 'prospect', country: '', notes: '' })
+    setForm({ name: '', ig_link: '', tiktok_link: '', ig_followers: '', tiktok_followers: '', category: '', country: '', notes: '' })
     router.refresh()
   }
 
@@ -119,14 +109,6 @@ export function TalentsClient({ talents, talentCategories }: Props) {
           <option value="">All categories</option>
           {categoryOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        <select
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black/10 bg-white text-gray-700"
-        >
-          <option value="">All statuses</option>
-          {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -135,7 +117,6 @@ export function TalentsClient({ talents, talentCategories }: Props) {
             <tr className="border-b border-gray-100 bg-gray-50/50">
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Name</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Cat</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Status</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Agent</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Primary Contact</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">IG Followers</th>
@@ -147,8 +128,8 @@ export function TalentsClient({ talents, talentCategories }: Props) {
           <tbody className="divide-y divide-gray-50">
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-sm text-gray-400">
-                  {search || statusFilter || categoryFilter ? 'No results match your filters.' : 'No talents yet.'}
+                <td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-400">
+                  {search || categoryFilter ? 'No results match your filters.' : 'No talents yet.'}
                 </td>
               </tr>
             )}
@@ -163,7 +144,6 @@ export function TalentsClient({ talents, talentCategories }: Props) {
                     </Link>
                   </td>
                   <td className="px-4 py-3"><Badge value={talent.category} /></td>
-                  <td className="px-4 py-3"><Badge value={talent.status} /></td>
                   <td className="px-4 py-3 text-gray-600 text-xs">
                     {agent ? (
                       <Link href={`/agents/${agent.id}`} className="hover:text-black">{agent.name}</Link>
@@ -206,15 +186,9 @@ export function TalentsClient({ talents, talentCategories }: Props) {
             <label className="text-xs font-medium text-gray-700">Name *</label>
             <Input value={form.name} onChange={field('name')} required placeholder="Full name" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Category</label>
-              <Select value={form.category} onChange={field('category')} options={categoryOpts} placeholder="Select…" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Status</label>
-              <Select value={form.status} onChange={field('status')} options={statusOpts} />
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Category</label>
+            <Select value={form.category} onChange={field('category')} options={categoryOpts} placeholder="Select…" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

@@ -32,13 +32,6 @@ const convoStatusOpts = [
   { value: 'resolved', label: 'Resolved' },
 ]
 
-const statusOpts = [
-  { value: 'confirmed', label: 'Confirmed' },
-  { value: 'prospect', label: 'Prospect' },
-  { value: 'available', label: 'Available' },
-  { value: 'cancelled', label: 'Cancelled' },
-]
-
 type AgentLink = {
   id: string
   agent_id: string
@@ -78,7 +71,6 @@ export function TalentDetailClient({ talent, opportunities, eventDetails, conver
     ig_followers: talent.ig_followers ?? '',
     tiktok_followers: talent.tiktok_followers ?? '',
     category: talent.category ?? '',
-    status: talent.status ?? 'confirmed',
     country: talent.country ?? '',
     notes: talent.notes ?? '',
   })
@@ -106,7 +98,6 @@ export function TalentDetailClient({ talent, opportunities, eventDetails, conver
       ig_followers: form.ig_followers || null,
       tiktok_followers: form.tiktok_followers || null,
       category: form.category || null,
-      status: form.status || null,
       country: form.country || null,
       notes: form.notes || null,
     }).eq('id', talent.id)
@@ -251,10 +242,6 @@ export function TalentDetailClient({ talent, opportunities, eventDetails, conver
               <div>
                 <dt className="text-xs text-gray-400 mb-0.5">Category</dt>
                 <dd><Badge value={talent.category} /></dd>
-              </div>
-              <div>
-                <dt className="text-xs text-gray-400 mb-0.5">Status</dt>
-                <dd><Badge value={talent.status} /></dd>
               </div>
               <div>
                 <dt className="text-xs text-gray-400 mb-0.5">Country</dt>
@@ -535,15 +522,9 @@ export function TalentDetailClient({ talent, opportunities, eventDetails, conver
             <label className="text-xs font-medium text-gray-700">Name</label>
             <Input value={form.name} onChange={field('name')} required />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Category</label>
-              <Select value={form.category} onChange={field('category')} options={categoryOpts} placeholder="Select…" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Status</label>
-              <Select value={form.status} onChange={field('status')} options={statusOpts} />
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Category</label>
+            <Select value={form.category} onChange={field('category')} options={categoryOpts} placeholder="Select…" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
