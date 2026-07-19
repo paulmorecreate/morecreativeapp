@@ -2,14 +2,34 @@ export interface Talent {
   id: string
   name: string
   ig_link: string | null
+  tiktok_link: string | null
+  ig_followers: string | null
+  tiktok_followers: string | null
   category: string | null
   status: string | null
-  contact: string | null
-  agency: string | null
   country: string | null
   notes: string | null
   created_at: string
   updated_at: string
+}
+
+export interface TalentContact {
+  id: string
+  talent_id: string
+  name: string | null
+  role: string | null
+  email: string | null
+  phone: string | null
+  notes: string | null
+  is_primary: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface TalentCategory {
+  id: string
+  name: string
+  created_at: string
 }
 
 export interface Brand {
@@ -130,6 +150,7 @@ export interface Agent {
   id: string
   name: string
   agent_type: string | null
+  website: string | null
   notes: string | null
   created_at: string
   updated_at: string

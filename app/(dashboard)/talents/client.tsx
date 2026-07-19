@@ -4,13 +4,24 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, Search, ExternalLink, ChevronRight } from 'lucide-react'
-import { Talent } from '@/lib/supabase/types'
+import { Talent, TalentCategory } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
-import { cn } from '@/lib/utils'
+
+type TalentRow = Talent & {
+  talent_contacts: { id: string; name: string | null; is_primary: boolean }[]
+  talent_agents: { id: string; agent: { id: string; name: string } | null }[]
+}
+
+const COUNTRIES = [
+  'Australia','Austria','Belgium','Brazil','Canada','China','Denmark','Finland',
+  'France','Germany','Greece','India','Ireland','Italy','Japan','Mexico',
+  'Netherlands','New Zealand','Norway','Poland','Portugal','Russia','Saudi Arabia',
+  'South Korea','Spain','Sweden','Switzerland','Turkey','UAE','UK','USA',
+].map(c => ({ value: c, label: c }))
 
 const statusOpts = [
   { value: 'confirmed', label: 'Confirmed' },
@@ -19,13 +30,12 @@ const statusOpts = [
   { value: 'cancelled', label: 'Cancelled' },
 ]
 
-const categoryOpts = [
-  { value: 'A', label: 'A — Top Priority' },
-  { value: 'B', label: 'B — Secondary' },
-  { value: 'C', label: 'C — Paying' },
-]
+type Props = {
+  talents: TalentRow[]
+  talentCategories: TalentCategory[]
+}
 
-export function TalentsClient({ talents }: { talents: Talent[] }) {
+export function TalentsClient({ talents, talentCategories }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -33,13 +43,20 @@ export function TalentsClient({ talents }: { talents: Talent[] }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
-    name: '', ig_link: '', category: '', status: 'prospect',
-    contact: '', agency: '', country: '', notes: '',
+    name: '', ig_link: '', tiktok_link: '', ig_followers: '', tiktok_followers: '',
+    category: '', status: 'prospect', country: '', notes: '',
   })
 
+  const categoryOpts = talentCategories.map(c => ({ value: c.name, label: c.name }))
+
+  const q = search.toLowerCase()
   const filtered = talents.filter(t => {
-    const q = search.toLowerCase()
-    const matchSearch = !search || t.name.toLowerCase().includes(q) || (t.agency ?? '').toLowerCase().includes(q)
+    const agentName = t.talent_agents?.[0]?.agent?.name ?? ''
+    const primaryContact = t.talent_contacts?.find(c => c.is_primary)?.name ?? ''
+    const matchSearch = !search ||
+      t.name.toLowerCase().includes(q) ||
+      agentName.toLowerCase().includes(q) ||
+      primaryContact.toLowerCase().includes(q)
     const matchStatus = !statusFilter || t.status === statusFilter
     const matchCat = !categoryFilter || t.category === categoryFilter
     return matchSearch && matchStatus && matchCat
@@ -54,12 +71,20 @@ export function TalentsClient({ talents }: { talents: Talent[] }) {
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
-    const payload = Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v || null]))
-    payload.name = form.name
-    await supabase.from('talents').insert(payload)
+    await supabase.from('talents').insert({
+      name: form.name,
+      ig_link: form.ig_link || null,
+      tiktok_link: form.tiktok_link || null,
+      ig_followers: form.ig_followers || null,
+      tiktok_followers: form.tiktok_followers || null,
+      category: form.category || null,
+      status: form.status || null,
+      country: form.country || null,
+      notes: form.notes || null,
+    })
     setSaving(false)
     setOpen(false)
-    setForm({ name: '', ig_link: '', category: '', status: 'prospect', contact: '', agency: '', country: '', notes: '' })
+    setForm({ name: '', ig_link: '', tiktok_link: '', ig_followers: '', tiktok_followers: '', category: '', status: 'prospect', country: '', notes: '' })
     router.refresh()
   }
 
@@ -76,7 +101,6 @@ export function TalentsClient({ talents }: { talents: Talent[] }) {
         </Button>
       </div>
 
-      {/* Filters */}
       <div className="flex gap-3 mb-5">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
@@ -105,7 +129,6 @@ export function TalentsClient({ talents }: { talents: Talent[] }) {
         </select>
       </div>
 
-      {/* Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -113,50 +136,70 @@ export function TalentsClient({ talents }: { talents: Talent[] }) {
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Name</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Cat</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Status</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Agency</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Contact</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">IG</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Agent</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Primary Contact</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">IG Followers</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">TK Followers</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Links</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">
-                  {search || statusFilter || categoryFilter ? 'No results match your filters.' : 'No talents yet. Add the first one.'}
+                <td colSpan={9} className="px-4 py-10 text-center text-sm text-gray-400">
+                  {search || statusFilter || categoryFilter ? 'No results match your filters.' : 'No talents yet.'}
                 </td>
               </tr>
             )}
-            {filtered.map(talent => (
-              <tr key={talent.id} className="hover:bg-gray-50/50 transition-colors">
-                <td className="px-4 py-3">
-                  <Link href={`/talents/${talent.id}`} className="font-medium text-gray-900 hover:text-black">
-                    {talent.name}
-                  </Link>
-                </td>
-                <td className="px-4 py-3"><Badge value={talent.category} /></td>
-                <td className="px-4 py-3"><Badge value={talent.status} /></td>
-                <td className="px-4 py-3 text-gray-600">{talent.agency ?? '—'}</td>
-                <td className="px-4 py-3 text-gray-500 max-w-[180px] truncate">{talent.contact ?? '—'}</td>
-                <td className="px-4 py-3">
-                  {talent.ig_link ? (
-                    <a href={talent.ig_link} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-gray-700">
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  ) : <span className="text-gray-300">—</span>}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <Link href={`/talents/${talent.id}`} className="text-gray-300 hover:text-gray-500">
-                    <ChevronRight className="w-4 h-4" />
-                  </Link>
-                </td>
-              </tr>
-            ))}
+            {filtered.map(talent => {
+              const primaryContact = talent.talent_contacts?.find(c => c.is_primary)
+              const agent = talent.talent_agents?.[0]?.agent
+              return (
+                <tr key={talent.id} className="hover:bg-gray-50/50 transition-colors">
+                  <td className="px-4 py-3">
+                    <Link href={`/talents/${talent.id}`} className="font-medium text-gray-900 hover:text-black">
+                      {talent.name}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3"><Badge value={talent.category} /></td>
+                  <td className="px-4 py-3"><Badge value={talent.status} /></td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">
+                    {agent ? (
+                      <Link href={`/agents/${agent.id}`} className="hover:text-black">{agent.name}</Link>
+                    ) : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">
+                    {primaryContact?.name ?? <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">{talent.ig_followers ?? <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">{talent.tiktok_followers ?? <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      {talent.ig_link ? (
+                        <a href={talent.ig_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700" title="Instagram">
+                          <ExternalLink className="w-3 h-3" /> IG
+                        </a>
+                      ) : <span className="text-xs text-gray-200">IG</span>}
+                      {talent.tiktok_link ? (
+                        <a href={talent.tiktok_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700" title="TikTok">
+                          <ExternalLink className="w-3 h-3" /> TK
+                        </a>
+                      ) : <span className="text-xs text-gray-200">TK</span>}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Link href={`/talents/${talent.id}`} className="text-gray-300 hover:text-gray-500">
+                      <ChevronRight className="w-4 h-4" />
+                    </Link>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
 
-      {/* Add Modal */}
       <Modal open={open} onClose={() => setOpen(false)} title="Add Talent">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
@@ -173,23 +216,29 @@ export function TalentsClient({ talents }: { talents: Talent[] }) {
               <Select value={form.status} onChange={field('status')} options={statusOpts} />
             </div>
           </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Instagram Link</label>
-            <Input value={form.ig_link} onChange={field('ig_link')} type="url" placeholder="https://instagram.com/…" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Instagram URL</label>
+              <Input value={form.ig_link} onChange={field('ig_link')} placeholder="https://instagram.com/…" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">TikTok URL</label>
+              <Input value={form.tiktok_link} onChange={field('tiktok_link')} placeholder="https://tiktok.com/@…" />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Agency</label>
-              <Input value={form.agency} onChange={field('agency')} placeholder="Agency name" />
+              <label className="text-xs font-medium text-gray-700">IG Followers</label>
+              <Input value={form.ig_followers} onChange={field('ig_followers')} placeholder="e.g. 250K" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Country</label>
-              <Input value={form.country} onChange={field('country')} placeholder="Country" />
+              <label className="text-xs font-medium text-gray-700">TikTok Followers</label>
+              <Input value={form.tiktok_followers} onChange={field('tiktok_followers')} placeholder="e.g. 1.2M" />
             </div>
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Contact Info</label>
-            <Textarea value={form.contact} onChange={field('contact')} rows={2} placeholder="Agent email / WhatsApp / notes…" />
+            <label className="text-xs font-medium text-gray-700">Country</label>
+            <Select value={form.country} onChange={field('country')} options={COUNTRIES} placeholder="Select…" />
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Notes</label>

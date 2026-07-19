@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Pencil, Plus, Trash2, Star } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, Star, AlertTriangle } from 'lucide-react'
 import { Agent, AgentContact, AgentType } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -32,9 +32,12 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
 
   const [editOpen, setEditOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [form, setForm] = useState({
     name: agent.name ?? '',
     agent_type: agent.agent_type ?? '',
+    website: agent.website ?? '',
     notes: agent.notes ?? '',
   })
 
@@ -48,7 +51,6 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
   const [linkSaving, setLinkSaving] = useState(false)
 
   const typeOpts = agentTypes.map(t => ({ value: t.name, label: t.name }))
-
   const linkedTalentIds = new Set(talentLinks.map(l => l.talent_id))
   const availableTalents = allTalents.filter(t => !linkedTalentIds.has(t.id))
 
@@ -69,10 +71,19 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
     await supabase.from('agents').update({
       name: form.name || null,
       agent_type: form.agent_type || null,
+      website: form.website || null,
       notes: form.notes || null,
     }).eq('id', agent.id)
     setSaving(false)
     setEditOpen(false)
+    router.refresh()
+  }
+
+  async function handleDelete() {
+    setDeleting(true)
+    const supabase = createClient()
+    await supabase.from('agents').delete().eq('id', agent.id)
+    router.push('/agents')
     router.refresh()
   }
 
@@ -152,9 +163,14 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">{agent.name}</h1>
-            {agent.agent_type && (
-              <span className="text-sm text-gray-500 mt-0.5 block">{agent.agent_type}</span>
-            )}
+            <div className="flex items-center gap-3 mt-1">
+              {agent.agent_type && <span className="text-sm text-gray-500">{agent.agent_type}</span>}
+              {agent.website && (
+                <a href={agent.website} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-gray-700">
+                  <ExternalLink className="w-3 h-3" /> Website
+                </a>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Badge value={agent.agent_type} />
@@ -162,12 +178,15 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
               <Pencil className="w-3.5 h-3.5" />
               Edit
             </Button>
+            <Button variant="secondary" onClick={() => setDeleteOpen(true)} className="text-red-500 hover:text-red-700 border-red-200 hover:border-red-300">
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete
+            </Button>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-6">
-        {/* Left col: notes */}
         <div className="col-span-1 space-y-5">
           {agent.notes && (
             <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -177,7 +196,6 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
           )}
         </div>
 
-        {/* Right cols: contacts + talents */}
         <div className="col-span-2 space-y-5">
           {/* Contacts */}
           <div className="bg-white rounded-xl border border-gray-200">
@@ -188,9 +206,7 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
               </button>
             </div>
             <div className="divide-y divide-gray-50">
-              {contacts.length === 0 && (
-                <p className="px-5 py-4 text-sm text-gray-400">No contacts yet.</p>
-              )}
+              {contacts.length === 0 && <p className="px-5 py-4 text-sm text-gray-400">No contacts yet.</p>}
               {contacts.map(c => (
                 <div key={c.id} className="px-5 py-3 group flex items-start justify-between">
                   <div className="flex items-start gap-2.5 min-w-0">
@@ -215,12 +231,8 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
                     </div>
                   </div>
                   <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-3">
-                    <button onClick={() => openEditContact(c)} className="text-gray-300 hover:text-gray-600">
-                      <Pencil className="w-3 h-3" />
-                    </button>
-                    <button onClick={() => deleteContact(c.id)} className="text-gray-300 hover:text-red-500">
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                    <button onClick={() => openEditContact(c)} className="text-gray-300 hover:text-gray-600"><Pencil className="w-3 h-3" /></button>
+                    <button onClick={() => deleteContact(c.id)} className="text-gray-300 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
                   </div>
                 </div>
               ))}
@@ -231,17 +243,12 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
           <div className="bg-white rounded-xl border border-gray-200">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Talents</h2>
-              <button
-                onClick={() => { setLinkTalentId(''); setLinkOpen(true) }}
-                className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700"
-              >
+              <button onClick={() => { setLinkTalentId(''); setLinkOpen(true) }} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700">
                 <Plus className="w-3 h-3" /> Link Talent
               </button>
             </div>
             <div className="divide-y divide-gray-50">
-              {talentLinks.length === 0 && (
-                <p className="px-5 py-4 text-sm text-gray-400">No talents linked yet.</p>
-              )}
+              {talentLinks.length === 0 && <p className="px-5 py-4 text-sm text-gray-400">No talents linked yet.</p>}
               {talentLinks.map(link => (
                 <div key={link.id} className="px-5 py-3 group flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
@@ -251,11 +258,7 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
                     <Badge value={link.talent?.category} />
                     <Badge value={link.talent?.status} />
                   </div>
-                  <button
-                    onClick={() => unlinkTalent(link.id)}
-                    className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Remove link"
-                  >
+                  <button onClick={() => unlinkTalent(link.id)} className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Remove link">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -290,7 +293,7 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Notes</label>
-            <Textarea value={contactForm.notes} onChange={contactField('notes')} rows={2} placeholder="Any context…" />
+            <Textarea value={contactForm.notes} onChange={contactField('notes')} rows={2} />
           </div>
           <div className="flex gap-3 pt-1">
             <Button type="button" variant="secondary" onClick={() => { setContactOpen(false); setEditContact(null) }} className="flex-1">Cancel</Button>
@@ -304,16 +307,9 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
         <form onSubmit={handleLinkTalent} className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Talent</label>
-            <Select
-              value={linkTalentId}
-              onChange={e => setLinkTalentId(e.target.value)}
-              options={availableTalents.map(t => ({ value: t.id, label: t.name }))}
-              placeholder="Select talent…"
-            />
+            <Select value={linkTalentId} onChange={e => setLinkTalentId(e.target.value)} options={availableTalents.map(t => ({ value: t.id, label: t.name }))} placeholder="Select talent…" />
           </div>
-          {availableTalents.length === 0 && (
-            <p className="text-sm text-gray-400">All talents are already linked to this agent.</p>
-          )}
+          {availableTalents.length === 0 && <p className="text-sm text-gray-400">All talents are already linked to this agent.</p>}
           <div className="flex gap-3 pt-1">
             <Button type="button" variant="secondary" onClick={() => setLinkOpen(false)} className="flex-1">Cancel</Button>
             <Button type="submit" disabled={linkSaving || !linkTalentId} className="flex-1">{linkSaving ? 'Linking…' : 'Link Talent'}</Button>
@@ -333,6 +329,10 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
             <Select value={form.agent_type} onChange={field('agent_type')} options={typeOpts} placeholder="Select type…" />
           </div>
           <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Website</label>
+            <Input value={form.website} onChange={field('website')} placeholder="https://…" />
+          </div>
+          <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Notes</label>
             <Textarea value={form.notes} onChange={field('notes')} rows={3} />
           </div>
@@ -341,6 +341,24 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
             <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : 'Save Changes'}</Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete Confirmation */}
+      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete Agent">
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-4 bg-red-50 rounded-lg border border-red-100">
+            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+            <p className="text-sm text-red-700">
+              This will permanently delete <strong>{agent.name}</strong> and all associated contacts. Talent links will also be removed. This cannot be undone.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <Button type="button" variant="secondary" onClick={() => setDeleteOpen(false)} className="flex-1">Cancel</Button>
+            <Button type="button" onClick={handleDelete} disabled={deleting} className="flex-1 bg-red-600 hover:bg-red-700 text-white border-red-600">
+              {deleting ? 'Deleting…' : 'Delete Agent'}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   )

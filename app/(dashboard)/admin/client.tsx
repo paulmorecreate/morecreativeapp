@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2 } from 'lucide-react'
-import { ProjectCategory, Industry, AgentType } from '@/lib/supabase/types'
+import { ProjectCategory, Industry, AgentType, TalentCategory } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { createClient } from '@/lib/supabase/client'
@@ -12,6 +12,7 @@ type Props = {
   categories: ProjectCategory[]
   industries: Industry[]
   agentTypes: AgentType[]
+  talentCategories: TalentCategory[]
 }
 
 function StaticList({
@@ -79,7 +80,7 @@ function StaticList({
   )
 }
 
-export function AdminClient({ categories, industries, agentTypes }: Props) {
+export function AdminClient({ categories, industries, agentTypes, talentCategories }: Props) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -87,7 +88,6 @@ export function AdminClient({ categories, industries, agentTypes }: Props) {
     await supabase.from('project_categories').insert({ name })
     router.refresh()
   }
-
   async function deleteCategory(id: string) {
     await supabase.from('project_categories').delete().eq('id', id)
     router.refresh()
@@ -97,7 +97,6 @@ export function AdminClient({ categories, industries, agentTypes }: Props) {
     await supabase.from('industries').insert({ name })
     router.refresh()
   }
-
   async function deleteIndustry(id: string) {
     await supabase.from('industries').delete().eq('id', id)
     router.refresh()
@@ -107,9 +106,17 @@ export function AdminClient({ categories, industries, agentTypes }: Props) {
     await supabase.from('agent_types').insert({ name })
     router.refresh()
   }
-
   async function deleteAgentType(id: string) {
     await supabase.from('agent_types').delete().eq('id', id)
+    router.refresh()
+  }
+
+  async function addTalentCategory(name: string) {
+    await supabase.from('talent_categories').insert({ name })
+    router.refresh()
+  }
+  async function deleteTalentCategory(id: string) {
+    await supabase.from('talent_categories').delete().eq('id', id)
     router.refresh()
   }
 
@@ -120,7 +127,7 @@ export function AdminClient({ categories, industries, agentTypes }: Props) {
         <p className="text-sm text-gray-500 mt-0.5">Manage static data used across the app</p>
       </div>
 
-      <div className="max-w-lg space-y-5">
+      <div className="grid grid-cols-2 gap-5 max-w-3xl">
         <StaticList
           title="Project Categories"
           description="Appear in the Category dropdown when creating or editing a project."
@@ -141,6 +148,13 @@ export function AdminClient({ categories, industries, agentTypes }: Props) {
           items={agentTypes}
           onAdd={addAgentType}
           onDelete={deleteAgentType}
+        />
+        <StaticList
+          title="Talent Categories"
+          description="Appear in the Category dropdown when creating or editing a talent."
+          items={talentCategories}
+          onAdd={addTalentCategory}
+          onDelete={deleteTalentCategory}
         />
       </div>
     </div>
