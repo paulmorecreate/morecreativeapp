@@ -4,7 +4,9 @@ import { ProjectsClient } from './client'
 export default async function ProjectsPage() {
   const supabase = await createClient()
   const [{ data: projects }, { data: categories }] = await Promise.all([
-    supabase.from('events').select('*').order('start_date', { ascending: true }),
+    supabase.from('events')
+      .select('*, project_brands(brand:brands(id, name), project_brand_talents(talent:talents(id, name)))')
+      .order('start_date', { ascending: true }),
     supabase.from('project_categories').select('*').order('name'),
   ])
 

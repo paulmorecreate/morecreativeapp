@@ -11,8 +11,15 @@ import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 import { formatDate } from '@/lib/utils'
 
+type ProjectRow = Event & {
+  project_brands: {
+    brand: { id: string; name: string } | null
+    project_brand_talents: { talent: { id: string; name: string } | null }[]
+  }[]
+}
+
 type Props = {
-  projects: Event[]
+  projects: ProjectRow[]
   categories: ProjectCategory[]
 }
 
@@ -49,11 +56,15 @@ export function ProjectsClient({ projects, categories }: Props) {
   const q = search.toLowerCase()
   const filtered = projects.filter(p => {
     const matchCompleted = showCompleted ? true : p.status !== 'completed'
+    const brandNames = p.project_brands?.map(pb => pb.brand?.name ?? '') ?? []
+    const talentNames = p.project_brands?.flatMap(pb => pb.project_brand_talents?.map(pbt => pbt.talent?.name ?? '') ?? []) ?? []
     const matchSearch = !search ||
       p.name.toLowerCase().includes(q) ||
       (p.location ?? '').toLowerCase().includes(q) ||
       (p.notes ?? '').toLowerCase().includes(q) ||
-      (p.category ?? '').toLowerCase().includes(q)
+      (p.category ?? '').toLowerCase().includes(q) ||
+      brandNames.some(n => n.toLowerCase().includes(q)) ||
+      talentNames.some(n => n.toLowerCase().includes(q))
     return matchCompleted && matchSearch
   })
 
