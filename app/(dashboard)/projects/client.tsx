@@ -4,25 +4,32 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, Search, ChevronRight } from 'lucide-react'
-import { Event } from '@/lib/supabase/types'
+import { Event, ProjectCategory } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
-import { Input, Textarea } from '@/components/ui/input'
+import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 import { formatDate } from '@/lib/utils'
 
-export function ProjectsClient({ projects }: { projects: Event[] }) {
+type Props = {
+  projects: Event[]
+  categories: ProjectCategory[]
+}
+
+export function ProjectsClient({ projects, categories }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [showCompleted, setShowCompleted] = useState(false)
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
-    name: '', location: '', start_date: '', end_date: '', notes: '',
+    name: '', location: '', category: '', start_date: '', end_date: '', notes: '',
   })
 
+  const categoryOpts = categories.map(c => ({ value: c.name, label: c.name }))
+
   function field(k: keyof typeof form) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
   }
 
@@ -35,7 +42,16 @@ export function ProjectsClient({ projects }: { projects: Event[] }) {
     await supabase.from('events').insert(payload)
     setSaving(false)
     setOpen(false)
-    setForm({ name: '', location: '', start_date: '', end_date: '', notes: '' })
+    setForm({ name: '', location: '', category: '', start_date: '', end_date: '', notes: '' })
+    router.refresh()
+  }
+
+  async function toggleCompleted(e: React.MouseEvent, id: string, currentStatus: string) {
+    e.stopPropagation()
+    const supabase = createClient()
+    await supabase.from('events').update({
+      status: currentStatus === 'completed' ? 'active' : 'completed',
+    }).eq('id', id)
     router.refresh()
   }
 
@@ -45,7 +61,8 @@ export function ProjectsClient({ projects }: { projects: Event[] }) {
     const matchSearch = !search ||
       p.name.toLowerCase().includes(q) ||
       (p.location ?? '').toLowerCase().includes(q) ||
-      (p.notes ?? '').toLowerCase().includes(q)
+      (p.notes ?? '').toLowerCase().includes(q) ||
+      (p.category ?? '').toLowerCase().includes(q)
     return matchCompleted && matchSearch
   })
 
@@ -93,18 +110,19 @@ export function ProjectsClient({ projects }: { projects: Event[] }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50">
+              <th className="px-4 py-3 w-8" />
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Project</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Category</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Location</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Start Date</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">End Date</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Status</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {displayed.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
+                <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">
                   {search ? 'No results.' : 'No projects yet.'}
                 </td>
               </tr>
@@ -115,16 +133,21 @@ export function ProjectsClient({ projects }: { projects: Event[] }) {
                 className={`hover:bg-gray-50/50 transition-colors cursor-pointer ${project.status === 'completed' ? 'opacity-60' : ''}`}
                 onClick={() => router.push(`/projects/${project.id}`)}
               >
+                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={project.status === 'completed'}
+                    onChange={() => {}}
+                    onClick={e => toggleCompleted(e, project.id, project.status)}
+                    className="rounded border-gray-300 cursor-pointer"
+                    title={project.status === 'completed' ? 'Mark as active' : 'Mark as completed'}
+                  />
+                </td>
                 <td className="px-4 py-3 font-medium text-gray-900">{project.name}</td>
+                <td className="px-4 py-3 text-gray-500 text-xs">{project.category ?? <span className="text-gray-300">—</span>}</td>
                 <td className="px-4 py-3 text-gray-500">{project.location ?? <span className="text-gray-300">—</span>}</td>
                 <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(project.start_date) ?? <span className="text-gray-300">—</span>}</td>
                 <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(project.end_date) ?? <span className="text-gray-300">—</span>}</td>
-                <td className="px-4 py-3">
-                  {project.status === 'completed'
-                    ? <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Completed</span>
-                    : <span className="text-xs text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full">Active</span>
-                  }
-                </td>
                 <td className="px-4 py-3 text-right text-gray-300 hover:text-gray-500">
                   <ChevronRight className="w-4 h-4 inline" />
                 </td>
@@ -140,9 +163,15 @@ export function ProjectsClient({ projects }: { projects: Event[] }) {
             <label className="text-xs font-medium text-gray-700">Project Name *</label>
             <Input value={form.name} onChange={field('name')} required placeholder="e.g. Cannes 2026" />
           </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Location</label>
-            <Input value={form.location} onChange={field('location')} placeholder="City, Country" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Category</label>
+              <Select value={form.category} onChange={field('category')} options={categoryOpts} placeholder="Select…" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Location</label>
+              <Input value={form.location} onChange={field('location')} placeholder="City, Country" />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

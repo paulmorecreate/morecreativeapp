@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, MapPin, Calendar, Pencil, Plus } from 'lucide-react'
-import { Event } from '@/lib/supabase/types'
+import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag } from 'lucide-react'
+import { Event, ProjectCategory } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
@@ -92,9 +92,10 @@ type Props = {
   opportunities: Opportunity[]
   talents: SimpleRecord[]
   brands: SimpleRecord[]
+  categories: ProjectCategory[]
 }
 
-export function ProjectDetailClient({ project, talentDetails, opportunities, talents, brands }: Props) {
+export function ProjectDetailClient({ project, talentDetails, opportunities, talents, brands, categories }: Props) {
   const router = useRouter()
 
   const [open, setOpen] = useState(false)
@@ -102,11 +103,14 @@ export function ProjectDetailClient({ project, talentDetails, opportunities, tal
   const [form, setForm] = useState({
     name: project.name ?? '',
     location: project.location ?? '',
+    category: project.category ?? '',
     start_date: project.start_date ?? '',
     end_date: project.end_date ?? '',
     status: project.status ?? 'active',
     notes: project.notes ?? '',
   })
+
+  const categoryOpts = categories.map(c => ({ value: c.name, label: c.name }))
 
   const [scheduleTarget, setScheduleTarget] = useState<null | 'add' | TalentDetail>(null)
   const [scheduleForm, setScheduleForm] = useState(emptyScheduleForm)
@@ -217,6 +221,7 @@ export function ProjectDetailClient({ project, talentDetails, opportunities, tal
     await supabase.from('events').update({
       name: form.name || null,
       location: form.location || null,
+      category: form.category || null,
       start_date: form.start_date || null,
       end_date: form.end_date || null,
       status: form.status,
@@ -246,6 +251,11 @@ export function ProjectDetailClient({ project, talentDetails, opportunities, tal
               )}
             </div>
             <div className="flex items-center gap-4 mt-1.5">
+              {project.category && (
+                <span className="flex items-center gap-1 text-sm text-gray-500">
+                  <Tag className="w-3.5 h-3.5" /> {project.category}
+                </span>
+              )}
               {project.location && (
                 <span className="flex items-center gap-1 text-sm text-gray-500">
                   <MapPin className="w-3.5 h-3.5" /> {project.location}
@@ -508,9 +518,15 @@ export function ProjectDetailClient({ project, talentDetails, opportunities, tal
             <label className="text-xs font-medium text-gray-700">Project Name</label>
             <Input value={form.name} onChange={field('name')} required />
           </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Location</label>
-            <Input value={form.location} onChange={field('location')} placeholder="City, Country" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Category</label>
+              <Select value={form.category} onChange={field('category')} options={categoryOpts} placeholder="Select…" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Location</label>
+              <Input value={form.location} onChange={field('location')} placeholder="City, Country" />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

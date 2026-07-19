@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, Star } from 'lucide-react'
 import { Brand, Opportunity, Conversation, Contact } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -62,10 +62,10 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
     name: brand.name ?? '',
     link: brand.link ?? '',
     tiktok_link: brand.tiktok_link ?? '',
+    ig_followers: brand.ig_followers ?? '',
+    tiktok_followers: brand.tiktok_followers ?? '',
     category: brand.category ?? 'main',
     status: brand.status ?? 'active',
-    contact: brand.contact ?? '',
-    budget: brand.budget ?? '',
     industry: brand.industry ?? '',
     country: brand.country ?? '',
     notes: brand.notes ?? '',
@@ -119,6 +119,13 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
   async function deleteContact(id: string) {
     const supabase = createClient()
     await supabase.from('contacts').delete().eq('id', id)
+    router.refresh()
+  }
+
+  async function setPrimaryContact(id: string) {
+    const supabase = createClient()
+    await supabase.from('contacts').update({ is_primary: false }).eq('brand_id', brand.id)
+    await supabase.from('contacts').update({ is_primary: true }).eq('id', id)
     router.refresh()
   }
 
@@ -179,10 +186,10 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
       name: form.name || null,
       link: form.link || null,
       tiktok_link: form.tiktok_link || null,
+      ig_followers: form.ig_followers || null,
+      tiktok_followers: form.tiktok_followers || null,
       category: form.category || null,
       status: form.status || null,
-      contact: form.contact || null,
-      budget: form.budget || null,
       industry: form.industry || null,
       country: form.country || null,
       notes: form.notes || null,
@@ -202,12 +209,6 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">{brand.name}</h1>
-            {brand.link && (
-              <a href={brand.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 mt-1">
-                <ExternalLink className="w-3 h-3" />
-                View profile
-              </a>
-            )}
           </div>
           <div className="flex items-center gap-2">
             <Badge value={brand.category} />
@@ -228,14 +229,20 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
               {[
                 { label: 'Industry', value: brand.industry },
                 { label: 'Country', value: brand.country },
-                { label: 'Budget', value: brand.budget },
-                { label: 'Contact', value: brand.contact },
               ].map(({ label, value }) => (
                 <div key={label}>
                   <dt className="text-xs text-gray-400 mb-0.5">{label}</dt>
                   <dd className="text-sm text-gray-900 whitespace-pre-wrap">{value ?? <span className="text-gray-300">—</span>}</dd>
                 </div>
               ))}
+              <div>
+                <dt className="text-xs text-gray-400 mb-0.5">IG Followers</dt>
+                <dd className="text-sm text-gray-900">{brand.ig_followers ?? <span className="text-gray-300">—</span>}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-gray-400 mb-0.5">TikTok Followers</dt>
+                <dd className="text-sm text-gray-900">{brand.tiktok_followers ?? <span className="text-gray-300">—</span>}</dd>
+              </div>
             </dl>
           </div>
 
@@ -280,14 +287,26 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
               )}
               {contacts.map(c => (
                 <div key={c.id} className="px-5 py-3 group flex items-start justify-between">
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">{c.name ?? '—'}</div>
-                    {c.role && <div className="text-xs text-gray-400 mt-0.5">{c.role}</div>}
-                    <div className="flex items-center gap-3 mt-1">
-                      {c.email && <a href={`mailto:${c.email}`} className="text-xs text-gray-500 hover:text-black">{c.email}</a>}
-                      {c.phone && <span className="text-xs text-gray-500">{c.phone}</span>}
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <button
+                      onClick={() => setPrimaryContact(c.id)}
+                      title={c.is_primary ? 'Primary contact' : 'Set as primary'}
+                      className={`mt-0.5 shrink-0 transition-colors ${c.is_primary ? 'text-amber-400' : 'text-gray-200 hover:text-amber-300'}`}
+                    >
+                      <Star className="w-3.5 h-3.5" fill={c.is_primary ? 'currentColor' : 'none'} />
+                    </button>
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {c.name ?? '—'}
+                        {c.is_primary && <span className="ml-2 text-xs text-amber-600 font-normal">Primary</span>}
+                      </div>
+                      {c.role && <div className="text-xs text-gray-400 mt-0.5">{c.role}</div>}
+                      <div className="flex items-center gap-3 mt-1">
+                        {c.email && <a href={`mailto:${c.email}`} className="text-xs text-gray-500 hover:text-black">{c.email}</a>}
+                        {c.phone && <span className="text-xs text-gray-500">{c.phone}</span>}
+                      </div>
+                      {c.notes && <p className="text-xs text-gray-400 mt-1">{c.notes}</p>}
                     </div>
-                    {c.notes && <p className="text-xs text-gray-400 mt-1">{c.notes}</p>}
                   </div>
                   <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-3">
                     <button onClick={() => openEditContact(c)} className="text-gray-300 hover:text-gray-600">
@@ -302,6 +321,7 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
             </div>
           </div>
 
+          {/* Opportunities */}
           <div className="bg-white rounded-xl border border-gray-200">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Opportunities</h2>
@@ -312,7 +332,7 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
                 <p className="px-5 py-4 text-sm text-gray-400">No opportunities linked.</p>
               )}
               {opportunities?.map(opp => (
-                <div key={opp.id} className="px-5 py-3 flex items-center justify-between">
+                <Link key={opp.id} href={`/opportunities/${opp.id}`} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50/50 transition-colors">
                   <div>
                     <div className="text-sm font-medium text-gray-900">
                       {opp.talent?.name ?? 'No talent'} — {opp.type ?? 'No type'}
@@ -323,11 +343,12 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
                     {opp.estimated_value && <span className="text-xs text-gray-500">{formatCurrency(opp.estimated_value)}</span>}
                     <Badge value={opp.status} />
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           </div>
 
+          {/* Conversations */}
           <div className="bg-white rounded-xl border border-gray-200">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Conversations</h2>
@@ -359,6 +380,7 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
         </div>
       </div>
 
+      {/* Add/Edit Contact Modal */}
       <Modal open={contactOpen} onClose={() => { setContactOpen(false); setEditContact(null) }} title={editContact ? 'Edit Contact' : 'Add Contact'}>
         <form onSubmit={handleContactSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
@@ -392,6 +414,7 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
         </form>
       </Modal>
 
+      {/* Log Conversation Modal */}
       <Modal open={logConvoOpen} onClose={() => setLogConvoOpen(false)} title="Log Conversation">
         <form onSubmit={handleLogConvo} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
@@ -419,6 +442,7 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
         </form>
       </Modal>
 
+      {/* Edit Conversation Modal */}
       <Modal open={!!editConvo} onClose={() => setEditConvo(null)} title="Edit Conversation">
         <form onSubmit={handleEditConvo} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
@@ -446,21 +470,12 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
         </form>
       </Modal>
 
+      {/* Edit Brand Modal */}
       <Modal open={open} onClose={() => setOpen(false)} title="Edit Brand">
         <form onSubmit={handleSave} className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Name</label>
             <Input value={form.name} onChange={field('name')} required />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Instagram / Website URL</label>
-              <Input value={form.link} onChange={field('link')} placeholder="https://instagram.com/..." />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">TikTok URL</label>
-              <Input value={form.tiktok_link} onChange={field('tiktok_link')} placeholder="https://tiktok.com/@..." />
-            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -474,6 +489,26 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Instagram / Website URL</label>
+              <Input value={form.link} onChange={field('link')} placeholder="https://instagram.com/..." />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">TikTok URL</label>
+              <Input value={form.tiktok_link} onChange={field('tiktok_link')} placeholder="https://tiktok.com/@..." />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">IG Followers</label>
+              <Input value={form.ig_followers} onChange={field('ig_followers')} placeholder="e.g. 120K" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">TikTok Followers</label>
+              <Input value={form.tiktok_followers} onChange={field('tiktok_followers')} placeholder="e.g. 500K" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">Industry</label>
               <Input value={form.industry} onChange={field('industry')} />
             </div>
@@ -483,16 +518,8 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
             </div>
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Budget</label>
-            <Input value={form.budget} onChange={field('budget')} placeholder="e.g. €10,000" />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Contact</label>
-            <Textarea value={form.contact} onChange={field('contact')} rows={2} placeholder="Name, email, phone…" />
-          </div>
-          <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Notes</label>
-            <Textarea value={form.notes} onChange={field('notes')} rows={4} />
+            <Textarea value={form.notes} onChange={field('notes')} rows={3} />
           </div>
           <div className="flex gap-3 pt-1">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)} className="flex-1">Cancel</Button>

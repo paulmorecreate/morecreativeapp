@@ -5,8 +5,8 @@ export default async function BrandsPage() {
   const supabase = await createClient()
   const { data: brands } = await supabase
     .from('brands')
-    .select('*')
+    .select('*, contacts(id, name, is_primary)')
     .order('name')
 
-  return <BrandsClient brands={brands ?? []} />
+  return <BrandsClient brands={(brands ?? []) as any} />
 }

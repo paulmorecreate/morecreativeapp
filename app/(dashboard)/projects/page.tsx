@@ -3,10 +3,10 @@ import { ProjectsClient } from './client'
 
 export default async function ProjectsPage() {
   const supabase = await createClient()
-  const { data: projects } = await supabase
-    .from('events')
-    .select('*')
-    .order('start_date', { ascending: true })
+  const [{ data: projects }, { data: categories }] = await Promise.all([
+    supabase.from('events').select('*').order('start_date', { ascending: true }),
+    supabase.from('project_categories').select('*').order('name'),
+  ])
 
-  return <ProjectsClient projects={projects ?? []} />
+  return <ProjectsClient projects={projects ?? []} categories={categories ?? []} />
 }

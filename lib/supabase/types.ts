@@ -17,8 +17,8 @@ export interface Brand {
   name: string
   link: string | null
   tiktok_link: string | null
-  contact: string | null
-  budget: string | null
+  ig_followers: string | null
+  tiktok_followers: string | null
   category: string | null
   status: string | null
   industry: string | null
@@ -35,6 +35,7 @@ export interface Event {
   start_date: string | null
   end_date: string | null
   status: string
+  category: string | null
   notes: string | null
   created_at: string
   updated_at: string
@@ -101,7 +102,14 @@ export interface Contact {
   instagram: string | null
   brand_id: string | null
   role: string | null
+  is_primary: boolean
   notes: string | null
   created_at: string
   updated_at: string
+}
+
+export interface ProjectCategory {
+  id: string
+  name: string
+  created_at: string
 }

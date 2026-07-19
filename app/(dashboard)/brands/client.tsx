@@ -11,6 +11,10 @@ import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 
+type BrandWithContacts = Brand & {
+  contacts: { id: string; name: string | null; is_primary: boolean }[]
+}
+
 const statusOpts = [
   { value: 'prospect', label: 'Prospect' },
   { value: 'active', label: 'Active' },
@@ -26,7 +30,7 @@ const categoryOpts = [
   { value: 'prospect', label: 'Prospect' },
 ]
 
-export function BrandsClient({ brands }: { brands: Brand[] }) {
+export function BrandsClient({ brands }: { brands: BrandWithContacts[] }) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -34,13 +38,16 @@ export function BrandsClient({ brands }: { brands: Brand[] }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
-    name: '', link: '', contact: '', budget: '', category: '',
+    name: '', link: '', tiktok_link: '', category: '',
     status: 'prospect', industry: '', country: '', notes: '',
   })
 
   const filtered = brands.filter(b => {
+    const primaryContact = b.contacts?.find(c => c.is_primary)?.name ?? ''
     const q = search.toLowerCase()
-    const matchSearch = !search || b.name.toLowerCase().includes(q) || (b.contact ?? '').toLowerCase().includes(q)
+    const matchSearch = !search ||
+      b.name.toLowerCase().includes(q) ||
+      primaryContact.toLowerCase().includes(q)
     const matchCat = !categoryFilter || b.category === categoryFilter
     const matchStatus = !statusFilter || b.status === statusFilter
     return matchSearch && matchCat && matchStatus
@@ -60,7 +67,7 @@ export function BrandsClient({ brands }: { brands: Brand[] }) {
     await supabase.from('brands').insert(payload)
     setSaving(false)
     setOpen(false)
-    setForm({ name: '', link: '', contact: '', budget: '', category: '', status: 'prospect', industry: '', country: '', notes: '' })
+    setForm({ name: '', link: '', tiktok_link: '', category: '', status: 'prospect', industry: '', country: '', notes: '' })
     router.refresh()
   }
 
@@ -113,44 +120,60 @@ export function BrandsClient({ brands }: { brands: Brand[] }) {
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Category</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Status</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Contact</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Budget</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Link</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">IG Followers</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">TK Followers</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Links</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">
+                <td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-400">
                   {search || categoryFilter || statusFilter ? 'No results match your filters.' : 'No brands yet.'}
                 </td>
               </tr>
             )}
-            {filtered.map(brand => (
-              <tr key={brand.id} className="hover:bg-gray-50/50 transition-colors">
-                <td className="px-4 py-3">
-                  <Link href={`/brands/${brand.id}`} className="font-medium text-gray-900 hover:text-black">
-                    {brand.name}
-                  </Link>
-                </td>
-                <td className="px-4 py-3"><Badge value={brand.category} /></td>
-                <td className="px-4 py-3"><Badge value={brand.status} /></td>
-                <td className="px-4 py-3 text-gray-500 max-w-[200px] truncate">{brand.contact ?? '—'}</td>
-                <td className="px-4 py-3 text-gray-600">{brand.budget ?? '—'}</td>
-                <td className="px-4 py-3">
-                  {brand.link ? (
-                    <a href={brand.link} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-gray-700">
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  ) : <span className="text-gray-300">—</span>}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <Link href={`/brands/${brand.id}`} className="text-gray-300 hover:text-gray-500">
-                    <ChevronRight className="w-4 h-4" />
-                  </Link>
-                </td>
-              </tr>
-            ))}
+            {filtered.map(brand => {
+              const primaryContact = brand.contacts?.find(c => c.is_primary)
+              return (
+                <tr key={brand.id} className="hover:bg-gray-50/50 transition-colors">
+                  <td className="px-4 py-3">
+                    <Link href={`/brands/${brand.id}`} className="font-medium text-gray-900 hover:text-black">
+                      {brand.name}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3"><Badge value={brand.category} /></td>
+                  <td className="px-4 py-3"><Badge value={brand.status} /></td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">
+                    {primaryContact ? (
+                      <span>{primaryContact.name}</span>
+                    ) : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">{brand.ig_followers ?? <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">{brand.tiktok_followers ?? <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      {brand.link ? (
+                        <a href={brand.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700" title="Instagram / Website">
+                          <ExternalLink className="w-3 h-3" /> IG
+                        </a>
+                      ) : <span className="text-xs text-gray-200">IG</span>}
+                      {brand.tiktok_link ? (
+                        <a href={brand.tiktok_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700" title="TikTok">
+                          <ExternalLink className="w-3 h-3" /> TK
+                        </a>
+                      ) : <span className="text-xs text-gray-200">TK</span>}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Link href={`/brands/${brand.id}`} className="text-gray-300 hover:text-gray-500">
+                      <ChevronRight className="w-4 h-4" />
+                    </Link>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -171,23 +194,25 @@ export function BrandsClient({ brands }: { brands: Brand[] }) {
               <Select value={form.status} onChange={field('status')} options={statusOpts} />
             </div>
           </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Link (IG or website)</label>
-            <Input value={form.link} onChange={field('link')} type="url" placeholder="https://…" />
-          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Budget</label>
-              <Input value={form.budget} onChange={field('budget')} placeholder="e.g. €4,500" />
+              <label className="text-xs font-medium text-gray-700">Instagram / Website</label>
+              <Input value={form.link} onChange={field('link')} type="url" placeholder="https://…" />
             </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">TikTok</label>
+              <Input value={form.tiktok_link} onChange={field('tiktok_link')} type="url" placeholder="https://tiktok.com/@…" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">Industry</label>
               <Input value={form.industry} onChange={field('industry')} placeholder="Fashion, Jewellery…" />
             </div>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Contact Info</label>
-            <Textarea value={form.contact} onChange={field('contact')} rows={2} placeholder="Name, email, phone…" />
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Country</label>
+              <Input value={form.country} onChange={field('country')} placeholder="France, Italy…" />
+            </div>
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Notes</label>
