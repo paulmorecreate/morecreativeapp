@@ -113,3 +113,9 @@ export interface ProjectCategory {
   name: string
   created_at: string
 }
+
+export interface Industry {
+  id: string
+  name: string
+  created_at: string
+}

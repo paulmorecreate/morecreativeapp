@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, Search, ExternalLink, ChevronRight } from 'lucide-react'
-import { Brand } from '@/lib/supabase/types'
+import { Brand, Industry } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
@@ -30,7 +30,14 @@ const categoryOpts = [
   { value: 'prospect', label: 'Prospect' },
 ]
 
-export function BrandsClient({ brands }: { brands: BrandWithContacts[] }) {
+const COUNTRIES = [
+  'Australia','Austria','Belgium','Brazil','Canada','China','Denmark','Finland',
+  'France','Germany','Greece','India','Ireland','Italy','Japan','Mexico',
+  'Netherlands','New Zealand','Norway','Poland','Portugal','Russia','Saudi Arabia',
+  'South Korea','Spain','Sweden','Switzerland','Turkey','UAE','UK','USA',
+].map(c => ({ value: c, label: c }))
+
+export function BrandsClient({ brands, industries }: { brands: BrandWithContacts[]; industries: Industry[] }) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -207,11 +214,11 @@ export function BrandsClient({ brands }: { brands: BrandWithContacts[] }) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">Industry</label>
-              <Input value={form.industry} onChange={field('industry')} placeholder="Fashion, Jewellery…" />
+              <Select value={form.industry} onChange={field('industry')} options={industries.map(i => ({ value: i.name, label: i.name }))} placeholder="Select…" />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">Country</label>
-              <Input value={form.country} onChange={field('country')} placeholder="France, Italy…" />
+              <Select value={form.country} onChange={field('country')} options={COUNTRIES} placeholder="Select…" />
             </div>
           </div>
           <div className="space-y-1.5">

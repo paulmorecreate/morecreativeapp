@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, Star } from 'lucide-react'
-import { Brand, Opportunity, Conversation, Contact } from '@/lib/supabase/types'
+import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, Star, AlertTriangle } from 'lucide-react'
+import { Brand, Opportunity, Conversation, Contact, Industry } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
@@ -38,17 +38,27 @@ const statusOpts = [
   { value: 'inactive', label: 'Inactive' },
 ]
 
+const COUNTRIES = [
+  'Australia','Austria','Belgium','Brazil','Canada','China','Denmark','Finland',
+  'France','Germany','Greece','India','Ireland','Italy','Japan','Mexico',
+  'Netherlands','New Zealand','Norway','Poland','Portugal','Russia','Saudi Arabia',
+  'South Korea','Spain','Sweden','Switzerland','Turkey','UAE','UK','USA',
+].map(c => ({ value: c, label: c }))
+
 type Props = {
   brand: Brand
   opportunities: (Opportunity & { talent?: { name: string } | null; event?: { name: string } | null })[]
   conversations: Conversation[]
   contacts: Contact[]
+  industries: Industry[]
 }
 
-export function BrandDetailClient({ brand, opportunities, conversations, contacts }: Props) {
+export function BrandDetailClient({ brand, opportunities, conversations, contacts, industries }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [contactOpen, setContactOpen] = useState(false)
   const [editContact, setEditContact] = useState<Contact | null>(null)
   const [contactSaving, setContactSaving] = useState(false)
@@ -70,6 +80,16 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
     country: brand.country ?? '',
     notes: brand.notes ?? '',
   })
+
+  const industryOpts = industries.map(i => ({ value: i.name, label: i.name }))
+
+  async function handleDelete() {
+    setDeleting(true)
+    const supabase = createClient()
+    await supabase.from('brands').delete().eq('id', brand.id)
+    router.push('/brands')
+    router.refresh()
+  }
 
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -216,6 +236,10 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
             <Button variant="secondary" onClick={() => setOpen(true)}>
               <Pencil className="w-3.5 h-3.5" />
               Edit
+            </Button>
+            <Button variant="secondary" onClick={() => setDeleteOpen(true)} className="text-red-500 hover:text-red-700 border-red-200 hover:border-red-300">
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete
             </Button>
           </div>
         </div>
@@ -510,11 +534,11 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">Industry</label>
-              <Input value={form.industry} onChange={field('industry')} />
+              <Select value={form.industry} onChange={field('industry')} options={industryOpts} placeholder="Select…" />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">Country</label>
-              <Input value={form.country} onChange={field('country')} />
+              <Select value={form.country} onChange={field('country')} options={COUNTRIES} placeholder="Select…" />
             </div>
           </div>
           <div className="space-y-1.5">
@@ -526,6 +550,29 @@ export function BrandDetailClient({ brand, opportunities, conversations, contact
             <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : 'Save Changes'}</Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete Brand Confirmation */}
+      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete Brand">
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-4 bg-red-50 rounded-lg border border-red-100">
+            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+            <p className="text-sm text-red-700">
+              This will permanently delete <strong>{brand.name}</strong> and all associated contacts. This cannot be undone.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <Button type="button" variant="secondary" onClick={() => setDeleteOpen(false)} className="flex-1">Cancel</Button>
+            <Button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white border-red-600"
+            >
+              {deleting ? 'Deleting…' : 'Delete Brand'}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   )
