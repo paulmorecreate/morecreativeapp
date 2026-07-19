@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2 } from 'lucide-react'
-import { ProjectCategory, Industry } from '@/lib/supabase/types'
+import { ProjectCategory, Industry, AgentType } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { createClient } from '@/lib/supabase/client'
@@ -11,6 +11,7 @@ import { createClient } from '@/lib/supabase/client'
 type Props = {
   categories: ProjectCategory[]
   industries: Industry[]
+  agentTypes: AgentType[]
 }
 
 function StaticList({
@@ -78,7 +79,7 @@ function StaticList({
   )
 }
 
-export function AdminClient({ categories, industries }: Props) {
+export function AdminClient({ categories, industries, agentTypes }: Props) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -99,6 +100,16 @@ export function AdminClient({ categories, industries }: Props) {
 
   async function deleteIndustry(id: string) {
     await supabase.from('industries').delete().eq('id', id)
+    router.refresh()
+  }
+
+  async function addAgentType(name: string) {
+    await supabase.from('agent_types').insert({ name })
+    router.refresh()
+  }
+
+  async function deleteAgentType(id: string) {
+    await supabase.from('agent_types').delete().eq('id', id)
     router.refresh()
   }
 
@@ -123,6 +134,13 @@ export function AdminClient({ categories, industries }: Props) {
           items={industries}
           onAdd={addIndustry}
           onDelete={deleteIndustry}
+        />
+        <StaticList
+          title="Agent Types"
+          description="Appear in the Agent Type dropdown when creating or editing an agent."
+          items={agentTypes}
+          onAdd={addAgentType}
+          onDelete={deleteAgentType}
         />
       </div>
     </div>

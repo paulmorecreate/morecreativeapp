@@ -119,3 +119,31 @@ export interface Industry {
   name: string
   created_at: string
 }
+
+export interface AgentType {
+  id: string
+  name: string
+  created_at: string
+}
+
+export interface Agent {
+  id: string
+  name: string
+  agent_type: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AgentContact {
+  id: string
+  agent_id: string
+  name: string | null
+  role: string | null
+  email: string | null
+  phone: string | null
+  notes: string | null
+  is_primary: boolean
+  created_at: string
+  updated_at: string
+}

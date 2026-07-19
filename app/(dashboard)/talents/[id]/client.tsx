@@ -38,14 +38,21 @@ const statusOpts = [
   { value: 'inactive', label: 'Inactive' },
 ]
 
+type AgentLink = {
+  id: string
+  agent_id: string
+  agent: { id: string; name: string; agent_type: string | null } | null
+}
+
 type Props = {
   talent: Talent
   opportunities: (Opportunity & { brand?: { name: string } | null; event?: { name: string } | null })[]
   eventDetails: (TalentEventDetail & { event?: { name: string } | null })[]
   conversations: Conversation[]
+  agentLinks: AgentLink[]
 }
 
-export function TalentDetailClient({ talent, opportunities, eventDetails, conversations }: Props) {
+export function TalentDetailClient({ talent, opportunities, eventDetails, conversations, agentLinks }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -190,6 +197,27 @@ export function TalentDetailClient({ talent, opportunities, eventDetails, conver
               <p className="text-sm text-gray-700 whitespace-pre-wrap">{talent.notes}</p>
             </div>
           )}
+
+          <div className="bg-white rounded-xl border border-gray-200">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Agents</h2>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {agentLinks.length === 0 && (
+                <p className="px-5 py-4 text-sm text-gray-400">No agents linked.</p>
+              )}
+              {agentLinks.map(link => (
+                <Link key={link.id} href={`/agents/${link.agent?.id}`} className="flex items-center justify-between px-5 py-3 hover:bg-gray-50/50 transition-colors">
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{link.agent?.name ?? '—'}</div>
+                    {link.agent?.agent_type && (
+                      <div className="text-xs text-gray-400 mt-0.5">{link.agent.agent_type}</div>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="col-span-2 space-y-5">
