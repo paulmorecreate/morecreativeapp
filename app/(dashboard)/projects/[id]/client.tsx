@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag, Trash2, CheckCircle2, Circle } from 'lucide-react'
+import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag, Trash2, CheckCircle2, Circle, CheckCheck } from 'lucide-react'
 import { Event, ProjectCategory } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -218,6 +218,14 @@ export function ProjectDetailClient({ project, talentDetails, opportunities, tal
   }
 
   // Project edit
+  async function toggleCompleted() {
+    const supabase = createClient()
+    await supabase.from('events').update({
+      status: project.status === 'completed' ? 'active' : 'completed',
+    }).eq('id', project.id)
+    router.refresh()
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault(); setSaving(true)
     const supabase = createClient()
@@ -353,9 +361,15 @@ export function ProjectDetailClient({ project, talentDetails, opportunities, tal
               )}
             </div>
           </div>
-          <Button variant="secondary" onClick={() => setOpen(true)}>
-            <Pencil className="w-3.5 h-3.5" /> Edit Project
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={toggleCompleted}>
+              <CheckCheck className="w-3.5 h-3.5" />
+              {project.status === 'completed' ? 'Mark as Active' : 'Mark as Completed'}
+            </Button>
+            <Button variant="secondary" onClick={() => setOpen(true)}>
+              <Pencil className="w-3.5 h-3.5" /> Edit Project
+            </Button>
+          </div>
         </div>
       </div>
 

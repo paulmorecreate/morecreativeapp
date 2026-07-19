@@ -46,15 +46,6 @@ export function ProjectsClient({ projects, categories }: Props) {
     router.refresh()
   }
 
-  async function toggleCompleted(e: React.MouseEvent, id: string, currentStatus: string) {
-    e.stopPropagation()
-    const supabase = createClient()
-    await supabase.from('events').update({
-      status: currentStatus === 'completed' ? 'active' : 'completed',
-    }).eq('id', id)
-    router.refresh()
-  }
-
   const q = search.toLowerCase()
   const filtered = projects.filter(p => {
     const matchCompleted = showCompleted ? true : p.status !== 'completed'
@@ -110,7 +101,6 @@ export function ProjectsClient({ projects, categories }: Props) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50">
-              <th className="px-4 py-3 w-8" />
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Project</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Category</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Location</th>
@@ -122,7 +112,7 @@ export function ProjectsClient({ projects, categories }: Props) {
           <tbody className="divide-y divide-gray-50">
             {displayed.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">
+                <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
                   {search ? 'No results.' : 'No projects yet.'}
                 </td>
               </tr>
@@ -133,16 +123,6 @@ export function ProjectsClient({ projects, categories }: Props) {
                 className={`hover:bg-gray-50/50 transition-colors cursor-pointer ${project.status === 'completed' ? 'opacity-60' : ''}`}
                 onClick={() => router.push(`/projects/${project.id}`)}
               >
-                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                  <input
-                    type="checkbox"
-                    checked={project.status === 'completed'}
-                    onChange={() => {}}
-                    onClick={e => toggleCompleted(e, project.id, project.status)}
-                    className="rounded border-gray-300 cursor-pointer"
-                    title={project.status === 'completed' ? 'Mark as active' : 'Mark as completed'}
-                  />
-                </td>
                 <td className="px-4 py-3 font-medium text-gray-900">{project.name}</td>
                 <td className="px-4 py-3 text-gray-500 text-xs">{project.category ?? <span className="text-gray-300">—</span>}</td>
                 <td className="px-4 py-3 text-gray-500">{project.location ?? <span className="text-gray-300">—</span>}</td>
