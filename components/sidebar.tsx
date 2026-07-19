@@ -2,17 +2,15 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, Users, Briefcase, Calendar, TrendingUp, MessageCircle, LogOut } from 'lucide-react'
+import { LayoutDashboard, Users, Briefcase, Calendar, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 
 const nav = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/projects', label: 'Projects', icon: Calendar },
   { href: '/talents', label: 'Talents', icon: Users },
   { href: '/brands', label: 'Brands', icon: Briefcase },
-  { href: '/events', label: 'Events', icon: Calendar },
-  { href: '/opportunities', label: 'Opportunities', icon: TrendingUp },
-  { href: '/conversations', label: 'Conversations', icon: MessageCircle },
 ]
 
 export function Sidebar() {

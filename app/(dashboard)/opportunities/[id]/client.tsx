@@ -229,9 +229,9 @@ export function OpportunityDetailClient({ opp, conversations, talents, brands, e
                 </Link>
               )}
               {opp.event && (
-                <Link href={`/events/${opp.event.id}`} className="flex items-center justify-between text-sm text-gray-700 hover:text-gray-900 group">
+                <Link href={`/projects/${opp.event.id}`} className="flex items-center justify-between text-sm text-gray-700 hover:text-gray-900 group">
                   <span>{opp.event.name}</span>
-                  <span className="text-xs text-gray-300 group-hover:text-gray-500">Event →</span>
+                  <span className="text-xs text-gray-300 group-hover:text-gray-500">Project →</span>
                 </Link>
               )}
               {!opp.talent && !opp.brand && !opp.event && (

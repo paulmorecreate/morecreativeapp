@@ -42,7 +42,7 @@ export default async function DashboardPage() {
   const stats = [
     { label: 'Talents', value: talentCount ?? 0, icon: Users, href: '/talents', color: 'text-purple-600' },
     { label: 'Brands', value: brandCount ?? 0, icon: Briefcase, href: '/brands', color: 'text-blue-600' },
-    { label: 'Events', value: eventCount ?? 0, icon: Calendar, href: '/events', color: 'text-teal-600' },
+    { label: 'Projects', value: eventCount ?? 0, icon: Calendar, href: '/projects', color: 'text-teal-600' },
     { label: 'Open Opps', value: oppCount ?? 0, icon: TrendingUp, href: '/opportunities', color: 'text-amber-600' },
   ]
 
@@ -95,18 +95,18 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Upcoming Events */}
+        {/* Upcoming Projects */}
         <div className="bg-white rounded-xl border border-gray-200">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-900">Upcoming Events</h2>
-            <Link href="/events" className="text-xs text-gray-400 hover:text-gray-600">View all →</Link>
+            <h2 className="text-sm font-semibold text-gray-900">Upcoming Projects</h2>
+            <Link href="/projects" className="text-xs text-gray-400 hover:text-gray-600">View all →</Link>
           </div>
           <div className="divide-y divide-gray-50">
             {!upcomingEvents?.length && (
-              <p className="px-5 py-4 text-sm text-gray-400">No upcoming events.</p>
+              <p className="px-5 py-4 text-sm text-gray-400">No upcoming projects.</p>
             )}
             {upcomingEvents?.map(event => (
-              <Link key={event.id} href={`/events/${event.id}`} className="flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors">
+              <Link key={event.id} href={`/projects/${event.id}`} className="flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors">
                 <div>
                   <div className="text-sm font-medium text-gray-900">{event.name}</div>
                   <div className="text-xs text-gray-400 mt-0.5">{event.location ?? '—'}</div>

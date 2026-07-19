@@ -6,7 +6,7 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
   const { id } = await params
   const supabase = await createClient()
 
-  const [{ data: brand }, { data: opportunities }, { data: conversations }] = await Promise.all([
+  const [{ data: brand }, { data: opportunities }, { data: conversations }, { data: contacts }] = await Promise.all([
     supabase.from('brands').select('*').eq('id', id).single(),
     supabase.from('opportunities')
       .select('*, talent:talents(name), event:events(name)')
@@ -17,6 +17,10 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
       .eq('entity_type', 'brand')
       .eq('entity_id', id)
       .order('created_at', { ascending: false }),
+    supabase.from('contacts')
+      .select('*')
+      .eq('brand_id', id)
+      .order('created_at'),
   ])
 
   if (!brand) notFound()
@@ -26,6 +30,7 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
       brand={brand}
       opportunities={(opportunities ?? []) as any}
       conversations={conversations ?? []}
+      contacts={contacts ?? []}
     />
   )
 }

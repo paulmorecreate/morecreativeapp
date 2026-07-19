@@ -16,6 +16,7 @@ export interface Brand {
   id: string
   name: string
   link: string | null
+  tiktok_link: string | null
   contact: string | null
   budget: string | null
   category: string | null
@@ -33,6 +34,7 @@ export interface Event {
   location: string | null
   start_date: string | null
   end_date: string | null
+  status: string
   notes: string | null
   created_at: string
   updated_at: string

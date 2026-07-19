@@ -12,7 +12,7 @@ import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 import { formatDate } from '@/lib/utils'
 
-const statusOpts = [
+const oppStatusOpts = [
   { value: 'prospect', label: 'Prospect' },
   { value: 'in_progress', label: 'In Progress' },
   { value: 'confirmed', label: 'Confirmed' },
@@ -33,6 +33,11 @@ const priorityOpts = [
   { value: 'high', label: 'High' },
   { value: 'medium', label: 'Medium' },
   { value: 'low', label: 'Low' },
+]
+
+const projectStatusOpts = [
+  { value: 'active', label: 'Active' },
+  { value: 'completed', label: 'Completed' },
 ]
 
 type TalentDetail = {
@@ -82,32 +87,30 @@ const emptyScheduleForm = {
 }
 
 type Props = {
-  event: Event
+  project: Event
   talentDetails: TalentDetail[]
   opportunities: Opportunity[]
   talents: SimpleRecord[]
   brands: SimpleRecord[]
 }
 
-export function EventDetailClient({ event, talentDetails, opportunities, talents, brands }: Props) {
+export function ProjectDetailClient({ project, talentDetails, opportunities, talents, brands }: Props) {
   const router = useRouter()
 
-  // Event edit modal
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
-    name: event.name ?? '',
-    location: event.location ?? '',
-    start_date: event.start_date ?? '',
-    end_date: event.end_date ?? '',
-    notes: event.notes ?? '',
+    name: project.name ?? '',
+    location: project.location ?? '',
+    start_date: project.start_date ?? '',
+    end_date: project.end_date ?? '',
+    status: project.status ?? 'active',
+    notes: project.notes ?? '',
   })
 
-  // Talent schedule modal (null = closed, 'add' = adding new, TalentDetail = editing)
   const [scheduleTarget, setScheduleTarget] = useState<null | 'add' | TalentDetail>(null)
   const [scheduleForm, setScheduleForm] = useState(emptyScheduleForm)
 
-  // Opportunity modal
   const [oppOpen, setOppOpen] = useState(false)
   const [oppForm, setOppForm] = useState({
     talent_id: '', brand_id: '', type: '',
@@ -116,7 +119,7 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
   })
 
   function field(k: keyof typeof form) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
   }
 
@@ -161,7 +164,7 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
     const supabase = createClient()
     const payload = {
       talent_id: scheduleForm.talent_id || null,
-      event_id: event.id,
+      event_id: project.id,
       carpet_date: scheduleForm.carpet_date || null,
       hotel: scheduleForm.hotel || null,
       ticket: scheduleForm.ticket || null,
@@ -191,7 +194,7 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
     setSaving(true)
     const supabase = createClient()
     await supabase.from('opportunities').insert({
-      event_id: event.id,
+      event_id: project.id,
       talent_id: oppForm.talent_id || null,
       brand_id: oppForm.brand_id || null,
       type: oppForm.type || null,
@@ -216,8 +219,9 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
       location: form.location || null,
       start_date: form.start_date || null,
       end_date: form.end_date || null,
+      status: form.status,
       notes: form.notes || null,
-    }).eq('id', event.id)
+    }).eq('id', project.id)
     setSaving(false)
     setOpen(false)
     router.refresh()
@@ -229,45 +233,50 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
   return (
     <div>
       <div className="mb-6">
-        <Link href="/events" className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 mb-4">
+        <Link href="/projects" className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 mb-4">
           <ArrowLeft className="w-3.5 h-3.5" />
-          Events
+          Projects
         </Link>
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">{event.name}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-semibold text-gray-900">{project.name}</h1>
+              {project.status === 'completed' && (
+                <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Completed</span>
+              )}
+            </div>
             <div className="flex items-center gap-4 mt-1.5">
-              {event.location && (
+              {project.location && (
                 <span className="flex items-center gap-1 text-sm text-gray-500">
-                  <MapPin className="w-3.5 h-3.5" /> {event.location}
+                  <MapPin className="w-3.5 h-3.5" /> {project.location}
                 </span>
               )}
-              {(event.start_date || event.end_date) && (
+              {(project.start_date || project.end_date) && (
                 <span className="flex items-center gap-1 text-sm text-gray-500">
                   <Calendar className="w-3.5 h-3.5" />
-                  {formatDate(event.start_date)}{event.end_date ? ` – ${formatDate(event.end_date)}` : ''}
+                  {formatDate(project.start_date)}{project.end_date ? ` – ${formatDate(project.end_date)}` : ''}
                 </span>
               )}
             </div>
           </div>
           <Button variant="secondary" onClick={() => setOpen(true)}>
             <Pencil className="w-3.5 h-3.5" />
-            Edit Event
+            Edit Project
           </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-6">
-        {event.notes && (
+        {project.notes && (
           <div className="col-span-1">
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Notes</h2>
-              <p className="text-sm text-gray-700 whitespace-pre-wrap">{event.notes}</p>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">{project.notes}</p>
             </div>
           </div>
         )}
 
-        <div className={event.notes ? 'col-span-2' : 'col-span-3'}>
+        <div className={project.notes ? 'col-span-2' : 'col-span-3'}>
           {/* Talent Schedule */}
           <div className="bg-white rounded-xl border border-gray-200 mb-5">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
@@ -315,10 +324,7 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
                         <td className="px-4 py-3 text-gray-600 text-xs">{detail.jewelry ?? '—'}</td>
                         <td className="px-4 py-3 text-gray-600 text-xs">{detail.agent_contact ?? '—'}</td>
                         <td className="px-4 py-3 text-right">
-                          <button
-                            onClick={() => openEditSchedule(detail)}
-                            className="text-gray-300 hover:text-gray-600 transition-colors"
-                          >
+                          <button onClick={() => openEditSchedule(detail)} className="text-gray-300 hover:text-gray-600 transition-colors">
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
                         </td>
@@ -344,10 +350,10 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
             </div>
             <div className="divide-y divide-gray-50">
               {!opportunities.length && (
-                <p className="px-5 py-4 text-sm text-gray-400">No opportunities linked to this event.</p>
+                <p className="px-5 py-4 text-sm text-gray-400">No opportunities linked to this project.</p>
               )}
               {opportunities.map(opp => (
-                <div key={opp.id} className="px-5 py-3 flex items-center justify-between">
+                <Link key={opp.id} href={`/opportunities/${opp.id}`} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50/50 transition-colors">
                   <div>
                     <div className="text-sm font-medium text-gray-900">
                       {opp.talent?.name ?? '—'} × {opp.brand?.name ?? '—'}
@@ -355,7 +361,7 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
                     <div className="text-xs text-gray-400 mt-0.5 capitalize">{opp.type ?? '—'}</div>
                   </div>
                   <Badge value={opp.status} />
-                </div>
+                </Link>
               ))}
             </div>
           </div>
@@ -469,7 +475,7 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">Status</label>
-              <Select value={oppForm.status} onChange={oppField('status')} options={statusOpts} />
+              <Select value={oppForm.status} onChange={oppField('status')} options={oppStatusOpts} />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">Priority</label>
@@ -495,11 +501,11 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
         </form>
       </Modal>
 
-      {/* Edit Event Modal */}
-      <Modal open={open} onClose={() => setOpen(false)} title="Edit Event">
+      {/* Edit Project Modal */}
+      <Modal open={open} onClose={() => setOpen(false)} title="Edit Project">
         <form onSubmit={handleSave} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Event Name</label>
+            <label className="text-xs font-medium text-gray-700">Project Name</label>
             <Input value={form.name} onChange={field('name')} required />
           </div>
           <div className="space-y-1.5">
@@ -515,6 +521,10 @@ export function EventDetailClient({ event, talentDetails, opportunities, talents
               <label className="text-xs font-medium text-gray-700">End Date</label>
               <Input type="date" value={form.end_date} onChange={field('end_date')} />
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Status</label>
+            <Select value={form.status} onChange={field('status')} options={projectStatusOpts} />
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Notes</label>

@@ -222,12 +222,12 @@ export function TalentDetailClient({ talent, opportunities, eventDetails, conver
           {eventDetails && eventDetails.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200">
               <div className="px-5 py-4 border-b border-gray-100">
-                <h2 className="text-sm font-semibold text-gray-900">Event Logistics</h2>
+                <h2 className="text-sm font-semibold text-gray-900">Project Logistics</h2>
               </div>
               {eventDetails.map(detail => (
                 <div key={detail.id} className="px-5 py-4">
                   <h3 className="text-xs font-semibold text-gray-500 mb-3">
-                    {detail.event?.name ?? 'Unknown Event'}
+                    {detail.event?.name ?? 'Unknown Project'}
                   </h3>
                   <div className="grid grid-cols-2 gap-x-6 gap-y-2">
                     {[

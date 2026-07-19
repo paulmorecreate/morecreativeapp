@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ExternalLink, Pencil, Plus } from 'lucide-react'
-import { Brand, Opportunity, Conversation } from '@/lib/supabase/types'
+import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Brand, Opportunity, Conversation, Contact } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
@@ -42,12 +42,17 @@ type Props = {
   brand: Brand
   opportunities: (Opportunity & { talent?: { name: string } | null; event?: { name: string } | null })[]
   conversations: Conversation[]
+  contacts: Contact[]
 }
 
-export function BrandDetailClient({ brand, opportunities, conversations }: Props) {
+export function BrandDetailClient({ brand, opportunities, conversations, contacts }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [contactOpen, setContactOpen] = useState(false)
+  const [editContact, setEditContact] = useState<Contact | null>(null)
+  const [contactSaving, setContactSaving] = useState(false)
+  const [contactForm, setContactForm] = useState({ name: '', role: '', email: '', phone: '', notes: '' })
   const [logConvoOpen, setLogConvoOpen] = useState(false)
   const [editConvo, setEditConvo] = useState<Conversation | null>(null)
   const [convoSaving, setConvoSaving] = useState(false)
@@ -56,6 +61,7 @@ export function BrandDetailClient({ brand, opportunities, conversations }: Props
   const [form, setForm] = useState({
     name: brand.name ?? '',
     link: brand.link ?? '',
+    tiktok_link: brand.tiktok_link ?? '',
     category: brand.category ?? 'main',
     status: brand.status ?? 'active',
     contact: brand.contact ?? '',
@@ -68,6 +74,52 @@ export function BrandDetailClient({ brand, opportunities, conversations }: Props
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
+  }
+
+  function contactField(k: keyof typeof contactForm) {
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setContactForm(f => ({ ...f, [k]: e.target.value }))
+  }
+
+  function openEditContact(c: Contact) {
+    setContactForm({ name: c.name ?? '', role: c.role ?? '', email: c.email ?? '', phone: c.phone ?? '', notes: c.notes ?? '' })
+    setEditContact(c)
+    setContactOpen(true)
+  }
+
+  function openAddContact() {
+    setContactForm({ name: '', role: '', email: '', phone: '', notes: '' })
+    setEditContact(null)
+    setContactOpen(true)
+  }
+
+  async function handleContactSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setContactSaving(true)
+    const supabase = createClient()
+    const payload = {
+      brand_id: brand.id,
+      name: contactForm.name || null,
+      role: contactForm.role || null,
+      email: contactForm.email || null,
+      phone: contactForm.phone || null,
+      notes: contactForm.notes || null,
+    }
+    if (editContact) {
+      await supabase.from('contacts').update(payload).eq('id', editContact.id)
+    } else {
+      await supabase.from('contacts').insert(payload)
+    }
+    setContactSaving(false)
+    setContactOpen(false)
+    setEditContact(null)
+    router.refresh()
+  }
+
+  async function deleteContact(id: string) {
+    const supabase = createClient()
+    await supabase.from('contacts').delete().eq('id', id)
+    router.refresh()
   }
 
   function convoField(k: keyof typeof convoForm) {
@@ -126,6 +178,7 @@ export function BrandDetailClient({ brand, opportunities, conversations }: Props
     await supabase.from('brands').update({
       name: form.name || null,
       link: form.link || null,
+      tiktok_link: form.tiktok_link || null,
       category: form.category || null,
       status: form.status || null,
       contact: form.contact || null,
@@ -186,6 +239,24 @@ export function BrandDetailClient({ brand, opportunities, conversations }: Props
             </dl>
           </div>
 
+          {(brand.link || brand.tiktok_link) && (
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Links</h2>
+              <div className="space-y-2">
+                {brand.link && (
+                  <a href={brand.link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-gray-700 hover:text-black">
+                    <ExternalLink className="w-3 h-3 text-gray-400" /> Instagram / Website
+                  </a>
+                )}
+                {brand.tiktok_link && (
+                  <a href={brand.tiktok_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-gray-700 hover:text-black">
+                    <ExternalLink className="w-3 h-3 text-gray-400" /> TikTok
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
           {brand.notes && (
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Notes</h2>
@@ -195,6 +266,42 @@ export function BrandDetailClient({ brand, opportunities, conversations }: Props
         </div>
 
         <div className="col-span-2 space-y-5">
+          {/* Contacts */}
+          <div className="bg-white rounded-xl border border-gray-200">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h2 className="text-sm font-semibold text-gray-900">Contacts</h2>
+              <button onClick={openAddContact} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700">
+                <Plus className="w-3 h-3" /> Add
+              </button>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {contacts.length === 0 && (
+                <p className="px-5 py-4 text-sm text-gray-400">No contacts yet.</p>
+              )}
+              {contacts.map(c => (
+                <div key={c.id} className="px-5 py-3 group flex items-start justify-between">
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{c.name ?? '—'}</div>
+                    {c.role && <div className="text-xs text-gray-400 mt-0.5">{c.role}</div>}
+                    <div className="flex items-center gap-3 mt-1">
+                      {c.email && <a href={`mailto:${c.email}`} className="text-xs text-gray-500 hover:text-black">{c.email}</a>}
+                      {c.phone && <span className="text-xs text-gray-500">{c.phone}</span>}
+                    </div>
+                    {c.notes && <p className="text-xs text-gray-400 mt-1">{c.notes}</p>}
+                  </div>
+                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-3">
+                    <button onClick={() => openEditContact(c)} className="text-gray-300 hover:text-gray-600">
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                    <button onClick={() => deleteContact(c.id)} className="text-gray-300 hover:text-red-500">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="bg-white rounded-xl border border-gray-200">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Opportunities</h2>
@@ -251,6 +358,39 @@ export function BrandDetailClient({ brand, opportunities, conversations }: Props
           </div>
         </div>
       </div>
+
+      <Modal open={contactOpen} onClose={() => { setContactOpen(false); setEditContact(null) }} title={editContact ? 'Edit Contact' : 'Add Contact'}>
+        <form onSubmit={handleContactSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Name</label>
+              <Input value={contactForm.name} onChange={contactField('name')} placeholder="Full name" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Role</label>
+              <Input value={contactForm.role} onChange={contactField('role')} placeholder="e.g. PR Director" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Email</label>
+              <Input type="email" value={contactForm.email} onChange={contactField('email')} placeholder="email@brand.com" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Phone</label>
+              <Input value={contactForm.phone} onChange={contactField('phone')} placeholder="+1 555 000 0000" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Notes</label>
+            <Textarea value={contactForm.notes} onChange={contactField('notes')} rows={2} placeholder="Any context…" />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => { setContactOpen(false); setEditContact(null) }} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={contactSaving} className="flex-1">{contactSaving ? 'Saving…' : editContact ? 'Save Changes' : 'Add Contact'}</Button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal open={logConvoOpen} onClose={() => setLogConvoOpen(false)} title="Log Conversation">
         <form onSubmit={handleLogConvo} className="space-y-4">
@@ -312,9 +452,15 @@ export function BrandDetailClient({ brand, opportunities, conversations }: Props
             <label className="text-xs font-medium text-gray-700">Name</label>
             <Input value={form.name} onChange={field('name')} required />
           </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Instagram / Website URL</label>
-            <Input value={form.link} onChange={field('link')} placeholder="https://instagram.com/..." />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Instagram / Website URL</label>
+              <Input value={form.link} onChange={field('link')} placeholder="https://instagram.com/..." />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">TikTok URL</label>
+              <Input value={form.tiktok_link} onChange={field('tiktok_link')} placeholder="https://tiktok.com/@..." />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

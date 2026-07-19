@@ -1,12 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
-import { EventDetailClient } from './client'
+import { ProjectDetailClient } from './client'
 
-export default async function EventPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
 
-  const [{ data: event }, { data: talentDetails }, { data: opportunities }, { data: talents }, { data: brands }] = await Promise.all([
+  const [{ data: project }, { data: talentDetails }, { data: opportunities }, { data: talents }, { data: brands }] = await Promise.all([
     supabase.from('events').select('*').eq('id', id).single(),
     supabase.from('talent_event_details')
       .select('id, talent_id, carpet_date, hotel, ticket, driver, airport_transfer, makeup, hair, dress, jewelry, shoes, content, agent_contact, extra_notes, talent:talents(id,name,category,status)')
@@ -20,11 +20,11 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
     supabase.from('brands').select('id, name').order('name'),
   ])
 
-  if (!event) notFound()
+  if (!project) notFound()
 
   return (
-    <EventDetailClient
-      event={event}
+    <ProjectDetailClient
+      project={project}
       talentDetails={(talentDetails ?? []) as any}
       opportunities={(opportunities ?? []) as any}
       talents={talents ?? []}
