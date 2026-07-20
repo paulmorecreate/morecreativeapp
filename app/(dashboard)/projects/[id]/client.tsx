@@ -17,12 +17,35 @@ const projectStatusOpts = [
   { value: 'completed', label: 'Completed' },
 ]
 
+const showTypeOpts = [
+  { value: 'Show', label: 'Show' },
+  { value: 'Presentation', label: 'Presentation' },
+]
+
+const talentStatusOpts = [
+  { value: 'In Conversation', label: 'In Conversation' },
+  { value: 'Confirmed', label: 'Confirmed' },
+  { value: 'Rejected', label: 'Rejected' },
+]
+
+const dealTypeOpts = [
+  { value: 'Organic', label: 'Organic' },
+  { value: 'Budget', label: 'Budget' },
+]
+
+const CREATIVE_OPTIONS = ['Make Up', 'Hair', 'Photographer']
+
 type ShowTalent = {
   id: string
   talent_id: string
   accepted: boolean
+  status: string | null
+  deal_type: string | null
+  creative: string | null
+  stylist_id: string | null
   notes: string | null
   talent: { id: string; name: string; category: string | null } | null
+  stylist: { id: string; name: string } | null
 }
 
 type BrandShow = {
@@ -30,6 +53,7 @@ type BrandShow = {
   brand_id: string
   show_date: string | null
   show_time: string | null
+  show_type: string | null
   notes: string | null
   brand: { id: string; name: string } | null
   project_brand_talents: ShowTalent[]
@@ -43,12 +67,22 @@ type Props = {
   brands: SimpleRecord[]
   categories: ProjectCategory[]
   brandShows: BrandShow[]
+  stylists: SimpleRecord[]
 }
 
-export function ProjectDetailClient({ project, talents, brands, categories, brandShows }: Props) {
+const EMPTY_TALENT_FORM = {
+  talent_id: '',
+  status: 'In Conversation',
+  deal_type: '',
+  creative: [] as string[],
+  stylist_id: '',
+  accepted: false,
+  notes: '',
+}
+
+export function ProjectDetailClient({ project, talents, brands, categories, brandShows, stylists }: Props) {
   const router = useRouter()
 
-  // Project edit
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
@@ -62,13 +96,11 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   })
   const categoryOpts = categories.map(c => ({ value: c.name, label: c.name }))
 
-  // Brand shows — add/edit show
   const [showModal, setShowModal] = useState<null | 'add' | BrandShow>(null)
-  const [showForm, setShowForm] = useState({ brand_id: '', show_date: '', show_time: '', notes: '' })
+  const [showForm, setShowForm] = useState({ brand_id: '', show_type: '', show_date: '', show_time: '', notes: '' })
 
-  // Brand shows — add/edit talent in show
   const [talentModal, setTalentModal] = useState<null | { projectBrandId: string; entry?: ShowTalent }>(null)
-  const [talentForm, setTalentForm] = useState({ talent_id: '', accepted: false, notes: '' })
+  const [talentForm, setTalentForm] = useState(EMPTY_TALENT_FORM)
 
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -78,9 +110,17 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setShowForm(f => ({ ...f, [k]: e.target.value }))
   }
-  function talentField(k: keyof typeof talentForm) {
+  function talentField(k: keyof Omit<typeof talentForm, 'creative' | 'accepted'>) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setTalentForm(f => ({ ...f, [k]: e.target.value }))
+  }
+  function toggleCreative(opt: string) {
+    setTalentForm(f => ({
+      ...f,
+      creative: f.creative.includes(opt)
+        ? f.creative.filter(c => c !== opt)
+        : [...f.creative, opt],
+    }))
   }
 
   async function toggleCompleted() {
@@ -102,14 +142,14 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
     setSaving(false); setOpen(false); router.refresh()
   }
 
-  // Brand shows
   function openAddShow() {
-    setShowForm({ brand_id: '', show_date: '', show_time: '', notes: '' })
+    setShowForm({ brand_id: '', show_type: '', show_date: '', show_time: '', notes: '' })
     setShowModal('add')
   }
   function openEditShow(show: BrandShow) {
     setShowForm({
       brand_id: show.brand_id,
+      show_type: show.show_type ?? '',
       show_date: show.show_date ?? '',
       show_time: show.show_time ?? '',
       notes: show.notes ?? '',
@@ -123,6 +163,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
     const payload = {
       project_id: project.id,
       brand_id: showForm.brand_id || null,
+      show_type: showForm.show_type || null,
       show_date: showForm.show_date || null,
       show_time: showForm.show_time || null,
       notes: showForm.notes || null,
@@ -141,13 +182,20 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
     router.refresh()
   }
 
-  // Show talents
   function openAddTalent(projectBrandId: string) {
-    setTalentForm({ talent_id: '', accepted: false, notes: '' })
+    setTalentForm(EMPTY_TALENT_FORM)
     setTalentModal({ projectBrandId })
   }
   function openEditTalent(projectBrandId: string, entry: ShowTalent) {
-    setTalentForm({ talent_id: entry.talent_id, accepted: entry.accepted, notes: entry.notes ?? '' })
+    setTalentForm({
+      talent_id: entry.talent_id,
+      status: entry.status ?? 'In Conversation',
+      deal_type: entry.deal_type ?? '',
+      creative: entry.creative ? entry.creative.split(',').map(s => s.trim()).filter(Boolean) : [],
+      stylist_id: entry.stylist_id ?? '',
+      accepted: entry.accepted,
+      notes: entry.notes ?? '',
+    })
     setTalentModal({ projectBrandId, entry })
   }
 
@@ -159,6 +207,10 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
     const payload = {
       project_brand_id: talentModal.projectBrandId,
       talent_id: talentForm.talent_id || null,
+      status: talentForm.status || null,
+      deal_type: talentForm.deal_type || null,
+      creative: talentForm.creative.length > 0 ? talentForm.creative.join(', ') : null,
+      stylist_id: talentForm.stylist_id || null,
       accepted: talentForm.accepted,
       notes: talentForm.notes || null,
     }
@@ -188,6 +240,8 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
     const linked = new Set(show.project_brand_talents.map(t => t.talent_id))
     return talents.filter(t => !linked.has(t.id))
   }
+
+  const stylistOpts = stylists.map(s => ({ value: s.id, label: s.name }))
 
   return (
     <div>
@@ -263,10 +317,15 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
             <div key={show.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               {/* Show header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50/40">
-                <div className="flex items-center gap-4 min-w-0">
+                <div className="flex items-center gap-3 min-w-0">
                   <Link href={`/brands/${show.brand?.id}`} className="text-sm font-semibold text-gray-900 hover:text-black">
                     {show.brand?.name ?? '—'}
                   </Link>
+                  {show.show_type && (
+                    <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                      {show.show_type}
+                    </span>
+                  )}
                   {show.show_date && (
                     <span className="text-xs text-gray-500 flex items-center gap-1">
                       <Calendar className="w-3 h-3" />
@@ -302,7 +361,11 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                   <thead>
                     <tr className="border-b border-gray-50">
                       <th className="text-left px-5 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Talent</th>
-                      <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide w-28">Accepted</th>
+                      <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Status</th>
+                      <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Deal</th>
+                      <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Creative</th>
+                      <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Stylist</th>
+                      <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Accepted</th>
                       <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Notes</th>
                       <th className="px-4 py-2 w-16" />
                     </tr>
@@ -315,10 +378,20 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                             {entry.talent?.name ?? '—'}
                           </Link>
                           {entry.talent?.category && (
-                            <div className="mt-0.5">
-                              <Badge value={entry.talent.category} />
-                            </div>
+                            <div className="mt-0.5"><Badge value={entry.talent.category} /></div>
                           )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <TalentStatusBadge value={entry.status} />
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500">
+                          {entry.deal_type ?? <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500">
+                          {entry.creative ?? <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-600">
+                          {entry.stylist?.name ?? <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-4 py-3">
                           <button
@@ -327,14 +400,11 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                               entry.accepted ? 'text-emerald-600' : 'text-gray-400 hover:text-gray-600'
                             }`}
                           >
-                            {entry.accepted
-                              ? <CheckCircle2 className="w-4 h-4" />
-                              : <Circle className="w-4 h-4" />
-                            }
-                            {entry.accepted ? 'Accepted' : 'Pending'}
+                            {entry.accepted ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
+                            {entry.accepted ? 'Yes' : 'Pending'}
                           </button>
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-500">
+                        <td className="px-4 py-3 text-xs text-gray-500 max-w-[140px] truncate">
                           {entry.notes ?? <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-4 py-3">
@@ -366,14 +436,25 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
         title={isEditingShow ? 'Edit Brand Show' : 'Add Brand Show'}
       >
         <form onSubmit={handleShowSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Brand</label>
-            <Select
-              value={showForm.brand_id}
-              onChange={showField('brand_id')}
-              options={brands.map(b => ({ value: b.id, label: b.name }))}
-              placeholder="Select brand…"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Brand</label>
+              <Select
+                value={showForm.brand_id}
+                onChange={showField('brand_id')}
+                options={brands.map(b => ({ value: b.id, label: b.name }))}
+                placeholder="Select brand…"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Type</label>
+              <Select
+                value={showForm.show_type}
+                onChange={showField('show_type')}
+                options={showTypeOpts}
+                placeholder="Show or Presentation…"
+              />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -418,11 +499,46 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
               />
             </div>
           )}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Status</label>
+              <Select value={talentForm.status} onChange={talentField('status')} options={talentStatusOpts} placeholder="Select…" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Deal Type</label>
+              <Select value={talentForm.deal_type} onChange={talentField('deal_type')} options={dealTypeOpts} placeholder="Select…" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Creative</label>
+            <div className="flex items-center gap-4">
+              {CREATIVE_OPTIONS.map(opt => (
+                <label key={opt} className="flex items-center gap-1.5 cursor-pointer select-none text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={talentForm.creative.includes(opt)}
+                    onChange={() => toggleCreative(opt)}
+                    className="rounded border-gray-300 accent-black"
+                  />
+                  {opt}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Stylist</label>
+            <Select
+              value={talentForm.stylist_id}
+              onChange={talentField('stylist_id')}
+              options={stylistOpts}
+              placeholder={stylists.length ? 'Select stylist…' : 'No stylists in directory yet'}
+            />
+          </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Notes</label>
             <Textarea value={talentForm.notes} onChange={talentField('notes')} rows={2} placeholder="Any notes about this talent for this show…" />
           </div>
-          <label className="flex items-center gap-3 cursor-pointer select-none">
+          <label className="flex items-center gap-3 cursor-pointer select-none pt-1 border-t border-gray-100">
             <input
               type="checkbox"
               checked={talentForm.accepted}
@@ -482,5 +598,19 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
         </form>
       </Modal>
     </div>
+  )
+}
+
+function TalentStatusBadge({ value }: { value: string | null }) {
+  if (!value) return <span className="text-gray-300 text-xs">—</span>
+  const styles: Record<string, string> = {
+    'Confirmed': 'bg-emerald-50 text-emerald-700',
+    'In Conversation': 'bg-amber-50 text-amber-700',
+    'Rejected': 'bg-red-50 text-red-600',
+  }
+  return (
+    <span className={`inline-flex text-xs font-medium px-2 py-0.5 rounded-full ${styles[value] ?? 'bg-gray-100 text-gray-600'}`}>
+      {value}
+    </span>
   )
 }
