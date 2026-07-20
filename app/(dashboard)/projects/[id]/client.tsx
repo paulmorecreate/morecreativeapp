@@ -370,39 +370,38 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
           {/* Brand cards — sky blue accent */}
           {brandShows.map(show => (
             <div key={show.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 bg-sky-50/60">
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-sky-600 bg-sky-500">
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0" />
-                  <Link href={`/brands/${show.brand?.id}`} className="text-sm font-semibold text-sky-800 hover:text-sky-600">
+                  <Link href={`/brands/${show.brand?.id}`} className="text-sm font-semibold text-white hover:text-sky-100">
                     {show.brand?.name ?? '—'}
                   </Link>
                   {show.show_type && (
-                    <span className="text-xs font-medium text-sky-600 bg-sky-100 px-2 py-0.5 rounded-full">
+                    <span className="text-xs font-medium text-sky-100 bg-sky-600/60 px-2 py-0.5 rounded-full">
                       {show.show_type}
                     </span>
                   )}
                   {show.show_date && (
-                    <span className="text-xs text-gray-500 flex items-center gap-1">
+                    <span className="text-xs text-sky-100 flex items-center gap-1">
                       <Calendar className="w-3 h-3" />
                       {formatDate(show.show_date)}
-                      {show.show_time && <span className="ml-1 text-gray-400">· {show.show_time}</span>}
+                      {show.show_time && <span className="ml-1 text-sky-200">· {show.show_time}</span>}
                     </span>
                   )}
                   {show.notes && (
-                    <span className="text-xs text-gray-400 truncate max-w-xs">{show.notes}</span>
+                    <span className="text-xs text-sky-200 truncate max-w-xs">{show.notes}</span>
                   )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => openAddTalent(show.id)}
-                    className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 px-2 py-1 rounded hover:bg-white/70 transition-colors"
+                    className="inline-flex items-center gap-1 text-xs text-sky-100 hover:text-white px-2 py-1 rounded hover:bg-sky-600/50 transition-colors"
                   >
                     <Plus className="w-3 h-3" /> Add Talent
                   </button>
-                  <button onClick={() => openEditShow(show)} className="text-gray-300 hover:text-gray-600 p-1">
+                  <button onClick={() => openEditShow(show)} className="text-sky-200 hover:text-white p-1">
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={() => deleteShow(show.id)} className="text-gray-300 hover:text-red-500 p-1">
+                  <button onClick={() => deleteShow(show.id)} className="text-sky-200 hover:text-red-200 p-1">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -482,22 +481,25 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
           {/* Talent cards — violet accent */}
           {projectTalents.map(pt => (
             <div key={pt.id} className="group bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-3.5 bg-violet-50/60">
+              <div className="flex items-center justify-between px-5 py-3.5 bg-violet-500">
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-violet-400 shrink-0" />
-                  <Link href={`/talents/${pt.talent?.id}`} className="text-sm font-semibold text-violet-800 hover:text-violet-600">
+                  <Link href={`/talents/${pt.talent?.id}`} className="text-sm font-semibold text-white hover:text-violet-100">
                     {pt.talent?.name ?? '—'}
                   </Link>
-                  {pt.talent?.category && <Badge value={pt.talent.category} />}
+                  {pt.talent?.category && (
+                    <span className="text-xs font-medium text-violet-100 bg-violet-600/60 px-2 py-0.5 rounded-full">
+                      {pt.talent.category}
+                    </span>
+                  )}
                   {pt.notes && (
-                    <span className="text-xs text-gray-400 truncate max-w-xs">{pt.notes}</span>
+                    <span className="text-xs text-violet-200 truncate max-w-xs">{pt.notes}</span>
                   )}
                 </div>
-                <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100">
-                  <button onClick={() => openEditProjectTalent(pt)} className="text-gray-300 hover:text-gray-600 p-1">
+                <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => openEditProjectTalent(pt)} className="text-violet-200 hover:text-white p-1">
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={() => removeProjectTalent(pt.id)} className="text-gray-300 hover:text-red-500 p-1">
+                  <button onClick={() => removeProjectTalent(pt.id)} className="text-violet-200 hover:text-red-200 p-1">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
