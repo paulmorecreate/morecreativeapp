@@ -59,6 +59,13 @@ type BrandShow = {
   project_brand_talents: ShowTalent[]
 }
 
+type ProjectTalent = {
+  id: string
+  talent_id: string
+  notes: string | null
+  talent: { id: string; name: string; category: string | null } | null
+}
+
 type SimpleRecord = { id: string; name: string }
 
 type Props = {
@@ -68,6 +75,7 @@ type Props = {
   categories: ProjectCategory[]
   brandShows: BrandShow[]
   stylists: SimpleRecord[]
+  projectTalents: ProjectTalent[]
 }
 
 const EMPTY_TALENT_FORM = {
@@ -80,9 +88,10 @@ const EMPTY_TALENT_FORM = {
   notes: '',
 }
 
-export function ProjectDetailClient({ project, talents, brands, categories, brandShows, stylists }: Props) {
+export function ProjectDetailClient({ project, talents, brands, categories, brandShows, stylists, projectTalents }: Props) {
   const router = useRouter()
 
+  // Project edit
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
@@ -96,11 +105,17 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   })
   const categoryOpts = categories.map(c => ({ value: c.name, label: c.name }))
 
+  // Brand show modal
   const [showModal, setShowModal] = useState<null | 'add' | BrandShow>(null)
   const [showForm, setShowForm] = useState({ brand_id: '', show_type: '', show_date: '', show_time: '', notes: '' })
 
+  // Brand show — talent modal
   const [talentModal, setTalentModal] = useState<null | { projectBrandId: string; entry?: ShowTalent }>(null)
   const [talentForm, setTalentForm] = useState(EMPTY_TALENT_FORM)
+
+  // Project-level talent modal
+  const [projectTalentModal, setProjectTalentModal] = useState<null | 'add' | ProjectTalent>(null)
+  const [projectTalentForm, setProjectTalentForm] = useState({ talent_id: '', notes: '' })
 
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -122,6 +137,10 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
         : [...f.creative, opt],
     }))
   }
+  function projectTalentField(k: keyof typeof projectTalentForm) {
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+      setProjectTalentForm(f => ({ ...f, [k]: e.target.value }))
+  }
 
   async function toggleCompleted() {
     const supabase = createClient()
@@ -142,6 +161,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
     setSaving(false); setOpen(false); router.refresh()
   }
 
+  // Brand show handlers
   function openAddShow() {
     setShowForm({ brand_id: '', show_type: '', show_date: '', show_time: '', notes: '' })
     setShowModal('add')
@@ -156,7 +176,6 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
     })
     setShowModal(show)
   }
-
   async function handleShowSubmit(e: React.FormEvent) {
     e.preventDefault(); setSaving(true)
     const supabase = createClient()
@@ -175,13 +194,13 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
     }
     setSaving(false); setShowModal(null); router.refresh()
   }
-
   async function deleteShow(id: string) {
     const supabase = createClient()
     await supabase.from('project_brands').delete().eq('id', id)
     router.refresh()
   }
 
+  // Brand show — talent handlers
   function openAddTalent(projectBrandId: string) {
     setTalentForm(EMPTY_TALENT_FORM)
     setTalentModal({ projectBrandId })
@@ -198,7 +217,6 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
     })
     setTalentModal({ projectBrandId, entry })
   }
-
   async function handleTalentSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!talentModal) return
@@ -221,27 +239,58 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
     }
     setSaving(false); setTalentModal(null); router.refresh()
   }
-
   async function removeTalentFromShow(id: string) {
     const supabase = createClient()
     await supabase.from('project_brand_talents').delete().eq('id', id)
     router.refresh()
   }
-
   async function toggleAccepted(entry: ShowTalent) {
     const supabase = createClient()
     await supabase.from('project_brand_talents').update({ accepted: !entry.accepted }).eq('id', entry.id)
     router.refresh()
   }
 
+  // Project-level talent handlers
+  function openAddProjectTalent() {
+    setProjectTalentForm({ talent_id: '', notes: '' })
+    setProjectTalentModal('add')
+  }
+  function openEditProjectTalent(pt: ProjectTalent) {
+    setProjectTalentForm({ talent_id: pt.talent_id, notes: pt.notes ?? '' })
+    setProjectTalentModal(pt)
+  }
+  async function handleProjectTalentSubmit(e: React.FormEvent) {
+    e.preventDefault(); setSaving(true)
+    const supabase = createClient()
+    const payload = {
+      project_id: project.id,
+      talent_id: projectTalentForm.talent_id || null,
+      notes: projectTalentForm.notes || null,
+    }
+    if (projectTalentModal === 'add') {
+      await supabase.from('project_talents').insert(payload)
+    } else if (projectTalentModal && typeof projectTalentModal === 'object') {
+      await supabase.from('project_talents').update(payload).eq('id', projectTalentModal.id)
+    }
+    setSaving(false); setProjectTalentModal(null); router.refresh()
+  }
+  async function removeProjectTalent(id: string) {
+    const supabase = createClient()
+    await supabase.from('project_talents').delete().eq('id', id)
+    router.refresh()
+  }
+
   const isEditingShow = showModal !== null && typeof showModal === 'object'
+  const isEditingProjectTalent = projectTalentModal !== null && typeof projectTalentModal === 'object'
+  const stylistOpts = stylists.map(s => ({ value: s.id, label: s.name }))
 
   function availableTalentsForShow(show: BrandShow) {
     const linked = new Set(show.project_brand_talents.map(t => t.talent_id))
     return talents.filter(t => !linked.has(t.id))
   }
 
-  const stylistOpts = stylists.map(s => ({ value: s.id, label: s.name }))
+  const linkedProjectTalentIds = new Set(projectTalents.map(pt => pt.talent_id))
+  const availableProjectTalents = talents.filter(t => !linkedProjectTalentIds.has(t.id))
 
   return (
     <div>
@@ -297,32 +346,38 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
         </div>
       )}
 
-      {/* ── Brand Shows ── */}
+      {/* ── Lineup ── */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-gray-900">Brand Shows</h2>
-          <Button variant="secondary" onClick={openAddShow}>
-            <Plus className="w-3.5 h-3.5" /> Add Brand Show
-          </Button>
+          <h2 className="text-sm font-semibold text-gray-900">Lineup</h2>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={openAddProjectTalent}>
+              <Plus className="w-3.5 h-3.5" /> Add Talent
+            </Button>
+            <Button variant="secondary" onClick={openAddShow}>
+              <Plus className="w-3.5 h-3.5" /> Add Brand
+            </Button>
+          </div>
         </div>
 
-        {brandShows.length === 0 && (
+        {brandShows.length === 0 && projectTalents.length === 0 && (
           <div className="bg-white rounded-xl border border-gray-200 px-5 py-8 text-center text-sm text-gray-400">
-            No brand shows yet. Add a brand to start building the lineup.
+            No lineup yet. Add a brand or talent to get started.
           </div>
         )}
 
-        <div className="space-y-4">
+        <div className="space-y-3">
+          {/* Brand cards — sky blue accent */}
           {brandShows.map(show => (
             <div key={show.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              {/* Show header */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50/40">
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 bg-sky-50/60">
                 <div className="flex items-center gap-3 min-w-0">
-                  <Link href={`/brands/${show.brand?.id}`} className="text-sm font-semibold text-gray-900 hover:text-black">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0" />
+                  <Link href={`/brands/${show.brand?.id}`} className="text-sm font-semibold text-sky-800 hover:text-sky-600">
                     {show.brand?.name ?? '—'}
                   </Link>
                   {show.show_type && (
-                    <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                    <span className="text-xs font-medium text-sky-600 bg-sky-100 px-2 py-0.5 rounded-full">
                       {show.show_type}
                     </span>
                   )}
@@ -340,7 +395,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => openAddTalent(show.id)}
-                    className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                    className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 px-2 py-1 rounded hover:bg-white/70 transition-colors"
                   >
                     <Plus className="w-3 h-3" /> Add Talent
                   </button>
@@ -353,7 +408,6 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                 </div>
               </div>
 
-              {/* Talent rows */}
               {show.project_brand_talents.length === 0 ? (
                 <p className="px-5 py-3 text-xs text-gray-400">No talents added to this show yet.</p>
               ) : (
@@ -424,16 +478,42 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
               )}
             </div>
           ))}
+
+          {/* Talent cards — violet accent */}
+          {projectTalents.map(pt => (
+            <div key={pt.id} className="group bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3.5 bg-violet-50/60">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-violet-400 shrink-0" />
+                  <Link href={`/talents/${pt.talent?.id}`} className="text-sm font-semibold text-violet-800 hover:text-violet-600">
+                    {pt.talent?.name ?? '—'}
+                  </Link>
+                  {pt.talent?.category && <Badge value={pt.talent.category} />}
+                  {pt.notes && (
+                    <span className="text-xs text-gray-400 truncate max-w-xs">{pt.notes}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100">
+                  <button onClick={() => openEditProjectTalent(pt)} className="text-gray-300 hover:text-gray-600 p-1">
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => removeProjectTalent(pt.id)} className="text-gray-300 hover:text-red-500 p-1">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
       {/* ── Modals ── */}
 
-      {/* Add/Edit Brand Show */}
+      {/* Add/Edit Brand */}
       <Modal
         open={showModal !== null}
         onClose={() => setShowModal(null)}
-        title={isEditingShow ? 'Edit Brand Show' : 'Add Brand Show'}
+        title={isEditingShow ? 'Edit Brand' : 'Add Brand'}
       >
         <form onSubmit={handleShowSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
@@ -468,16 +548,16 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Notes</label>
-            <Textarea value={showForm.notes} onChange={showField('notes')} rows={2} placeholder="Any context about this show…" />
+            <Textarea value={showForm.notes} onChange={showField('notes')} rows={2} placeholder="Any context…" />
           </div>
           <div className="flex gap-3 pt-1">
             <Button type="button" variant="secondary" onClick={() => setShowModal(null)} className="flex-1">Cancel</Button>
-            <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : isEditingShow ? 'Save Changes' : 'Add Show'}</Button>
+            <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : isEditingShow ? 'Save Changes' : 'Add Brand'}</Button>
           </div>
         </form>
       </Modal>
 
-      {/* Add/Edit Talent to Show */}
+      {/* Add/Edit Talent to Brand Show */}
       <Modal
         open={talentModal !== null}
         onClose={() => setTalentModal(null)}
@@ -536,7 +616,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Notes</label>
-            <Textarea value={talentForm.notes} onChange={talentField('notes')} rows={2} placeholder="Any notes about this talent for this show…" />
+            <Textarea value={talentForm.notes} onChange={talentField('notes')} rows={2} placeholder="Any notes…" />
           </div>
           <label className="flex items-center gap-3 cursor-pointer select-none pt-1 border-t border-gray-100">
             <input
@@ -551,6 +631,37 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
             <Button type="button" variant="secondary" onClick={() => setTalentModal(null)} className="flex-1">Cancel</Button>
             <Button type="submit" disabled={saving || (!talentModal?.entry && !talentForm.talent_id)} className="flex-1">
               {saving ? 'Saving…' : talentModal?.entry ? 'Save Changes' : 'Add Talent'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Add/Edit Project-level Talent */}
+      <Modal
+        open={projectTalentModal !== null}
+        onClose={() => setProjectTalentModal(null)}
+        title={isEditingProjectTalent ? 'Edit Talent' : 'Add Talent to Project'}
+      >
+        <form onSubmit={handleProjectTalentSubmit} className="space-y-4">
+          {!isEditingProjectTalent && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Talent</label>
+              <Select
+                value={projectTalentForm.talent_id}
+                onChange={projectTalentField('talent_id')}
+                options={availableProjectTalents.map(t => ({ value: t.id, label: t.name }))}
+                placeholder="Select talent…"
+              />
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Notes</label>
+            <Textarea value={projectTalentForm.notes} onChange={projectTalentField('notes')} rows={2} placeholder="Any context…" />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setProjectTalentModal(null)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={saving || (!isEditingProjectTalent && !projectTalentForm.talent_id)} className="flex-1">
+              {saving ? 'Saving…' : isEditingProjectTalent ? 'Save Changes' : 'Add Talent'}
             </Button>
           </div>
         </form>

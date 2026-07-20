@@ -13,6 +13,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     { data: categories },
     { data: brandShows },
     { data: stylists },
+    { data: projectTalents },
   ] = await Promise.all([
     supabase.from('events').select('*').eq('id', id).single(),
     supabase.from('talents').select('id, name').order('name'),
@@ -23,6 +24,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       .eq('project_id', id)
       .order('show_date', { ascending: true }),
     supabase.from('stylists').select('id, name').order('name'),
+    supabase.from('project_talents')
+      .select('*, talent:talents(id, name, category)')
+      .eq('project_id', id)
+      .order('created_at', { ascending: true }),
   ])
 
   if (!project) notFound()
@@ -35,6 +40,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       categories={categories ?? []}
       brandShows={(brandShows ?? []) as any}
       stylists={stylists ?? []}
+      projectTalents={(projectTalents ?? []) as any}
     />
   )
 }
