@@ -168,3 +168,53 @@ export interface AgentContact {
   created_at: string
   updated_at: string
 }
+
+export interface Stylist {
+  id: string
+  name: string
+  specialty: string | null
+  based: string | null
+  ig_link: string | null
+  website: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface StylistContact {
+  id: string
+  stylist_id: string
+  name: string | null
+  role: string | null
+  email: string | null
+  phone: string | null
+  notes: string | null
+  is_primary: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Photographer {
+  id: string
+  name: string
+  specialty: string | null
+  based: string | null
+  ig_link: string | null
+  website: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface PhotographerContact {
+  id: string
+  photographer_id: string
+  name: string | null
+  role: string | null
+  email: string | null
+  phone: string | null
+  notes: string | null
+  is_primary: boolean
+  created_at: string
+  updated_at: string
+}

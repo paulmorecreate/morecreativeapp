@@ -258,12 +258,32 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
                 <dd className="text-sm text-gray-900">{talent.country ?? <span className="text-gray-300">—</span>}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-400 mb-0.5">IG Followers</dt>
-                <dd className="text-sm text-gray-900">{talent.ig_followers ?? <span className="text-gray-300">—</span>}</dd>
+                <dt className="text-xs text-gray-400 mb-0.5">Instagram</dt>
+                <dd className="text-sm">
+                  {talent.ig_link ? (
+                    <a href={talent.ig_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-gray-900 hover:text-black">
+                      {talent.ig_followers ?? 'View'} <ExternalLink className="w-3 h-3 text-gray-400 shrink-0" />
+                    </a>
+                  ) : talent.ig_followers ? (
+                    <span className="text-gray-900">{talent.ig_followers}</span>
+                  ) : (
+                    <span className="text-gray-300">—</span>
+                  )}
+                </dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-400 mb-0.5">TikTok Followers</dt>
-                <dd className="text-sm text-gray-900">{talent.tiktok_followers ?? <span className="text-gray-300">—</span>}</dd>
+                <dt className="text-xs text-gray-400 mb-0.5">TikTok</dt>
+                <dd className="text-sm">
+                  {talent.tiktok_link ? (
+                    <a href={talent.tiktok_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-gray-900 hover:text-black">
+                      {talent.tiktok_followers ?? 'View'} <ExternalLink className="w-3 h-3 text-gray-400 shrink-0" />
+                    </a>
+                  ) : talent.tiktok_followers ? (
+                    <span className="text-gray-900">{talent.tiktok_followers}</span>
+                  ) : (
+                    <span className="text-gray-300">—</span>
+                  )}
+                </dd>
               </div>
             </dl>
           </div>
