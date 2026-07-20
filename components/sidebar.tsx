@@ -71,7 +71,8 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-2 py-3 border-t border-zinc-800">
+      <div className="px-2 py-3 border-t border-zinc-800 space-y-0.5">
+        <NavLink href="/admin" label="Admin" icon={Settings} />
         <button
           onClick={signOut}
           className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm text-zinc-400 hover:text-white hover:bg-white/5 transition-all"
