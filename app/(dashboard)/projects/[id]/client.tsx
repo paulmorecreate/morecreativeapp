@@ -68,6 +68,13 @@ type ProjectTalent = {
 
 type SimpleRecord = { id: string; name: string }
 
+type DeleteTarget = {
+  type: 'show' | 'show-talent' | 'project-talent'
+  id: string
+  label: string
+  warning?: string
+}
+
 type Props = {
   project: Event
   talents: SimpleRecord[]
@@ -116,6 +123,10 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   // Project-level talent modal
   const [projectTalentModal, setProjectTalentModal] = useState<null | 'add' | ProjectTalent>(null)
   const [projectTalentForm, setProjectTalentForm] = useState({ talent_id: '', notes: '' })
+
+  // Delete confirmation
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -194,10 +205,13 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
     }
     setSaving(false); setShowModal(null); router.refresh()
   }
-  async function deleteShow(id: string) {
-    const supabase = createClient()
-    await supabase.from('project_brands').delete().eq('id', id)
-    router.refresh()
+  function deleteShow(show: BrandShow) {
+    setDeleteTarget({
+      type: 'show',
+      id: show.id,
+      label: show.brand?.name ?? 'this brand',
+      warning: 'All talents linked to this show will also be removed.',
+    })
   }
 
   // Brand show — talent handlers
@@ -239,10 +253,12 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
     }
     setSaving(false); setTalentModal(null); router.refresh()
   }
-  async function removeTalentFromShow(id: string) {
-    const supabase = createClient()
-    await supabase.from('project_brand_talents').delete().eq('id', id)
-    router.refresh()
+  function removeTalentFromShow(entry: ShowTalent, brandName: string) {
+    setDeleteTarget({
+      type: 'show-talent',
+      id: entry.id,
+      label: `${entry.talent?.name ?? 'this talent'} from ${brandName}`,
+    })
   }
   async function toggleAccepted(entry: ShowTalent) {
     const supabase = createClient()
@@ -274,9 +290,27 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
     }
     setSaving(false); setProjectTalentModal(null); router.refresh()
   }
-  async function removeProjectTalent(id: string) {
+  function removeProjectTalent(pt: ProjectTalent) {
+    setDeleteTarget({
+      type: 'project-talent',
+      id: pt.id,
+      label: pt.talent?.name ?? 'this talent',
+    })
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
     const supabase = createClient()
-    await supabase.from('project_talents').delete().eq('id', id)
+    if (deleteTarget.type === 'show') {
+      await supabase.from('project_brands').delete().eq('id', deleteTarget.id)
+    } else if (deleteTarget.type === 'show-talent') {
+      await supabase.from('project_brand_talents').delete().eq('id', deleteTarget.id)
+    } else if (deleteTarget.type === 'project-talent') {
+      await supabase.from('project_talents').delete().eq('id', deleteTarget.id)
+    }
+    setDeleting(false)
+    setDeleteTarget(null)
     router.refresh()
   }
 
@@ -401,7 +435,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                   <button onClick={() => openEditShow(show)} className="text-sky-200 hover:text-white p-1">
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={() => deleteShow(show.id)} className="text-sky-200 hover:text-red-200 p-1">
+                  <button onClick={() => deleteShow(show)} className="text-sky-200 hover:text-red-200 p-1">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -465,7 +499,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                             <button onClick={() => openEditTalent(show.id, entry)} className="text-gray-300 hover:text-gray-600">
                               <Pencil className="w-3 h-3" />
                             </button>
-                            <button onClick={() => removeTalentFromShow(entry.id)} className="text-gray-300 hover:text-red-500">
+                            <button onClick={() => removeTalentFromShow(entry, show.brand?.name ?? '')} className="text-gray-300 hover:text-red-500">
                               <Trash2 className="w-3 h-3" />
                             </button>
                           </div>
@@ -499,7 +533,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                   <button onClick={() => openEditProjectTalent(pt)} className="text-violet-200 hover:text-white p-1">
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={() => removeProjectTalent(pt.id)} className="text-violet-200 hover:text-red-200 p-1">
+                  <button onClick={() => removeProjectTalent(pt)} className="text-violet-200 hover:text-red-200 p-1">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -667,6 +701,28 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete Confirmation */}
+      <Modal open={deleteTarget !== null} onClose={() => setDeleteTarget(null)} title="Confirm removal">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            Remove <strong>{deleteTarget?.label}</strong>? This cannot be undone.
+          </p>
+          {deleteTarget?.warning && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+              {deleteTarget.warning}
+            </p>
+          )}
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setDeleteTarget(null)} className="flex-1">
+              Cancel
+            </Button>
+            <Button type="button" variant="danger" disabled={deleting} onClick={handleConfirmDelete} className="flex-1">
+              {deleting ? 'Removing…' : 'Remove'}
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       {/* Edit Project Modal */}
