@@ -19,7 +19,7 @@ const directoryNav = [
   { href: '/photographers', label: 'Photographers', icon: Camera },
 ]
 
-export function Sidebar() {
+export function Sidebar({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname()
   const router = useRouter()
 
@@ -35,6 +35,7 @@ export function Sidebar() {
     return (
       <Link
         href={href}
+        onClick={onClose}
         className={cn(
           'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all',
           active
@@ -74,7 +75,7 @@ export function Sidebar() {
       <div className="px-2 py-3 border-t border-zinc-800 space-y-0.5">
         <NavLink href="/admin" label="Admin" icon={Settings} />
         <button
-          onClick={signOut}
+          onClick={() => { onClose?.(); signOut() }}
           className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm text-zinc-400 hover:text-white hover:bg-white/5 transition-all"
         >
           <LogOut className="w-4 h-4 shrink-0" />
