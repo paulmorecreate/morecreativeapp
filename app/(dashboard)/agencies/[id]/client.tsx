@@ -3,39 +3,63 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ExternalLink, Pencil, Trash2, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, AlertTriangle } from 'lucide-react'
 import { Agency } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input, Textarea } from '@/components/ui/input'
+import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
+
+const COUNTRIES = [
+  'Australia','Austria','Belgium','Brazil','Canada','China','Denmark','Finland',
+  'France','Germany','Greece','India','Ireland','Italy','Japan','Mexico',
+  'Netherlands','New Zealand','Norway','Poland','Portugal','Russia','Saudi Arabia',
+  'South Korea','Spain','Sweden','Switzerland','Turkey','UAE','UK','USA',
+].map(c => ({ value: c, label: c }))
 
 type AgentAtAgency = {
   id: string
   name: string
   agent_type: string | null
+  country: string | null
 }
+
+type SimpleAgent = { id: string; name: string; agent_type: string | null }
 
 type Props = {
   agency: Agency
   agents: AgentAtAgency[]
+  allAgents: SimpleAgent[]
 }
 
-export function AgencyDetailClient({ agency, agents }: Props) {
+export function AgencyDetailClient({ agency, agents, allAgents }: Props) {
   const router = useRouter()
+
+  // Edit
   const [editOpen, setEditOpen] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [deleteOpen, setDeleteOpen] = useState(false)
-  const [deleting, setDeleting] = useState(false)
   const [form, setForm] = useState({
     name: agency.name ?? '',
     website: agency.website ?? '',
+    country: agency.country ?? '',
     notes: agency.notes ?? '',
   })
 
+  // Delete
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  // Link agent
+  const [linkOpen, setLinkOpen] = useState(false)
+  const [linkAgentId, setLinkAgentId] = useState('')
+  const [linkSaving, setLinkSaving] = useState(false)
+
+  const agentIdsAtAgency = new Set(agents.map(a => a.id))
+  const availableAgents = allAgents.filter(a => !agentIdsAtAgency.has(a.id))
+
   function field(k: keyof typeof form) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
   }
 
@@ -46,6 +70,7 @@ export function AgencyDetailClient({ agency, agents }: Props) {
     await supabase.from('agencies').update({
       name: form.name || null,
       website: form.website || null,
+      country: form.country || null,
       notes: form.notes || null,
     }).eq('id', agency.id)
     setSaving(false)
@@ -60,6 +85,18 @@ export function AgencyDetailClient({ agency, agents }: Props) {
     router.push('/agencies')
   }
 
+  async function handleLinkAgent(e: React.FormEvent) {
+    e.preventDefault()
+    if (!linkAgentId) return
+    setLinkSaving(true)
+    const supabase = createClient()
+    await supabase.from('agents').update({ agency_id: agency.id }).eq('id', linkAgentId)
+    setLinkSaving(false)
+    setLinkOpen(false)
+    setLinkAgentId('')
+    router.refresh()
+  }
+
   return (
     <div>
       <div className="mb-6">
@@ -70,11 +107,14 @@ export function AgencyDetailClient({ agency, agents }: Props) {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">{agency.name}</h1>
-            {agency.website && (
-              <a href={agency.website} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-gray-700 mt-1">
-                <ExternalLink className="w-3 h-3" /> {agency.website.replace(/^https?:\/\//, '')}
-              </a>
-            )}
+            <div className="flex items-center gap-3 mt-1">
+              {agency.country && <span className="text-sm text-gray-500">{agency.country}</span>}
+              {agency.website && (
+                <a href={agency.website} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-gray-700">
+                  <ExternalLink className="w-3 h-3" /> {agency.website.replace(/^https?:\/\//, '')}
+                </a>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="secondary" onClick={() => setEditOpen(true)}>
@@ -101,22 +141,53 @@ export function AgencyDetailClient({ agency, agents }: Props) {
           <div className="bg-white rounded-xl border border-gray-200">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Agents</h2>
-              <span className="text-xs text-gray-400">{agents.length}</span>
+              <button
+                onClick={() => { setLinkAgentId(''); setLinkOpen(true) }}
+                className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700"
+              >
+                <Plus className="w-3 h-3" /> Link Agent
+              </button>
             </div>
             <div className="divide-y divide-gray-50">
               {agents.length === 0 && (
-                <p className="px-5 py-4 text-sm text-gray-400">No agents at this agency yet. Associate agents via their individual pages.</p>
+                <p className="px-5 py-4 text-sm text-gray-400">No agents linked yet. Use the button above or assign from the agent's own page.</p>
               )}
               {agents.map(agent => (
                 <Link key={agent.id} href={`/agents/${agent.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50/50 transition-colors">
                   <span className="text-sm font-medium text-gray-900">{agent.name}</span>
                   <Badge value={agent.agent_type} />
+                  {agent.country && <span className="text-xs text-gray-400">{agent.country}</span>}
                 </Link>
               ))}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Link Agent Modal */}
+      <Modal open={linkOpen} onClose={() => setLinkOpen(false)} title="Link Agent to Agency">
+        <form onSubmit={handleLinkAgent} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Agent</label>
+            <Select
+              value={linkAgentId}
+              onChange={e => setLinkAgentId(e.target.value)}
+              options={availableAgents.map(a => ({ value: a.id, label: a.name + (a.agent_type ? ` · ${a.agent_type}` : '') }))}
+              placeholder={availableAgents.length ? 'Select agent…' : 'No agents available'}
+            />
+            {availableAgents.length === 0 && (
+              <p className="text-xs text-gray-400">All agents are already at this agency.</p>
+            )}
+          </div>
+          <p className="text-xs text-gray-400">If the agent is already at another agency, they will be moved here.</p>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setLinkOpen(false)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={linkSaving || !linkAgentId} className="flex-1">
+              {linkSaving ? 'Linking…' : 'Link Agent'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Edit Modal */}
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Agency">
@@ -125,9 +196,15 @@ export function AgencyDetailClient({ agency, agents }: Props) {
             <label className="text-xs font-medium text-gray-700">Agency Name</label>
             <Input value={form.name} onChange={field('name')} required />
           </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Website</label>
-            <Input value={form.website} onChange={field('website')} placeholder="https://…" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Website</label>
+              <Input value={form.website} onChange={field('website')} placeholder="https://…" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Country</label>
+              <Select value={form.country} onChange={field('country')} options={COUNTRIES} placeholder="Select…" />
+            </div>
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Notes</label>

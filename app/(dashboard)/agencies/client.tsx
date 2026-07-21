@@ -6,9 +6,16 @@ import Link from 'next/link'
 import { Plus, Search, ChevronRight, ExternalLink } from 'lucide-react'
 import { Agency } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
-import { Input, Textarea } from '@/components/ui/input'
+import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
+
+const COUNTRIES = [
+  'Australia','Austria','Belgium','Brazil','Canada','China','Denmark','Finland',
+  'France','Germany','Greece','India','Ireland','Italy','Japan','Mexico',
+  'Netherlands','New Zealand','Norway','Poland','Portugal','Russia','Saudi Arabia',
+  'South Korea','Spain','Sweden','Switzerland','Turkey','UAE','UK','USA',
+].map(c => ({ value: c, label: c }))
 
 type AgencyRow = Agency & {
   agents: { id: string }[]
@@ -23,14 +30,14 @@ export function AgenciesClient({ agencies }: Props) {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({ name: '', website: '', notes: '' })
+  const [form, setForm] = useState({ name: '', website: '', country: '', notes: '' })
 
   const filtered = agencies.filter(a =>
     !search || a.name.toLowerCase().includes(search.toLowerCase())
   )
 
   function field(k: keyof typeof form) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
   }
 
@@ -41,11 +48,12 @@ export function AgenciesClient({ agencies }: Props) {
     await supabase.from('agencies').insert({
       name: form.name,
       website: form.website || null,
+      country: form.country || null,
       notes: form.notes || null,
     })
     setSaving(false)
     setOpen(false)
-    setForm({ name: '', website: '', notes: '' })
+    setForm({ name: '', website: '', country: '', notes: '' })
     router.refresh()
   }
 
@@ -79,6 +87,7 @@ export function AgenciesClient({ agencies }: Props) {
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50">
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Name</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Country</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Website</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Agents</th>
               <th className="px-4 py-3" />
@@ -98,6 +107,9 @@ export function AgenciesClient({ agencies }: Props) {
                   <Link href={`/agencies/${agency.id}`} className="font-medium text-gray-900 hover:text-black">
                     {agency.name}
                   </Link>
+                </td>
+                <td className="px-4 py-3 text-xs text-gray-500">
+                  {agency.country ?? <span className="text-gray-300">—</span>}
                 </td>
                 <td className="px-4 py-3 text-xs text-gray-500">
                   {agency.website ? (
@@ -126,9 +138,15 @@ export function AgenciesClient({ agencies }: Props) {
             <label className="text-xs font-medium text-gray-700">Agency Name *</label>
             <Input value={form.name} onChange={field('name')} required placeholder="e.g. WME, CAA, Wilhelmina" />
           </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Website</label>
-            <Input value={form.website} onChange={field('website')} placeholder="https://…" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Website</label>
+              <Input value={form.website} onChange={field('website')} placeholder="https://…" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Country</label>
+              <Select value={form.country} onChange={field('country')} options={COUNTRIES} placeholder="Select…" />
+            </div>
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Notes</label>

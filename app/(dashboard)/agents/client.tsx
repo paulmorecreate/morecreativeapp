@@ -11,6 +11,13 @@ import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 
+const COUNTRIES = [
+  'Australia','Austria','Belgium','Brazil','Canada','China','Denmark','Finland',
+  'France','Germany','Greece','India','Ireland','Italy','Japan','Mexico',
+  'Netherlands','New Zealand','Norway','Poland','Portugal','Russia','Saudi Arabia',
+  'South Korea','Spain','Sweden','Switzerland','Turkey','UAE','UK','USA',
+].map(c => ({ value: c, label: c }))
+
 type AgentWithContacts = Agent & {
   agent_contacts: { id: string; name: string | null; is_primary: boolean }[]
   agency: { id: string; name: string } | null
@@ -24,6 +31,8 @@ type Props = {
   agencies: SimpleAgency[]
 }
 
+const EMPTY_FORM = { name: '', agent_type: '', agency_id: '', country: '', notes: '' }
+
 export function AgentsClient({ agents, agentTypes, agencies }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
@@ -31,7 +40,12 @@ export function AgentsClient({ agents, agentTypes, agencies }: Props) {
   const [agencyFilter, setAgencyFilter] = useState('')
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({ name: '', agent_type: '', agency_id: '', notes: '' })
+  const [form, setForm] = useState(EMPTY_FORM)
+
+  // Inline agency creation
+  const [agencyMode, setAgencyMode] = useState<'existing' | 'new'>('existing')
+  const [newAgencyName, setNewAgencyName] = useState('')
+  const [newAgencyCountry, setNewAgencyCountry] = useState('')
 
   const typeOpts = agentTypes.map(t => ({ value: t.name, label: t.name }))
   const agencyOpts = agencies.map(a => ({ value: a.id, label: a.name }))
@@ -55,19 +69,38 @@ export function AgentsClient({ agents, agentTypes, agencies }: Props) {
       setForm(f => ({ ...f, [k]: e.target.value }))
   }
 
+  function resetModal() {
+    setForm(EMPTY_FORM)
+    setAgencyMode('existing')
+    setNewAgencyName('')
+    setNewAgencyCountry('')
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
+
+    let resolvedAgencyId = form.agency_id || null
+    if (agencyMode === 'new' && newAgencyName) {
+      const { data: newAgency } = await supabase
+        .from('agencies')
+        .insert({ name: newAgencyName, country: newAgencyCountry || null })
+        .select('id')
+        .single()
+      resolvedAgencyId = newAgency?.id ?? null
+    }
+
     await supabase.from('agents').insert({
       name: form.name,
       agent_type: form.agent_type || null,
-      agency_id: form.agency_id || null,
+      agency_id: resolvedAgencyId,
+      country: form.country || null,
       notes: form.notes || null,
     })
     setSaving(false)
     setOpen(false)
-    setForm({ name: '', agent_type: '', agency_id: '', notes: '' })
+    resetModal()
     router.refresh()
   }
 
@@ -120,6 +153,7 @@ export function AgentsClient({ agents, agentTypes, agencies }: Props) {
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Name</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Type</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Agency</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Country</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Primary Contact</th>
               <th className="px-4 py-3" />
             </tr>
@@ -127,7 +161,7 @@ export function AgentsClient({ agents, agentTypes, agencies }: Props) {
           <tbody className="divide-y divide-gray-50">
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-400">
+                <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
                   {search || typeFilter || agencyFilter ? 'No results.' : 'No agents yet.'}
                 </td>
               </tr>
@@ -147,6 +181,9 @@ export function AgentsClient({ agents, agentTypes, agencies }: Props) {
                       ? <Link href={`/agencies/${agent.agency.id}`} className="hover:text-black">{agent.agency.name}</Link>
                       : <span className="text-gray-300">—</span>}
                   </td>
+                  <td className="px-4 py-3 text-xs text-gray-500">
+                    {agent.country ?? <span className="text-gray-300">—</span>}
+                  </td>
                   <td className="px-4 py-3 text-gray-600 text-xs">
                     {primary?.name ?? <span className="text-gray-300">—</span>}
                   </td>
@@ -162,27 +199,54 @@ export function AgentsClient({ agents, agentTypes, agencies }: Props) {
         </table>
       </div>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Add Agent">
+      <Modal open={open} onClose={() => { setOpen(false); resetModal() }} title="Add Agent">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Agent Name *</label>
             <Input value={form.name} onChange={field('name')} required placeholder="Full name" />
           </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Agent Type</label>
-            <Select value={form.agent_type} onChange={field('agent_type')} options={typeOpts} placeholder="Select type…" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Agent Type</label>
+              <Select value={form.agent_type} onChange={field('agent_type')} options={typeOpts} placeholder="Select type…" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Country</label>
+              <Select value={form.country} onChange={field('country')} options={COUNTRIES} placeholder="Select…" />
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Agency</label>
-            <Select value={form.agency_id} onChange={field('agency_id')} options={agencyOpts} placeholder="Select agency (optional)…" />
+
+          {/* Agency — select existing or create new */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-gray-700">Agency</label>
+              <button
+                type="button"
+                onClick={() => { setAgencyMode(agencyMode === 'new' ? 'existing' : 'new'); setNewAgencyName(''); setNewAgencyCountry('') }}
+                className="text-xs text-gray-400 hover:text-gray-700"
+              >
+                {agencyMode === 'new' ? '← Select existing' : '+ Create new agency'}
+              </button>
+            </div>
+            {agencyMode === 'existing' ? (
+              <Select value={form.agency_id} onChange={field('agency_id')} options={agencyOpts} placeholder="Select agency (optional)…" />
+            ) : (
+              <div className="space-y-2 pl-3 border-l-2 border-gray-100">
+                <Input value={newAgencyName} onChange={e => setNewAgencyName(e.target.value)} placeholder="New agency name *" />
+                <Select value={newAgencyCountry} onChange={e => setNewAgencyCountry(e.target.value)} options={COUNTRIES} placeholder="Agency country (optional)…" />
+              </div>
+            )}
           </div>
+
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Notes</label>
             <Textarea value={form.notes} onChange={field('notes')} rows={2} placeholder="Any context…" />
           </div>
           <div className="flex gap-3 pt-1">
-            <Button type="button" variant="secondary" onClick={() => setOpen(false)} className="flex-1">Cancel</Button>
-            <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : 'Add Agent'}</Button>
+            <Button type="button" variant="secondary" onClick={() => { setOpen(false); resetModal() }} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={saving || (agencyMode === 'new' && !newAgencyName)} className="flex-1">
+              {saving ? 'Saving…' : 'Add Agent'}
+            </Button>
           </div>
         </form>
       </Modal>

@@ -41,12 +41,20 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
     name: agent.name ?? '',
     agent_type: agent.agent_type ?? '',
     agency_id: agent.agency_id ?? '',
+    country: agent.country ?? '',
     website: agent.website ?? '',
     notes: agent.notes ?? '',
   })
 
   const agencyOpts = agencies.map(a => ({ value: a.id, label: a.name }))
   const currentAgency = agencies.find(a => a.id === agent.agency_id)
+
+  const COUNTRIES = [
+    'Australia','Austria','Belgium','Brazil','Canada','China','Denmark','Finland',
+    'France','Germany','Greece','India','Ireland','Italy','Japan','Mexico',
+    'Netherlands','New Zealand','Norway','Poland','Portugal','Russia','Saudi Arabia',
+    'South Korea','Spain','Sweden','Switzerland','Turkey','UAE','UK','USA',
+  ].map(c => ({ value: c, label: c }))
 
   const [contactOpen, setContactOpen] = useState(false)
   const [editContact, setEditContact] = useState<AgentContact | null>(null)
@@ -79,6 +87,7 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
       name: form.name || null,
       agent_type: form.agent_type || null,
       agency_id: form.agency_id || null,
+      country: form.country || null,
       website: form.website || null,
       notes: form.notes || null,
     }).eq('id', agent.id)
@@ -201,6 +210,23 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
 
       <div className="grid grid-cols-3 gap-6">
         <div className="col-span-1 space-y-5">
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Details</h2>
+            <dl className="space-y-3">
+              <div>
+                <dt className="text-xs text-gray-400 mb-0.5">Country</dt>
+                <dd className="text-sm text-gray-900">{agent.country ?? <span className="text-gray-300">—</span>}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-gray-400 mb-0.5">Agency</dt>
+                <dd className="text-sm text-gray-900">
+                  {currentAgency
+                    ? <Link href={`/agencies/${currentAgency.id}`} className="hover:underline">{currentAgency.name}</Link>
+                    : <span className="text-gray-300">—</span>}
+                </dd>
+              </div>
+            </dl>
+          </div>
           {agent.notes && (
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Notes</h2>
@@ -344,6 +370,10 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Agency</label>
             <Select value={form.agency_id} onChange={field('agency_id')} options={agencyOpts} placeholder="Select agency (optional)…" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Country</label>
+            <Select value={form.country} onChange={field('country')} options={COUNTRIES} placeholder="Select…" />
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Website</label>

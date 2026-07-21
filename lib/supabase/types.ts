@@ -152,6 +152,7 @@ export interface Agency {
   id: string
   name: string
   website: string | null
+  country: string | null
   notes: string | null
   created_at: string
   updated_at: string
@@ -162,6 +163,7 @@ export interface Agent {
   name: string
   agent_type: string | null
   agency_id: string | null
+  country: string | null
   website: string | null
   notes: string | null
   created_at: string
