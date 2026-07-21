@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, AlertTriangle } from 'lucide-react'
-import { Agency } from '@/lib/supabase/types'
+import { Agency, AgentType } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
@@ -31,9 +31,10 @@ type Props = {
   agency: Agency
   agents: AgentAtAgency[]
   allAgents: SimpleAgent[]
+  agentTypes: AgentType[]
 }
 
-export function AgencyDetailClient({ agency, agents, allAgents }: Props) {
+export function AgencyDetailClient({ agency, agents, allAgents, agentTypes }: Props) {
   const router = useRouter()
 
   // Edit
@@ -52,11 +53,24 @@ export function AgencyDetailClient({ agency, agents, allAgents }: Props) {
 
   // Link agent
   const [linkOpen, setLinkOpen] = useState(false)
+  const [linkMode, setLinkMode] = useState<'existing' | 'new'>('existing')
   const [linkAgentId, setLinkAgentId] = useState('')
+  const [newAgentName, setNewAgentName] = useState('')
+  const [newAgentType, setNewAgentType] = useState('')
+  const [newAgentCountry, setNewAgentCountry] = useState('')
   const [linkSaving, setLinkSaving] = useState(false)
 
   const agentIdsAtAgency = new Set(agents.map(a => a.id))
   const availableAgents = allAgents.filter(a => !agentIdsAtAgency.has(a.id))
+  const typeOpts = agentTypes.map(t => ({ value: t.name, label: t.name }))
+
+  function resetLink() {
+    setLinkMode('existing')
+    setLinkAgentId('')
+    setNewAgentName('')
+    setNewAgentType('')
+    setNewAgentCountry('')
+  }
 
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -87,13 +101,22 @@ export function AgencyDetailClient({ agency, agents, allAgents }: Props) {
 
   async function handleLinkAgent(e: React.FormEvent) {
     e.preventDefault()
-    if (!linkAgentId) return
     setLinkSaving(true)
     const supabase = createClient()
-    await supabase.from('agents').update({ agency_id: agency.id }).eq('id', linkAgentId)
+    if (linkMode === 'new') {
+      await supabase.from('agents').insert({
+        name: newAgentName,
+        agent_type: newAgentType || null,
+        country: newAgentCountry || null,
+        agency_id: agency.id,
+      })
+    } else {
+      if (!linkAgentId) { setLinkSaving(false); return }
+      await supabase.from('agents').update({ agency_id: agency.id }).eq('id', linkAgentId)
+    }
     setLinkSaving(false)
     setLinkOpen(false)
-    setLinkAgentId('')
+    resetLink()
     router.refresh()
   }
 
@@ -142,10 +165,10 @@ export function AgencyDetailClient({ agency, agents, allAgents }: Props) {
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Agents</h2>
               <button
-                onClick={() => { setLinkAgentId(''); setLinkOpen(true) }}
+                onClick={() => { resetLink(); setLinkOpen(true) }}
                 className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700"
               >
-                <Plus className="w-3 h-3" /> Link Agent
+                <Plus className="w-3 h-3" /> Add Agent
               </button>
             </div>
             <div className="divide-y divide-gray-50">
@@ -164,26 +187,55 @@ export function AgencyDetailClient({ agency, agents, allAgents }: Props) {
         </div>
       </div>
 
-      {/* Link Agent Modal */}
-      <Modal open={linkOpen} onClose={() => setLinkOpen(false)} title="Link Agent to Agency">
+      {/* Link / Add Agent Modal */}
+      <Modal open={linkOpen} onClose={() => { setLinkOpen(false); resetLink() }} title="Add Agent to Agency">
         <form onSubmit={handleLinkAgent} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Agent</label>
-            <Select
-              value={linkAgentId}
-              onChange={e => setLinkAgentId(e.target.value)}
-              options={availableAgents.map(a => ({ value: a.id, label: a.name + (a.agent_type ? ` · ${a.agent_type}` : '') }))}
-              placeholder={availableAgents.length ? 'Select agent…' : 'No agents available'}
-            />
-            {availableAgents.length === 0 && (
-              <p className="text-xs text-gray-400">All agents are already at this agency.</p>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-gray-700">
+                {linkMode === 'existing' ? 'Existing Agent' : 'New Agent'}
+              </label>
+              <button
+                type="button"
+                onClick={() => { setLinkMode(linkMode === 'new' ? 'existing' : 'new'); setLinkAgentId(''); setNewAgentName('') }}
+                className="text-xs text-gray-400 hover:text-gray-700"
+              >
+                {linkMode === 'new' ? '← Select existing' : '+ Create new agent'}
+              </button>
+            </div>
+
+            {linkMode === 'existing' ? (
+              <>
+                <Select
+                  value={linkAgentId}
+                  onChange={e => setLinkAgentId(e.target.value)}
+                  options={availableAgents.map(a => ({ value: a.id, label: a.name + (a.agent_type ? ` · ${a.agent_type}` : '') }))}
+                  placeholder={availableAgents.length ? 'Select agent…' : 'No agents available'}
+                />
+                {availableAgents.length === 0 && (
+                  <p className="text-xs text-gray-400">All agents are already at this agency.</p>
+                )}
+                <p className="text-xs text-gray-400">If the agent is already at another agency, they will be moved here.</p>
+              </>
+            ) : (
+              <div className="space-y-3 pl-3 border-l-2 border-gray-100">
+                <Input value={newAgentName} onChange={e => setNewAgentName(e.target.value)} placeholder="Full name *" required={linkMode === 'new'} />
+                <div className="grid grid-cols-2 gap-2">
+                  <Select value={newAgentType} onChange={e => setNewAgentType(e.target.value)} options={typeOpts} placeholder="Type (optional)…" />
+                  <Select value={newAgentCountry} onChange={e => setNewAgentCountry(e.target.value)} options={COUNTRIES} placeholder="Country (optional)…" />
+                </div>
+              </div>
             )}
           </div>
-          <p className="text-xs text-gray-400">If the agent is already at another agency, they will be moved here.</p>
+
           <div className="flex gap-3 pt-1">
-            <Button type="button" variant="secondary" onClick={() => setLinkOpen(false)} className="flex-1">Cancel</Button>
-            <Button type="submit" disabled={linkSaving || !linkAgentId} className="flex-1">
-              {linkSaving ? 'Linking…' : 'Link Agent'}
+            <Button type="button" variant="secondary" onClick={() => { setLinkOpen(false); resetLink() }} className="flex-1">Cancel</Button>
+            <Button
+              type="submit"
+              disabled={linkSaving || (linkMode === 'existing' ? !linkAgentId : !newAgentName)}
+              className="flex-1"
+            >
+              {linkSaving ? 'Saving…' : linkMode === 'new' ? 'Add Agent' : 'Link Agent'}
             </Button>
           </div>
         </form>
