@@ -6,7 +6,7 @@ export default async function TalentPage({ params }: { params: Promise<{ id: str
   const { id } = await params
   const supabase = await createClient()
 
-  const [{ data: talent }, { data: talentProjects }, { data: eventDetails }, { data: conversations }, { data: agentLinks }, { data: talentContacts }, { data: talentCategories }, { data: allAgents }, { data: agentTypes }, { data: allAgencies }] = await Promise.all([
+  const [{ data: talent }, { data: talentProjects }, { data: eventDetails }, { data: conversations }, { data: agentLinks }, { data: talentCategories }, { data: allAgents }, { data: agentTypes }, { data: allAgencies }, { data: talentLevels }] = await Promise.all([
     supabase.from('talents').select('*').eq('id', id).single(),
     supabase.from('project_brand_talents')
       .select('id, project_brand:project_brands(id, show_date, project:events(id, name, start_date, location, status, category), brand:brands(id, name))')
@@ -22,14 +22,11 @@ export default async function TalentPage({ params }: { params: Promise<{ id: str
     supabase.from('talent_agents')
       .select('id, agent_id, agent:agents(id, name, agent_type)')
       .eq('talent_id', id),
-    supabase.from('talent_contacts')
-      .select('*')
-      .eq('talent_id', id)
-      .order('created_at'),
     supabase.from('talent_categories').select('*').order('name'),
     supabase.from('agents').select('id, name, agent_type').order('name'),
     supabase.from('agent_types').select('id, name').order('name'),
     supabase.from('agencies').select('id, name').order('name'),
+    supabase.from('talent_levels').select('*').order('name'),
   ])
 
   if (!talent) notFound()
@@ -41,11 +38,11 @@ export default async function TalentPage({ params }: { params: Promise<{ id: str
       eventDetails={(eventDetails ?? []) as any}
       conversations={conversations ?? []}
       agentLinks={(agentLinks ?? []) as any}
-      talentContacts={talentContacts ?? []}
       talentCategories={talentCategories ?? []}
       allAgents={(allAgents ?? []) as any}
       agentTypes={agentTypes ?? []}
       allAgencies={allAgencies ?? []}
+      talentLevels={talentLevels ?? []}
     />
   )
 }

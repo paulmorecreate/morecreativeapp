@@ -10,13 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
-
-const COUNTRIES = [
-  'Australia','Austria','Belgium','Brazil','Canada','China','Denmark','Finland',
-  'France','Germany','Greece','India','Ireland','Italy','Japan','Mexico',
-  'Netherlands','New Zealand','Norway','Poland','Portugal','Russia','Saudi Arabia',
-  'South Korea','Spain','Sweden','Switzerland','Turkey','UAE','UK','USA',
-].map(c => ({ value: c, label: c }))
+import { COUNTRIES } from '@/lib/constants/countries'
 
 type TalentLink = {
   id: string
@@ -115,7 +109,7 @@ export function AgentDetailClient({ agent, talentLinks, agentTypes, allTalents, 
   return (
     <div>
       <div className="mb-6">
-        <Link href="/agents" className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 mb-4">
+        <Link href="/agencies" className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 mb-4">
           <ArrowLeft className="w-3.5 h-3.5" />
           Agents
         </Link>

@@ -10,13 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
-
-const COUNTRIES = [
-  'Australia','Austria','Belgium','Brazil','Canada','China','Denmark','Finland',
-  'France','Germany','Greece','India','Ireland','Italy','Japan','Mexico',
-  'Netherlands','New Zealand','Norway','Poland','Portugal','Russia','Saudi Arabia',
-  'South Korea','Spain','Sweden','Switzerland','Turkey','UAE','UK','USA',
-].map(c => ({ value: c, label: c }))
+import { COUNTRIES } from '@/lib/constants/countries'
 
 type AgentAtAgency = {
   id: string

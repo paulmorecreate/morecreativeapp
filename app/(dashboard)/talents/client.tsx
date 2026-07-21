@@ -3,72 +3,75 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Search, ExternalLink, ChevronRight } from 'lucide-react'
-import { Talent, TalentCategory } from '@/lib/supabase/types'
+import { Plus, Search, ExternalLink, ChevronRight, Trash2, ChevronUp, ChevronDown, Check } from 'lucide-react'
+import { Talent, TalentCategory, TalentLevel } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
+import { COUNTRIES } from '@/lib/constants/countries'
 
 type TalentRow = Talent & {
-  talent_contacts: { id: string; name: string | null; is_primary: boolean }[]
   talent_agents: { id: string; agent: { id: string; name: string } | null }[]
 }
 
 type SimpleAgent = { id: string; name: string; agent_type: string | null }
-
-const COUNTRIES = [
-  'Australia','Austria','Belgium','Brazil','Canada','China','Denmark','Finland',
-  'France','Germany','Greece','India','Ireland','Italy','Japan','Mexico',
-  'Netherlands','New Zealand','Norway','Poland','Portugal','Russia','Saudi Arabia',
-  'South Korea','Spain','Sweden','Switzerland','Turkey','UAE','UK','USA',
-].map(c => ({ value: c, label: c }))
 
 type Props = {
   talents: TalentRow[]
   talentCategories: TalentCategory[]
   allAgents: SimpleAgent[]
   agentTypes: { id: string; name: string }[]
-  allAgencies: { id: string; name: string }[]
+  talentLevels: TalentLevel[]
 }
 
 const EMPTY_FORM = {
   name: '', ig_link: '', tiktok_link: '', ig_followers: '', tiktok_followers: '',
-  category: '', country: '', notes: '', email: '', phone: '',
+  category: '', talent_level: '', country: '', notes: '', email: '', phone: '',
 }
 
-export function TalentsClient({ talents, talentCategories, allAgents, agentTypes, allAgencies }: Props) {
+export function TalentsClient({ talents, talentCategories, allAgents, agentTypes, talentLevels }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
 
   // Agent selection within Add Talent modal
   const [agentMode, setAgentMode] = useState<'' | 'existing' | 'new'>('')
-  const [agentId, setAgentId] = useState('')
+  const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([])
   const [newAgentName, setNewAgentName] = useState('')
   const [newAgentType, setNewAgentType] = useState('')
   const [newAgentEmail, setNewAgentEmail] = useState('')
   const [newAgentPhone, setNewAgentPhone] = useState('')
-  const [newAgentAgencyId, setNewAgentAgencyId] = useState('')
 
   const categoryOpts = talentCategories.map(c => ({ value: c.name, label: c.name }))
+  const levelOpts = talentLevels.map(l => ({ value: l.name, label: l.name }))
   const agentTypeOpts = agentTypes.map(t => ({ value: t.name, label: t.name }))
 
   const q = search.toLowerCase()
   const filtered = talents.filter(t => {
     const agentName = t.talent_agents?.[0]?.agent?.name ?? ''
-    const primaryContact = t.talent_contacts?.find(c => c.is_primary)?.name ?? ''
     const matchSearch = !search ||
       t.name.toLowerCase().includes(q) ||
-      agentName.toLowerCase().includes(q) ||
-      primaryContact.toLowerCase().includes(q)
+      agentName.toLowerCase().includes(q)
     const matchCat = !categoryFilter || t.category === categoryFilter
     return matchSearch && matchCat
   })
+
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    const supabase = createClient()
+    await supabase.from('talents').delete().eq('id', deleteTarget.id)
+    setDeleting(false)
+    setDeleteTarget(null)
+    router.refresh()
+  }
 
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -78,12 +81,11 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
   function resetModal() {
     setForm(EMPTY_FORM)
     setAgentMode('')
-    setAgentId('')
+    setSelectedAgentIds([])
     setNewAgentName('')
     setNewAgentType('')
     setNewAgentEmail('')
     setNewAgentPhone('')
-    setNewAgentAgencyId('')
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -97,6 +99,7 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
       ig_followers: form.ig_followers || null,
       tiktok_followers: form.tiktok_followers || null,
       category: form.category || null,
+      talent_level: form.talent_level || null,
       country: form.country || null,
       email: form.email || null,
       phone: form.phone || null,
@@ -104,12 +107,14 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
     }).select('id').single()
 
     if (newTalent) {
-      if (agentMode === 'existing' && agentId) {
-        await supabase.from('talent_agents').insert({ talent_id: newTalent.id, agent_id: agentId })
+      if (agentMode === 'existing' && selectedAgentIds.length > 0) {
+        await supabase.from('talent_agents').insert(
+          selectedAgentIds.map(agent_id => ({ talent_id: newTalent.id, agent_id }))
+        )
       } else if (agentMode === 'new' && newAgentName) {
         const { data: createdAgent } = await supabase
           .from('agents')
-          .insert({ name: newAgentName, agent_type: newAgentType || null, email: newAgentEmail || null, phone: newAgentPhone || null, agency_id: newAgentAgencyId || null })
+          .insert({ name: newAgentName, agent_type: newAgentType || null, email: newAgentEmail || null, phone: newAgentPhone || null })
           .select('id')
           .single()
         if (createdAgent) {
@@ -123,6 +128,30 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
     resetModal()
     router.refresh()
   }
+
+  const [sortKey, setSortKey] = useState('name')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  function toggleSort(key: string) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('asc') }
+  }
+  function SortIcon({ col }: { col: string }) {
+    if (sortKey !== col) return null
+    return sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />
+  }
+  const sorted = [...filtered].sort((a, b) => {
+    let av = '', bv = ''
+    if (sortKey === 'name') { av = a.name; bv = b.name }
+    else if (sortKey === 'talent_level') { av = a.talent_level ?? ''; bv = b.talent_level ?? '' }
+    else if (sortKey === 'category') { av = a.category ?? ''; bv = b.category ?? '' }
+    else if (sortKey === 'agent') {
+      av = a.talent_agents?.map(ta => ta.agent?.name).filter(Boolean).join(', ') ?? ''
+      bv = b.talent_agents?.map(ta => ta.agent?.name).filter(Boolean).join(', ') ?? ''
+    }
+    else if (sortKey === 'ig_followers') { av = a.ig_followers ?? ''; bv = b.ig_followers ?? '' }
+    else if (sortKey === 'tiktok_followers') { av = a.tiktok_followers ?? ''; bv = b.tiktok_followers ?? '' }
+    return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
+  })
 
   return (
     <div>
@@ -161,45 +190,35 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50">
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Name</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Cat</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Agent</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Primary Contact</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">IG Followers</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">TK Followers</th>
+              <th onClick={() => toggleSort('name')} className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide cursor-pointer select-none hover:text-gray-700">
+                Name<SortIcon col="name" />
+              </th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Links</th>
+              {([['talent_level','Level'],['category','Cat'],['agent','Agent'],['ig_followers','IG Followers'],['tiktok_followers','TK Followers']] as [string,string][]).map(([col, label]) => (
+                <th key={col} onClick={() => toggleSort(col)} className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide cursor-pointer select-none hover:text-gray-700">
+                  {label}<SortIcon col={col} />
+                </th>
+              ))}
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {filtered.length === 0 && (
+            {sorted.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-400">
                   {search || categoryFilter ? 'No results match your filters.' : 'No talents yet.'}
                 </td>
               </tr>
             )}
-            {filtered.map(talent => {
-              const primaryContact = talent.talent_contacts?.find(c => c.is_primary)
-              const agent = talent.talent_agents?.[0]?.agent
+            {sorted.map(talent => {
+              const agentNames = talent.talent_agents?.map(ta => ta.agent?.name).filter(Boolean).join(', ') ?? ''
               return (
-                <tr key={talent.id} className="hover:bg-gray-50/50 transition-colors">
+                <tr key={talent.id} className="hover:bg-gray-50/50 transition-colors group">
                   <td className="px-4 py-3">
                     <Link href={`/talents/${talent.id}`} className="font-medium text-gray-900 hover:text-black">
                       {talent.name}
                     </Link>
                   </td>
-                  <td className="px-4 py-3"><Badge value={talent.category} /></td>
-                  <td className="px-4 py-3 text-gray-600 text-xs">
-                    {agent ? (
-                      <Link href={`/agents/${agent.id}`} className="hover:text-black">{agent.name}</Link>
-                    ) : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600 text-xs">
-                    {primaryContact?.name ?? <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600 text-xs">{talent.ig_followers ?? <span className="text-gray-300">—</span>}</td>
-                  <td className="px-4 py-3 text-gray-600 text-xs">{talent.tiktok_followers ?? <span className="text-gray-300">—</span>}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       {talent.ig_link ? (
@@ -214,10 +233,27 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
                       ) : <span className="text-xs text-gray-200">TK</span>}
                     </div>
                   </td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">{talent.talent_level ?? <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-3"><Badge value={talent.category} /></td>
+                  <td className="px-4 py-3 text-gray-600 text-xs max-w-[160px]">
+                    {agentNames
+                      ? <span className="block truncate" title={agentNames}>{agentNames}</span>
+                      : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">{talent.ig_followers ?? <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">{talent.tiktok_followers ?? <span className="text-gray-300">—</span>}</td>
                   <td className="px-4 py-3 text-right">
-                    <Link href={`/talents/${talent.id}`} className="text-gray-300 hover:text-gray-500">
-                      <ChevronRight className="w-4 h-4" />
-                    </Link>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => setDeleteTarget({ id: talent.id, name: talent.name })}
+                        className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                      <Link href={`/talents/${talent.id}`} className="text-gray-300 hover:text-gray-500">
+                        <ChevronRight className="w-4 h-4" />
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               )
@@ -232,9 +268,15 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
             <label className="text-xs font-medium text-gray-700">Name *</label>
             <Input value={form.name} onChange={field('name')} required placeholder="Full name" />
           </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Category</label>
-            <Select value={form.category} onChange={field('category')} options={categoryOpts} placeholder="Select…" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Category</label>
+              <Select value={form.category} onChange={field('category')} options={categoryOpts} placeholder="Select…" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Talent Level</label>
+              <Select value={form.talent_level} onChange={field('talent_level')} options={levelOpts} placeholder="Select…" />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -277,26 +319,42 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => { setAgentMode(agentMode === 'existing' ? '' : 'existing'); setAgentId(''); setNewAgentName(''); setNewAgentType('') }}
+                onClick={() => { setAgentMode(agentMode === 'existing' ? '' : 'existing'); setSelectedAgentIds([]); setNewAgentName(''); setNewAgentType('') }}
                 className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${agentMode === 'existing' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}
               >
                 Select existing
               </button>
               <button
                 type="button"
-                onClick={() => { setAgentMode(agentMode === 'new' ? '' : 'new'); setAgentId(''); setNewAgentName(''); setNewAgentType('') }}
+                onClick={() => { setAgentMode(agentMode === 'new' ? '' : 'new'); setSelectedAgentIds([]); setNewAgentName(''); setNewAgentType('') }}
                 className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${agentMode === 'new' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}
               >
                 Add new agent
               </button>
             </div>
             {agentMode === 'existing' && (
-              <Select
-                value={agentId}
-                onChange={e => setAgentId(e.target.value)}
-                options={allAgents.map(a => ({ value: a.id, label: a.name + (a.agent_type ? ` · ${a.agent_type}` : '') }))}
-                placeholder={allAgents.length ? 'Select agent…' : 'No agents in directory yet'}
-              />
+              allAgents.length === 0 ? (
+                <p className="text-xs text-gray-400 py-2">No agents in directory yet.</p>
+              ) : (
+                <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-44 overflow-y-auto">
+                  {allAgents.map(a => {
+                    const selected = selectedAgentIds.includes(a.id)
+                    return (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() => setSelectedAgentIds(ids =>
+                          selected ? ids.filter(id => id !== a.id) : [...ids, a.id]
+                        )}
+                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left transition-colors ${selected ? 'bg-gray-900 text-white' : 'hover:bg-gray-50 text-gray-700'}`}
+                      >
+                        <span>{a.name}{a.agent_type ? ` · ${a.agent_type}` : ''}</span>
+                        {selected && <Check className="w-3 h-3 shrink-0" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              )
             )}
             {agentMode === 'new' && (
               <div className="space-y-2">
@@ -306,7 +364,6 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
                   <Input type="email" value={newAgentEmail} onChange={e => setNewAgentEmail(e.target.value)} placeholder="Email (optional)" />
                   <Input value={newAgentPhone} onChange={e => setNewAgentPhone(e.target.value)} placeholder="Phone (optional)" />
                 </div>
-                <Select value={newAgentAgencyId} onChange={e => setNewAgentAgencyId(e.target.value)} options={allAgencies.map(a => ({ value: a.id, label: a.name }))} placeholder="Agency (optional)…" />
               </div>
             )}
           </div>
@@ -320,6 +377,31 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
             <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : 'Add Talent'}</Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Talent">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            Are you sure you want to permanently delete <strong>{deleteTarget?.name}</strong>? This cannot be undone.
+          </p>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setDeleteTarget(null)}
+              className="flex-1 px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="flex-1 px-4 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors disabled:opacity-60"
+            >
+              {deleting ? 'Deleting…' : 'Delete'}
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   )

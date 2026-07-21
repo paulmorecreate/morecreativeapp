@@ -4,13 +4,14 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, Star, AlertTriangle } from 'lucide-react'
-import { Brand, Conversation, Contact, Industry } from '@/lib/supabase/types'
+import { Brand, Conversation, Contact, Industry, BrandCategory } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 import { formatDate } from '@/lib/utils'
+import { COUNTRIES } from '@/lib/constants/countries'
 
 const channelOpts = [
   { value: 'email', label: 'Email' },
@@ -25,25 +26,6 @@ const convoStatusOpts = [
   { value: 'resolved', label: 'Resolved' },
 ]
 
-const categoryOpts = [
-  { value: 'showroom', label: 'Showroom' },
-  { value: 'dressing', label: 'Dressing' },
-  { value: 'main', label: 'Main' },
-  { value: 'prospect', label: 'Prospect' },
-]
-
-const statusOpts = [
-  { value: 'active', label: 'Active' },
-  { value: 'prospect', label: 'Prospect' },
-  { value: 'inactive', label: 'Inactive' },
-]
-
-const COUNTRIES = [
-  'Australia','Austria','Belgium','Brazil','Canada','China','Denmark','Finland',
-  'France','Germany','Greece','India','Ireland','Italy','Japan','Mexico',
-  'Netherlands','New Zealand','Norway','Poland','Portugal','Russia','Saudi Arabia',
-  'South Korea','Spain','Sweden','Switzerland','Turkey','UAE','UK','USA',
-].map(c => ({ value: c, label: c }))
 
 type BrandProject = {
   id: string
@@ -58,9 +40,10 @@ type Props = {
   conversations: Conversation[]
   contacts: Contact[]
   industries: Industry[]
+  brandCategories: BrandCategory[]
 }
 
-export function BrandDetailClient({ brand, brandProjects, conversations, contacts, industries }: Props) {
+export function BrandDetailClient({ brand, brandProjects, conversations, contacts, industries, brandCategories }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -78,15 +61,14 @@ export function BrandDetailClient({ brand, brandProjects, conversations, contact
   const [form, setForm] = useState({
     name: brand.name ?? '',
     link: brand.link ?? '',
-    tiktok_link: brand.tiktok_link ?? '',
-    category: brand.category ?? 'main',
-    status: brand.status ?? 'active',
+    category: brand.category ?? '',
     industry: brand.industry ?? '',
     country: brand.country ?? '',
     notes: brand.notes ?? '',
   })
 
   const industryOpts = industries.map(i => ({ value: i.name, label: i.name }))
+  const categoryOpts = brandCategories.map(c => ({ value: c.name, label: c.name }))
 
   async function handleDelete() {
     setDeleting(true)
@@ -210,9 +192,7 @@ export function BrandDetailClient({ brand, brandProjects, conversations, contact
     await supabase.from('brands').update({
       name: form.name || null,
       link: form.link || null,
-      tiktok_link: form.tiktok_link || null,
       category: form.category || null,
-      status: form.status || null,
       industry: form.industry || null,
       country: form.country || null,
       notes: form.notes || null,
@@ -235,7 +215,6 @@ export function BrandDetailClient({ brand, brandProjects, conversations, contact
           </div>
           <div className="flex items-center gap-2">
             <Badge value={brand.category} />
-            <Badge value={brand.status} />
             <Button variant="secondary" onClick={() => setOpen(true)}>
               <Pencil className="w-3.5 h-3.5" />
               Edit
@@ -265,20 +244,13 @@ export function BrandDetailClient({ brand, brandProjects, conversations, contact
             </dl>
           </div>
 
-          {(brand.link || brand.tiktok_link) && (
+          {brand.link && (
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Links</h2>
               <div className="space-y-2">
-                {brand.link && (
-                  <a href={brand.link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-gray-700 hover:text-black">
-                    <ExternalLink className="w-3 h-3 text-gray-400" /> Instagram / Website
-                  </a>
-                )}
-                {brand.tiktok_link && (
-                  <a href={brand.tiktok_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-gray-700 hover:text-black">
-                    <ExternalLink className="w-3 h-3 text-gray-400" /> TikTok
-                  </a>
-                )}
+                <a href={brand.link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-gray-700 hover:text-black">
+                  <ExternalLink className="w-3 h-3 text-gray-400" /> Instagram / Website
+                </a>
               </div>
             </div>
           )}
@@ -494,25 +466,13 @@ export function BrandDetailClient({ brand, brandProjects, conversations, contact
             <label className="text-xs font-medium text-gray-700">Name</label>
             <Input value={form.name} onChange={field('name')} required />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Category</label>
-              <Select value={form.category} onChange={field('category')} options={categoryOpts} />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Status</label>
-              <Select value={form.status} onChange={field('status')} options={statusOpts} />
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Category</label>
+            <Select value={form.category} onChange={field('category')} options={categoryOpts} placeholder="Select…" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Instagram / Website URL</label>
-              <Input value={form.link} onChange={field('link')} placeholder="https://instagram.com/..." />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">TikTok URL</label>
-              <Input value={form.tiktok_link} onChange={field('tiktok_link')} placeholder="https://tiktok.com/@..." />
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Instagram / Website URL</label>
+            <Input value={form.link} onChange={field('link')} placeholder="https://instagram.com/..." />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

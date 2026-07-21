@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Contact, Scissors, Camera, Building2 } from 'lucide-react'
+import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Scissors, Camera, Building2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 
@@ -15,7 +15,6 @@ const directoryNav = [
   { href: '/talents', label: 'Talents', icon: Users },
   { href: '/brands', label: 'Brands', icon: Briefcase },
   { href: '/agencies', label: 'Agencies', icon: Building2 },
-  { href: '/agents', label: 'Agents', icon: Contact },
   { href: '/stylists', label: 'Stylists', icon: Scissors },
   { href: '/photographers', label: 'Photographers', icon: Camera },
 ]
@@ -32,7 +31,9 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
   }
 
   function NavLink({ href, label, icon: Icon }: { href: string; label: string; icon: React.ElementType }) {
-    const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
+    const active = pathname === href ||
+      (href !== '/dashboard' && pathname.startsWith(href)) ||
+      (href === '/agencies' && pathname.startsWith('/agents'))
     return (
       <Link
         href={href}

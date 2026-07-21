@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2, KeyRound, X } from 'lucide-react'
-import { ProjectCategory, Industry, AgentType, TalentCategory } from '@/lib/supabase/types'
+import { ProjectCategory, Industry, AgentType, TalentCategory, BrandCategory, TalentLevel } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { createClient } from '@/lib/supabase/client'
@@ -13,6 +13,8 @@ type Props = {
   industries: Industry[]
   agentTypes: AgentType[]
   talentCategories: TalentCategory[]
+  brandCategories: BrandCategory[]
+  talentLevels: TalentLevel[]
 }
 
 type AppUser = {
@@ -319,7 +321,7 @@ function StaticList({
   )
 }
 
-export function AdminClient({ categories, industries, agentTypes, talentCategories }: Props) {
+export function AdminClient({ categories, industries, agentTypes, talentCategories, brandCategories, talentLevels }: Props) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -359,6 +361,24 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
     router.refresh()
   }
 
+  async function addBrandCategory(name: string) {
+    await supabase.from('brand_categories').insert({ name })
+    router.refresh()
+  }
+  async function deleteBrandCategory(id: string) {
+    await supabase.from('brand_categories').delete().eq('id', id)
+    router.refresh()
+  }
+
+  async function addTalentLevel(name: string) {
+    await supabase.from('talent_levels').insert({ name })
+    router.refresh()
+  }
+  async function deleteTalentLevel(id: string) {
+    await supabase.from('talent_levels').delete().eq('id', id)
+    router.refresh()
+  }
+
   return (
     <div>
       <div className="mb-6">
@@ -395,6 +415,20 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
           items={talentCategories}
           onAdd={addTalentCategory}
           onDelete={deleteTalentCategory}
+        />
+        <StaticList
+          title="Brand Categories"
+          description="Appear in the Category dropdown when creating or editing a brand."
+          items={brandCategories}
+          onAdd={addBrandCategory}
+          onDelete={deleteBrandCategory}
+        />
+        <StaticList
+          title="Talent Levels"
+          description="Appear in the Talent Level dropdown when creating or editing a talent."
+          items={talentLevels}
+          onAdd={addTalentLevel}
+          onDelete={deleteTalentLevel}
         />
       </div>
     </div>

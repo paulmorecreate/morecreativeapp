@@ -6,6 +6,7 @@ export interface Talent {
   ig_followers: string | null
   tiktok_followers: string | null
   category: string | null
+  talent_level: string | null
   status: string | null
   country: string | null
   email: string | null
@@ -13,6 +14,12 @@ export interface Talent {
   notes: string | null
   created_at: string
   updated_at: string
+}
+
+export interface TalentLevel {
+  id: string
+  name: string
+  created_at: string
 }
 
 export interface TalentContact {
@@ -29,6 +36,12 @@ export interface TalentContact {
 }
 
 export interface TalentCategory {
+  id: string
+  name: string
+  created_at: string
+}
+
+export interface BrandCategory {
   id: string
   name: string
   created_at: string

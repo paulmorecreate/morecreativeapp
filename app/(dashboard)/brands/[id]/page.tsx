@@ -6,7 +6,7 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
   const { id } = await params
   const supabase = await createClient()
 
-  const [{ data: brand }, { data: brandProjects }, { data: conversations }, { data: contacts }, { data: industries }] = await Promise.all([
+  const [{ data: brand }, { data: brandProjects }, { data: conversations }, { data: contacts }, { data: industries }, { data: brandCategories }] = await Promise.all([
     supabase.from('brands').select('*').eq('id', id).single(),
     supabase.from('project_brands')
       .select('id, show_date, show_time, project:events(id, name, start_date, location, status, category)')
@@ -22,6 +22,7 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
       .eq('brand_id', id)
       .order('created_at'),
     supabase.from('industries').select('*').order('name'),
+    supabase.from('brand_categories').select('*').order('name'),
   ])
 
   if (!brand) notFound()
@@ -33,6 +34,7 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
       conversations={conversations ?? []}
       contacts={contacts ?? []}
       industries={industries ?? []}
+      brandCategories={brandCategories ?? []}
     />
   )
 }
