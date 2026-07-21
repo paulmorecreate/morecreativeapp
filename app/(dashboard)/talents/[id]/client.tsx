@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, Star, Info } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, Star, AlertTriangle } from 'lucide-react'
 import { Talent, TalentEventDetail, Conversation, TalentContact, TalentCategory } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -38,6 +38,8 @@ type AgentLink = {
   agent: { id: string; name: string; agent_type: string | null } | null
 }
 
+type SimpleAgent = { id: string; name: string; agent_type: string | null }
+
 type TalentProject = {
   id: string
   project_brand: {
@@ -56,9 +58,11 @@ type Props = {
   agentLinks: AgentLink[]
   talentContacts: TalentContact[]
   talentCategories: TalentCategory[]
+  allAgents: SimpleAgent[]
+  agentTypes: { id: string; name: string }[]
 }
 
-export function TalentDetailClient({ talent, talentProjects, eventDetails, conversations, agentLinks, talentContacts, talentCategories }: Props) {
+export function TalentDetailClient({ talent, talentProjects, eventDetails, conversations, agentLinks, talentContacts, talentCategories, allAgents, agentTypes }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -74,6 +78,18 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
   const [convoForm, setConvoForm] = useState({ channel: 'note', content: '', follow_up: '', status: 'open' })
   const [editConvoForm, setEditConvoForm] = useState({ channel: 'note', content: '', follow_up: '', status: 'open' })
 
+  // Delete talent
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  // Agent linking
+  const [linkAgentOpen, setLinkAgentOpen] = useState(false)
+  const [linkAgentMode, setLinkAgentMode] = useState<'existing' | 'new'>('existing')
+  const [linkAgentId, setLinkAgentId] = useState('')
+  const [newAgentName, setNewAgentName] = useState('')
+  const [newAgentType, setNewAgentType] = useState('')
+  const [linkAgentSaving, setLinkAgentSaving] = useState(false)
+
   const [form, setForm] = useState({
     name: talent.name ?? '',
     ig_link: talent.ig_link ?? '',
@@ -82,10 +98,16 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
     tiktok_followers: talent.tiktok_followers ?? '',
     category: talent.category ?? '',
     country: talent.country ?? '',
+    email: talent.email ?? '',
+    phone: talent.phone ?? '',
     notes: talent.notes ?? '',
   })
 
   const categoryOpts = talentCategories.map(c => ({ value: c.name, label: c.name }))
+  const agentTypeOpts = agentTypes.map(t => ({ value: t.name, label: t.name }))
+
+  const linkedAgentIds = new Set(agentLinks.map(l => l.agent_id))
+  const availableAgents = allAgents.filter(a => !linkedAgentIds.has(a.id))
 
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -95,6 +117,13 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
   function contactField(k: keyof typeof contactForm) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       setContactForm(f => ({ ...f, [k]: e.target.value }))
+  }
+
+  async function handleDelete() {
+    setDeleting(true)
+    const supabase = createClient()
+    await supabase.from('talents').delete().eq('id', talent.id)
+    router.push('/talents')
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -109,6 +138,8 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
       tiktok_followers: form.tiktok_followers || null,
       category: form.category || null,
       country: form.country || null,
+      email: form.email || null,
+      phone: form.phone || null,
       notes: form.notes || null,
     }).eq('id', talent.id)
     setSaving(false)
@@ -213,6 +244,39 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
     router.refresh()
   }
 
+  function openLinkAgent() {
+    setLinkAgentMode('existing')
+    setLinkAgentId('')
+    setNewAgentName('')
+    setNewAgentType('')
+    setLinkAgentOpen(true)
+  }
+
+  async function handleLinkAgent(e: React.FormEvent) {
+    e.preventDefault()
+    setLinkAgentSaving(true)
+    const supabase = createClient()
+    let agentId = linkAgentId
+    if (linkAgentMode === 'new' && newAgentName) {
+      const { data } = await supabase.from('agents').insert({ name: newAgentName, agent_type: newAgentType || null }).select('id').single()
+      agentId = data?.id ?? ''
+    }
+    if (agentId) {
+      await supabase.from('talent_agents').insert({ talent_id: talent.id, agent_id: agentId })
+    }
+    setLinkAgentSaving(false)
+    setLinkAgentOpen(false)
+    router.refresh()
+  }
+
+  async function unlinkAgent(linkId: string) {
+    const supabase = createClient()
+    await supabase.from('talent_agents').delete().eq('id', linkId)
+    router.refresh()
+  }
+
+  const canSubmitLinkAgent = linkAgentMode === 'existing' ? !!linkAgentId : !!newAgentName
+
   return (
     <div>
       <div className="mb-6">
@@ -236,10 +300,15 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
               )}
             </div>
           </div>
-          <Button variant="secondary" onClick={() => setOpen(true)}>
-            <Pencil className="w-3.5 h-3.5" />
-            Edit
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => setOpen(true)}>
+              <Pencil className="w-3.5 h-3.5" />
+              Edit
+            </Button>
+            <Button variant="secondary" onClick={() => setDeleteOpen(true)} className="text-red-500 hover:text-red-700 border-red-200 hover:border-red-300">
+              <Trash2 className="w-3.5 h-3.5" /> Delete
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -256,6 +325,18 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
               <div>
                 <dt className="text-xs text-gray-400 mb-0.5">Country</dt>
                 <dd className="text-sm text-gray-900">{talent.country ?? <span className="text-gray-300">—</span>}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-gray-400 mb-0.5">Email</dt>
+                <dd className="text-sm text-gray-900">
+                  {talent.email
+                    ? <a href={`mailto:${talent.email}`} className="hover:underline">{talent.email}</a>
+                    : <span className="text-gray-300">—</span>}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-gray-400 mb-0.5">Phone</dt>
+                <dd className="text-sm text-gray-900">{talent.phone ?? <span className="text-gray-300">—</span>}</dd>
               </div>
               <div>
                 <dt className="text-xs text-gray-400 mb-0.5">IG Followers</dt>
@@ -282,27 +363,33 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
             </dl>
           </div>
 
-          {/* Agents (read-only) */}
+          {/* Agents */}
           <div className="bg-white rounded-xl border border-gray-200">
-            <div className="px-5 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Agent</h2>
+              <button onClick={openLinkAgent} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700">
+                <Plus className="w-3 h-3" /> Link
+              </button>
             </div>
             <div className="divide-y divide-gray-50">
               {agentLinks.length === 0 && (
                 <p className="px-5 py-4 text-sm text-gray-400">No agent linked.</p>
               )}
               {agentLinks.map(link => (
-                <Link key={link.id} href={`/agents/${link.agent?.id}`} className="flex items-center justify-between px-5 py-3 hover:bg-gray-50/50 transition-colors">
-                  <div>
+                <div key={link.id} className="group flex items-center justify-between px-5 py-3 hover:bg-gray-50/50 transition-colors">
+                  <Link href={`/agents/${link.agent?.id}`} className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-gray-900">{link.agent?.name ?? '—'}</div>
                     {link.agent?.agent_type && <div className="text-xs text-gray-400 mt-0.5">{link.agent.agent_type}</div>}
-                  </div>
-                </Link>
+                  </Link>
+                  <button
+                    onClick={() => unlinkAgent(link.id)}
+                    className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity ml-3 shrink-0"
+                    title="Remove link"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               ))}
-            </div>
-            <div className="px-5 py-3 border-t border-gray-50 flex items-center gap-1.5 text-xs text-gray-400">
-              <Info className="w-3 h-3 shrink-0" />
-              Go to the Agents screen to make any changes.
             </div>
           </div>
 
@@ -539,6 +626,78 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
         </form>
       </Modal>
 
+      {/* Link Agent Modal */}
+      <Modal open={linkAgentOpen} onClose={() => setLinkAgentOpen(false)} title="Link Agent">
+        <form onSubmit={handleLinkAgent} className="space-y-4">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => { setLinkAgentMode('existing'); setNewAgentName(''); setNewAgentType('') }}
+              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${linkAgentMode === 'existing' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}
+            >
+              Select existing
+            </button>
+            <button
+              type="button"
+              onClick={() => { setLinkAgentMode('new'); setLinkAgentId('') }}
+              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${linkAgentMode === 'new' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}
+            >
+              Add new agent
+            </button>
+          </div>
+
+          {linkAgentMode === 'existing' && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Agent</label>
+              <Select
+                value={linkAgentId}
+                onChange={e => setLinkAgentId(e.target.value)}
+                options={availableAgents.map(a => ({ value: a.id, label: a.name + (a.agent_type ? ` · ${a.agent_type}` : '') }))}
+                placeholder={availableAgents.length ? 'Select agent…' : 'All agents already linked'}
+              />
+            </div>
+          )}
+
+          {linkAgentMode === 'new' && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-gray-700">Agent Name *</label>
+                <Input value={newAgentName} onChange={e => setNewAgentName(e.target.value)} placeholder="Agency or agent name" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-gray-700">Agent Type</label>
+                <Select value={newAgentType} onChange={e => setNewAgentType(e.target.value)} options={agentTypeOpts} placeholder="Select type…" />
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setLinkAgentOpen(false)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={linkAgentSaving || !canSubmitLinkAgent} className="flex-1">
+              {linkAgentSaving ? 'Saving…' : linkAgentMode === 'new' ? 'Create & Link' : 'Link Agent'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Delete Talent */}
+      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete Talent">
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-4 bg-red-50 rounded-lg border border-red-100">
+            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+            <p className="text-sm text-red-700">
+              This will permanently delete <strong>{talent.name}</strong> and all associated contacts, agent links, and conversation history. This cannot be undone.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <Button type="button" variant="secondary" onClick={() => setDeleteOpen(false)} className="flex-1">Cancel</Button>
+            <Button type="button" onClick={handleDelete} disabled={deleting} className="flex-1 bg-red-600 hover:bg-red-700 text-white border-red-600">
+              {deleting ? 'Deleting…' : 'Delete Talent'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Edit Talent Modal */}
       <Modal open={open} onClose={() => setOpen(false)} title="Edit Talent">
         <form onSubmit={handleSave} className="space-y-4">
@@ -549,6 +708,16 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Category</label>
             <Select value={form.category} onChange={field('category')} options={categoryOpts} placeholder="Select…" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Email</label>
+              <Input type="email" value={form.email} onChange={field('email')} placeholder="email@example.com" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Phone</label>
+              <Input value={form.phone} onChange={field('phone')} placeholder="+1 555 000 0000" />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

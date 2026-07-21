@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag, Trash2, CheckCircle2, Circle, CheckCheck } from 'lucide-react'
+import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag, Trash2, CheckCircle2, Circle, CheckCheck, AlertTriangle } from 'lucide-react'
 import { Event, ProjectCategory } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -128,6 +128,10 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  // Delete project
+  const [deleteProjectOpen, setDeleteProjectOpen] = useState(false)
+  const [deletingProject, setDeletingProject] = useState(false)
+
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
@@ -151,6 +155,13 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   function projectTalentField(k: keyof typeof projectTalentForm) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setProjectTalentForm(f => ({ ...f, [k]: e.target.value }))
+  }
+
+  async function handleDeleteProject() {
+    setDeletingProject(true)
+    const supabase = createClient()
+    await supabase.from('events').delete().eq('id', project.id)
+    router.push('/projects')
   }
 
   async function toggleCompleted() {
@@ -367,6 +378,9 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
             </Button>
             <Button variant="secondary" onClick={() => setOpen(true)}>
               <Pencil className="w-3.5 h-3.5" /> Edit Project
+            </Button>
+            <Button variant="secondary" onClick={() => setDeleteProjectOpen(true)} className="text-red-500 hover:text-red-700 border-red-200 hover:border-red-300">
+              <Trash2 className="w-3.5 h-3.5" /> Delete
             </Button>
           </div>
         </div>
@@ -720,6 +734,24 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
             </Button>
             <Button type="button" variant="danger" disabled={deleting} onClick={handleConfirmDelete} className="flex-1">
               {deleting ? 'Removing…' : 'Remove'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Project */}
+      <Modal open={deleteProjectOpen} onClose={() => setDeleteProjectOpen(false)} title="Delete Project">
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-4 bg-red-50 rounded-lg border border-red-100">
+            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+            <p className="text-sm text-red-700">
+              This will permanently delete <strong>{project.name}</strong> and all associated brand shows and talent entries. This cannot be undone.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <Button type="button" variant="secondary" onClick={() => setDeleteProjectOpen(false)} className="flex-1">Cancel</Button>
+            <Button type="button" onClick={handleDeleteProject} disabled={deletingProject} className="flex-1 bg-red-600 hover:bg-red-700 text-white border-red-600">
+              {deletingProject ? 'Deleting…' : 'Delete Project'}
             </Button>
           </div>
         </div>

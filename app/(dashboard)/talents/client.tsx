@@ -16,6 +16,8 @@ type TalentRow = Talent & {
   talent_agents: { id: string; agent: { id: string; name: string } | null }[]
 }
 
+type SimpleAgent = { id: string; name: string; agent_type: string | null }
+
 const COUNTRIES = [
   'Australia','Austria','Belgium','Brazil','Canada','China','Denmark','Finland',
   'France','Germany','Greece','India','Ireland','Italy','Japan','Mexico',
@@ -26,20 +28,31 @@ const COUNTRIES = [
 type Props = {
   talents: TalentRow[]
   talentCategories: TalentCategory[]
+  allAgents: SimpleAgent[]
+  agentTypes: { id: string; name: string }[]
 }
 
-export function TalentsClient({ talents, talentCategories }: Props) {
+const EMPTY_FORM = {
+  name: '', ig_link: '', tiktok_link: '', ig_followers: '', tiktok_followers: '',
+  category: '', country: '', notes: '', email: '', phone: '',
+}
+
+export function TalentsClient({ talents, talentCategories, allAgents, agentTypes }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({
-    name: '', ig_link: '', tiktok_link: '', ig_followers: '', tiktok_followers: '',
-    category: '', country: '', notes: '',
-  })
+  const [form, setForm] = useState(EMPTY_FORM)
+
+  // Agent selection within Add Talent modal
+  const [agentMode, setAgentMode] = useState<'' | 'existing' | 'new'>('')
+  const [agentId, setAgentId] = useState('')
+  const [newAgentName, setNewAgentName] = useState('')
+  const [newAgentType, setNewAgentType] = useState('')
 
   const categoryOpts = talentCategories.map(c => ({ value: c.name, label: c.name }))
+  const agentTypeOpts = agentTypes.map(t => ({ value: t.name, label: t.name }))
 
   const q = search.toLowerCase()
   const filtered = talents.filter(t => {
@@ -58,11 +71,19 @@ export function TalentsClient({ talents, talentCategories }: Props) {
       setForm(f => ({ ...f, [k]: e.target.value }))
   }
 
+  function resetModal() {
+    setForm(EMPTY_FORM)
+    setAgentMode('')
+    setAgentId('')
+    setNewAgentName('')
+    setNewAgentType('')
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
-    await supabase.from('talents').insert({
+    const { data: newTalent } = await supabase.from('talents').insert({
       name: form.name,
       ig_link: form.ig_link || null,
       tiktok_link: form.tiktok_link || null,
@@ -70,11 +91,29 @@ export function TalentsClient({ talents, talentCategories }: Props) {
       tiktok_followers: form.tiktok_followers || null,
       category: form.category || null,
       country: form.country || null,
+      email: form.email || null,
+      phone: form.phone || null,
       notes: form.notes || null,
-    })
+    }).select('id').single()
+
+    if (newTalent) {
+      if (agentMode === 'existing' && agentId) {
+        await supabase.from('talent_agents').insert({ talent_id: newTalent.id, agent_id: agentId })
+      } else if (agentMode === 'new' && newAgentName) {
+        const { data: createdAgent } = await supabase
+          .from('agents')
+          .insert({ name: newAgentName, agent_type: newAgentType || null })
+          .select('id')
+          .single()
+        if (createdAgent) {
+          await supabase.from('talent_agents').insert({ talent_id: newTalent.id, agent_id: createdAgent.id })
+        }
+      }
+    }
+
     setSaving(false)
     setOpen(false)
-    setForm({ name: '', ig_link: '', tiktok_link: '', ig_followers: '', tiktok_followers: '', category: '', country: '', notes: '' })
+    resetModal()
     router.refresh()
   }
 
@@ -180,7 +219,7 @@ export function TalentsClient({ talents, talentCategories }: Props) {
         </table>
       </div>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Add Talent">
+      <Modal open={open} onClose={() => { setOpen(false); resetModal() }} title="Add Talent">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Name *</label>
@@ -189,6 +228,16 @@ export function TalentsClient({ talents, talentCategories }: Props) {
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Category</label>
             <Select value={form.category} onChange={field('category')} options={categoryOpts} placeholder="Select…" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Email</label>
+              <Input type="email" value={form.email} onChange={field('email')} placeholder="email@example.com" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Phone</label>
+              <Input value={form.phone} onChange={field('phone')} placeholder="+1 555 000 0000" />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -214,12 +263,48 @@ export function TalentsClient({ talents, talentCategories }: Props) {
             <label className="text-xs font-medium text-gray-700">Country</label>
             <Select value={form.country} onChange={field('country')} options={COUNTRIES} placeholder="Select…" />
           </div>
+
+          {/* Agent */}
+          <div className="space-y-2 pt-1 border-t border-gray-100">
+            <label className="text-xs font-medium text-gray-700">Agent</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setAgentMode(agentMode === 'existing' ? '' : 'existing'); setAgentId(''); setNewAgentName(''); setNewAgentType('') }}
+                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${agentMode === 'existing' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}
+              >
+                Select existing
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAgentMode(agentMode === 'new' ? '' : 'new'); setAgentId(''); setNewAgentName(''); setNewAgentType('') }}
+                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${agentMode === 'new' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}
+              >
+                Add new agent
+              </button>
+            </div>
+            {agentMode === 'existing' && (
+              <Select
+                value={agentId}
+                onChange={e => setAgentId(e.target.value)}
+                options={allAgents.map(a => ({ value: a.id, label: a.name + (a.agent_type ? ` · ${a.agent_type}` : '') }))}
+                placeholder={allAgents.length ? 'Select agent…' : 'No agents in directory yet'}
+              />
+            )}
+            {agentMode === 'new' && (
+              <div className="space-y-2">
+                <Input value={newAgentName} onChange={e => setNewAgentName(e.target.value)} placeholder="Agency or agent name *" />
+                <Select value={newAgentType} onChange={e => setNewAgentType(e.target.value)} options={agentTypeOpts} placeholder="Agent type (optional)…" />
+              </div>
+            )}
+          </div>
+
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Notes</label>
             <Textarea value={form.notes} onChange={field('notes')} rows={2} placeholder="Any notes…" />
           </div>
           <div className="flex gap-3 pt-1">
-            <Button type="button" variant="secondary" onClick={() => setOpen(false)} className="flex-1">Cancel</Button>
+            <Button type="button" variant="secondary" onClick={() => { setOpen(false); resetModal() }} className="flex-1">Cancel</Button>
             <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : 'Add Talent'}</Button>
           </div>
         </form>

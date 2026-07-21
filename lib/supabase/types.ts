@@ -8,6 +8,8 @@ export interface Talent {
   category: string | null
   status: string | null
   country: string | null
+  email: string | null
+  phone: string | null
   notes: string | null
   created_at: string
   updated_at: string
