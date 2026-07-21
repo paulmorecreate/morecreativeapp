@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Contact, Scissors, Camera } from 'lucide-react'
+import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Contact, Scissors, Camera, Building2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 
@@ -14,6 +14,7 @@ const primaryNav = [
 const directoryNav = [
   { href: '/talents', label: 'Talents', icon: Users },
   { href: '/brands', label: 'Brands', icon: Briefcase },
+  { href: '/agencies', label: 'Agencies', icon: Building2 },
   { href: '/agents', label: 'Agents', icon: Contact },
   { href: '/stylists', label: 'Stylists', icon: Scissors },
   { href: '/photographers', label: 'Photographers', icon: Camera },

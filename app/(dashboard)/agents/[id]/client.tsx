@@ -19,15 +19,18 @@ type TalentLink = {
 
 type SimpleRecord = { id: string; name: string }
 
+type SimpleAgency = { id: string; name: string }
+
 type Props = {
   agent: Agent
   contacts: AgentContact[]
   talentLinks: TalentLink[]
   agentTypes: AgentType[]
   allTalents: SimpleRecord[]
+  agencies: SimpleAgency[]
 }
 
-export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, allTalents }: Props) {
+export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, allTalents, agencies }: Props) {
   const router = useRouter()
 
   const [editOpen, setEditOpen] = useState(false)
@@ -37,9 +40,13 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
   const [form, setForm] = useState({
     name: agent.name ?? '',
     agent_type: agent.agent_type ?? '',
+    agency_id: agent.agency_id ?? '',
     website: agent.website ?? '',
     notes: agent.notes ?? '',
   })
+
+  const agencyOpts = agencies.map(a => ({ value: a.id, label: a.name }))
+  const currentAgency = agencies.find(a => a.id === agent.agency_id)
 
   const [contactOpen, setContactOpen] = useState(false)
   const [editContact, setEditContact] = useState<AgentContact | null>(null)
@@ -71,6 +78,7 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
     await supabase.from('agents').update({
       name: form.name || null,
       agent_type: form.agent_type || null,
+      agency_id: form.agency_id || null,
       website: form.website || null,
       notes: form.notes || null,
     }).eq('id', agent.id)
@@ -165,6 +173,11 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
             <h1 className="text-2xl font-semibold text-gray-900">{agent.name}</h1>
             <div className="flex items-center gap-3 mt-1">
               {agent.agent_type && <span className="text-sm text-gray-500">{agent.agent_type}</span>}
+              {currentAgency && (
+                <Link href={`/agencies/${currentAgency.id}`} className="text-sm text-gray-400 hover:text-gray-700">
+                  {currentAgency.name}
+                </Link>
+              )}
               {agent.website && (
                 <a href={agent.website} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-gray-700">
                   <ExternalLink className="w-3 h-3" /> Website
@@ -327,6 +340,10 @@ export function AgentDetailClient({ agent, contacts, talentLinks, agentTypes, al
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Agent Type</label>
             <Select value={form.agent_type} onChange={field('agent_type')} options={typeOpts} placeholder="Select type…" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Agency</label>
+            <Select value={form.agency_id} onChange={field('agency_id')} options={agencyOpts} placeholder="Select agency (optional)…" />
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Website</label>

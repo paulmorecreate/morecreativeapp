@@ -60,9 +60,10 @@ type Props = {
   talentCategories: TalentCategory[]
   allAgents: SimpleAgent[]
   agentTypes: { id: string; name: string }[]
+  allAgencies: { id: string; name: string }[]
 }
 
-export function TalentDetailClient({ talent, talentProjects, eventDetails, conversations, agentLinks, talentContacts, talentCategories, allAgents, agentTypes }: Props) {
+export function TalentDetailClient({ talent, talentProjects, eventDetails, conversations, agentLinks, talentContacts, talentCategories, allAgents, agentTypes, allAgencies }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -88,6 +89,7 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
   const [linkAgentId, setLinkAgentId] = useState('')
   const [newAgentName, setNewAgentName] = useState('')
   const [newAgentType, setNewAgentType] = useState('')
+  const [newAgentAgencyId, setNewAgentAgencyId] = useState('')
   const [linkAgentSaving, setLinkAgentSaving] = useState(false)
 
   const [form, setForm] = useState({
@@ -249,6 +251,7 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
     setLinkAgentId('')
     setNewAgentName('')
     setNewAgentType('')
+    setNewAgentAgencyId('')
     setLinkAgentOpen(true)
   }
 
@@ -258,7 +261,7 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
     const supabase = createClient()
     let agentId = linkAgentId
     if (linkAgentMode === 'new' && newAgentName) {
-      const { data } = await supabase.from('agents').insert({ name: newAgentName, agent_type: newAgentType || null }).select('id').single()
+      const { data } = await supabase.from('agents').insert({ name: newAgentName, agent_type: newAgentType || null, agency_id: newAgentAgencyId || null }).select('id').single()
       agentId = data?.id ?? ''
     }
     if (agentId) {
@@ -662,11 +665,15 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-gray-700">Agent Name *</label>
-                <Input value={newAgentName} onChange={e => setNewAgentName(e.target.value)} placeholder="Agency or agent name" />
+                <Input value={newAgentName} onChange={e => setNewAgentName(e.target.value)} placeholder="Full name" />
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-gray-700">Agent Type</label>
                 <Select value={newAgentType} onChange={e => setNewAgentType(e.target.value)} options={agentTypeOpts} placeholder="Select type…" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-gray-700">Agency</label>
+                <Select value={newAgentAgencyId} onChange={e => setNewAgentAgencyId(e.target.value)} options={allAgencies.map(a => ({ value: a.id, label: a.name }))} placeholder="Select agency (optional)…" />
               </div>
             </div>
           )}

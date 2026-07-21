@@ -148,10 +148,20 @@ export interface AgentType {
   created_at: string
 }
 
+export interface Agency {
+  id: string
+  name: string
+  website: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Agent {
   id: string
   name: string
   agent_type: string | null
+  agency_id: string | null
   website: string | null
   notes: string | null
   created_at: string

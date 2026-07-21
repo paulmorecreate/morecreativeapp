@@ -30,6 +30,7 @@ type Props = {
   talentCategories: TalentCategory[]
   allAgents: SimpleAgent[]
   agentTypes: { id: string; name: string }[]
+  allAgencies: { id: string; name: string }[]
 }
 
 const EMPTY_FORM = {
@@ -37,7 +38,7 @@ const EMPTY_FORM = {
   category: '', country: '', notes: '', email: '', phone: '',
 }
 
-export function TalentsClient({ talents, talentCategories, allAgents, agentTypes }: Props) {
+export function TalentsClient({ talents, talentCategories, allAgents, agentTypes, allAgencies }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -50,6 +51,7 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
   const [agentId, setAgentId] = useState('')
   const [newAgentName, setNewAgentName] = useState('')
   const [newAgentType, setNewAgentType] = useState('')
+  const [newAgentAgencyId, setNewAgentAgencyId] = useState('')
 
   const categoryOpts = talentCategories.map(c => ({ value: c.name, label: c.name }))
   const agentTypeOpts = agentTypes.map(t => ({ value: t.name, label: t.name }))
@@ -77,6 +79,7 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
     setAgentId('')
     setNewAgentName('')
     setNewAgentType('')
+    setNewAgentAgencyId('')
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -102,7 +105,7 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
       } else if (agentMode === 'new' && newAgentName) {
         const { data: createdAgent } = await supabase
           .from('agents')
-          .insert({ name: newAgentName, agent_type: newAgentType || null })
+          .insert({ name: newAgentName, agent_type: newAgentType || null, agency_id: newAgentAgencyId || null })
           .select('id')
           .single()
         if (createdAgent) {
@@ -293,8 +296,9 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
             )}
             {agentMode === 'new' && (
               <div className="space-y-2">
-                <Input value={newAgentName} onChange={e => setNewAgentName(e.target.value)} placeholder="Agency or agent name *" />
+                <Input value={newAgentName} onChange={e => setNewAgentName(e.target.value)} placeholder="Full name *" />
                 <Select value={newAgentType} onChange={e => setNewAgentType(e.target.value)} options={agentTypeOpts} placeholder="Agent type (optional)…" />
+                <Select value={newAgentAgencyId} onChange={e => setNewAgentAgencyId(e.target.value)} options={allAgencies.map(a => ({ value: a.id, label: a.name }))} placeholder="Agency (optional)…" />
               </div>
             )}
           </div>

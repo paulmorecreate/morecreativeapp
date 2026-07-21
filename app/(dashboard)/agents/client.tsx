@@ -13,22 +13,28 @@ import { createClient } from '@/lib/supabase/client'
 
 type AgentWithContacts = Agent & {
   agent_contacts: { id: string; name: string | null; is_primary: boolean }[]
+  agency: { id: string; name: string } | null
 }
+
+type SimpleAgency = { id: string; name: string }
 
 type Props = {
   agents: AgentWithContacts[]
   agentTypes: AgentType[]
+  agencies: SimpleAgency[]
 }
 
-export function AgentsClient({ agents, agentTypes }: Props) {
+export function AgentsClient({ agents, agentTypes, agencies }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
+  const [agencyFilter, setAgencyFilter] = useState('')
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({ name: '', agent_type: '', notes: '' })
+  const [form, setForm] = useState({ name: '', agent_type: '', agency_id: '', notes: '' })
 
   const typeOpts = agentTypes.map(t => ({ value: t.name, label: t.name }))
+  const agencyOpts = agencies.map(a => ({ value: a.id, label: a.name }))
 
   const q = search.toLowerCase()
   const filtered = agents.filter(a => {
@@ -36,9 +42,12 @@ export function AgentsClient({ agents, agentTypes }: Props) {
     const matchSearch = !search ||
       a.name.toLowerCase().includes(q) ||
       (a.agent_type ?? '').toLowerCase().includes(q) ||
+      (a.agency?.name ?? '').toLowerCase().includes(q) ||
       primary.toLowerCase().includes(q)
     const matchType = !typeFilter || a.agent_type === typeFilter
-    return matchSearch && matchType
+    const matchAgency = !agencyFilter ||
+      (agencyFilter === '__standalone__' ? !a.agency : a.agency?.id === agencyFilter)
+    return matchSearch && matchType && matchAgency
   })
 
   function field(k: keyof typeof form) {
@@ -53,11 +62,12 @@ export function AgentsClient({ agents, agentTypes }: Props) {
     await supabase.from('agents').insert({
       name: form.name,
       agent_type: form.agent_type || null,
+      agency_id: form.agency_id || null,
       notes: form.notes || null,
     })
     setSaving(false)
     setOpen(false)
-    setForm({ name: '', agent_type: '', notes: '' })
+    setForm({ name: '', agent_type: '', agency_id: '', notes: '' })
     router.refresh()
   }
 
@@ -85,6 +95,15 @@ export function AgentsClient({ agents, agentTypes }: Props) {
           />
         </div>
         <select
+          value={agencyFilter}
+          onChange={e => setAgencyFilter(e.target.value)}
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black/10 bg-white text-gray-700"
+        >
+          <option value="">All agencies</option>
+          {agencyOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          <option value="__standalone__">Standalone (no agency)</option>
+        </select>
+        <select
           value={typeFilter}
           onChange={e => setTypeFilter(e.target.value)}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black/10 bg-white text-gray-700"
@@ -100,8 +119,8 @@ export function AgentsClient({ agents, agentTypes }: Props) {
             <tr className="border-b border-gray-100 bg-gray-50/50">
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Name</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Type</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Agency</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Primary Contact</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Talents</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -109,7 +128,7 @@ export function AgentsClient({ agents, agentTypes }: Props) {
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-400">
-                  {search || typeFilter ? 'No results.' : 'No agents yet.'}
+                  {search || typeFilter || agencyFilter ? 'No results.' : 'No agents yet.'}
                 </td>
               </tr>
             )}
@@ -123,11 +142,13 @@ export function AgentsClient({ agents, agentTypes }: Props) {
                     </Link>
                   </td>
                   <td className="px-4 py-3"><Badge value={agent.agent_type} /></td>
+                  <td className="px-4 py-3 text-xs text-gray-500">
+                    {agent.agency
+                      ? <Link href={`/agencies/${agent.agency.id}`} className="hover:text-black">{agent.agency.name}</Link>
+                      : <span className="text-gray-300">—</span>}
+                  </td>
                   <td className="px-4 py-3 text-gray-600 text-xs">
                     {primary?.name ?? <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-gray-400 text-xs">
-                    —
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link href={`/agents/${agent.id}`} className="text-gray-300 hover:text-gray-500">
@@ -145,11 +166,15 @@ export function AgentsClient({ agents, agentTypes }: Props) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Agent Name *</label>
-            <Input value={form.name} onChange={field('name')} required placeholder="Agency or agent name" />
+            <Input value={form.name} onChange={field('name')} required placeholder="Full name" />
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Agent Type</label>
             <Select value={form.agent_type} onChange={field('agent_type')} options={typeOpts} placeholder="Select type…" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Agency</label>
+            <Select value={form.agency_id} onChange={field('agency_id')} options={agencyOpts} placeholder="Select agency (optional)…" />
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Notes</label>
