@@ -79,8 +79,6 @@ export function BrandDetailClient({ brand, brandProjects, conversations, contact
     name: brand.name ?? '',
     link: brand.link ?? '',
     tiktok_link: brand.tiktok_link ?? '',
-    ig_followers: brand.ig_followers ?? '',
-    tiktok_followers: brand.tiktok_followers ?? '',
     category: brand.category ?? 'main',
     status: brand.status ?? 'active',
     industry: brand.industry ?? '',
@@ -213,8 +211,6 @@ export function BrandDetailClient({ brand, brandProjects, conversations, contact
       name: form.name || null,
       link: form.link || null,
       tiktok_link: form.tiktok_link || null,
-      ig_followers: form.ig_followers || null,
-      tiktok_followers: form.tiktok_followers || null,
       category: form.category || null,
       status: form.status || null,
       industry: form.industry || null,
@@ -266,14 +262,6 @@ export function BrandDetailClient({ brand, brandProjects, conversations, contact
                   <dd className="text-sm text-gray-900 whitespace-pre-wrap">{value ?? <span className="text-gray-300">—</span>}</dd>
                 </div>
               ))}
-              <div>
-                <dt className="text-xs text-gray-400 mb-0.5">IG Followers</dt>
-                <dd className="text-sm text-gray-900">{brand.ig_followers ?? <span className="text-gray-300">—</span>}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-gray-400 mb-0.5">TikTok Followers</dt>
-                <dd className="text-sm text-gray-900">{brand.tiktok_followers ?? <span className="text-gray-300">—</span>}</dd>
-              </div>
             </dl>
           </div>
 
@@ -524,16 +512,6 @@ export function BrandDetailClient({ brand, brandProjects, conversations, contact
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">TikTok URL</label>
               <Input value={form.tiktok_link} onChange={field('tiktok_link')} placeholder="https://tiktok.com/@..." />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">IG Followers</label>
-              <Input value={form.ig_followers} onChange={field('ig_followers')} placeholder="e.g. 120K" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">TikTok Followers</label>
-              <Input value={form.tiktok_followers} onChange={field('tiktok_followers')} placeholder="e.g. 500K" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

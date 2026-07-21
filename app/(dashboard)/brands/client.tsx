@@ -127,8 +127,6 @@ export function BrandsClient({ brands, industries }: { brands: BrandWithContacts
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Category</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Status</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Contact</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">IG Followers</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">TK Followers</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Links</th>
               <th className="px-4 py-3" />
             </tr>
@@ -136,7 +134,7 @@ export function BrandsClient({ brands, industries }: { brands: BrandWithContacts
           <tbody className="divide-y divide-gray-50">
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-400">
+                <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
                   {search || categoryFilter || statusFilter ? 'No results match your filters.' : 'No brands yet.'}
                 </td>
               </tr>
@@ -157,8 +155,6 @@ export function BrandsClient({ brands, industries }: { brands: BrandWithContacts
                       <span>{primaryContact.name}</span>
                     ) : <span className="text-gray-300">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-gray-600 text-xs">{brand.ig_followers ?? <span className="text-gray-300">—</span>}</td>
-                  <td className="px-4 py-3 text-gray-600 text-xs">{brand.tiktok_followers ?? <span className="text-gray-300">—</span>}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       {brand.link ? (
