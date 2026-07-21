@@ -21,20 +21,26 @@ type AgencyRow = Agency & {
   agents: { id: string }[]
 }
 
-type AgentEntry = { name: string; agent_type: string; country: string }
+type SimpleAgent = { id: string; name: string; agent_type: string | null }
+
+// Each slot is either "pick an existing agent" or "create a new one"
+type AgentSlot =
+  | { mode: 'existing'; agentId: string }
+  | { mode: 'new'; name: string; agent_type: string; country: string }
 
 type Props = {
   agencies: AgencyRow[]
   agentTypes: AgentType[]
+  allAgents: SimpleAgent[]
 }
 
-export function AgenciesClient({ agencies, agentTypes }: Props) {
+export function AgenciesClient({ agencies, agentTypes, allAgents }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ name: '', website: '', country: '', notes: '' })
-  const [agentEntries, setAgentEntries] = useState<AgentEntry[]>([])
+  const [agentSlots, setAgentSlots] = useState<AgentSlot[]>([])
 
   const filtered = agencies.filter(a =>
     !search || a.name.toLowerCase().includes(search.toLowerCase())
@@ -42,33 +48,60 @@ export function AgenciesClient({ agencies, agentTypes }: Props) {
 
   const typeOpts = agentTypes.map(t => ({ value: t.name, label: t.name }))
 
+  // Agents already selected in existing-mode slots, so we don't offer them twice
+  const selectedExistingIds = new Set(
+    agentSlots.flatMap(s => (s.mode === 'existing' && s.agentId ? [s.agentId] : []))
+  )
+
+  function availableAgentsFor(currentId: string) {
+    return allAgents
+      .filter(a => a.id === currentId || !selectedExistingIds.has(a.id))
+      .map(a => ({ value: a.id, label: a.name + (a.agent_type ? ` · ${a.agent_type}` : '') }))
+  }
+
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
   }
 
-  function agentField(i: number, k: keyof AgentEntry) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setAgentEntries(entries => entries.map((entry, idx) => idx === i ? { ...entry, [k]: e.target.value } : entry))
+  function addSlot() {
+    setAgentSlots(s => [...s, { mode: 'existing', agentId: '' }])
   }
 
-  function addAgentEntry() {
-    setAgentEntries(e => [...e, { name: '', agent_type: '', country: '' }])
+  function removeSlot(i: number) {
+    setAgentSlots(s => s.filter((_, idx) => idx !== i))
   }
 
-  function removeAgentEntry(i: number) {
-    setAgentEntries(e => e.filter((_, idx) => idx !== i))
+  function toggleMode(i: number) {
+    setAgentSlots(s => s.map((slot, idx) => {
+      if (idx !== i) return slot
+      return slot.mode === 'existing'
+        ? { mode: 'new', name: '', agent_type: '', country: '' }
+        : { mode: 'existing', agentId: '' }
+    }))
+  }
+
+  function updateExisting(i: number, agentId: string) {
+    setAgentSlots(s => s.map((slot, idx) => idx === i ? { mode: 'existing', agentId } : slot))
+  }
+
+  function updateNew(i: number, k: 'name' | 'agent_type' | 'country', value: string) {
+    setAgentSlots(s => s.map((slot, idx) => {
+      if (idx !== i || slot.mode !== 'new') return slot
+      return { ...slot, [k]: value }
+    }))
   }
 
   function resetModal() {
     setForm({ name: '', website: '', country: '', notes: '' })
-    setAgentEntries([])
+    setAgentSlots([])
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
+
     const { data: newAgency } = await supabase
       .from('agencies')
       .insert({
@@ -80,17 +113,29 @@ export function AgenciesClient({ agencies, agentTypes }: Props) {
       .select('id')
       .single()
 
-    if (newAgency && agentEntries.some(a => a.name.trim())) {
-      await supabase.from('agents').insert(
-        agentEntries
-          .filter(a => a.name.trim())
-          .map(a => ({
-            name: a.name.trim(),
-            agent_type: a.agent_type || null,
-            country: a.country || null,
-            agency_id: newAgency.id,
-          }))
+    if (newAgency) {
+      const existingToLink = agentSlots.filter((s): s is { mode: 'existing'; agentId: string } =>
+        s.mode === 'existing' && !!s.agentId
       )
+      const newToCreate = agentSlots.filter((s): s is { mode: 'new'; name: string; agent_type: string; country: string } =>
+        s.mode === 'new' && !!s.name.trim()
+      )
+
+      await Promise.all([
+        ...existingToLink.map(s =>
+          supabase.from('agents').update({ agency_id: newAgency.id }).eq('id', s.agentId)
+        ),
+        newToCreate.length > 0
+          ? supabase.from('agents').insert(
+              newToCreate.map(s => ({
+                name: s.name.trim(),
+                agent_type: s.agent_type || null,
+                country: s.country || null,
+                agency_id: newAgency.id,
+              }))
+            )
+          : Promise.resolve(),
+      ])
     }
 
     setSaving(false)
@@ -201,37 +246,72 @@ export function AgenciesClient({ agencies, agentTypes }: Props) {
               <label className="text-xs font-medium text-gray-700">Agents</label>
               <button
                 type="button"
-                onClick={addAgentEntry}
+                onClick={addSlot}
                 className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700"
               >
                 <Plus className="w-3 h-3" /> Add agent
               </button>
             </div>
-            {agentEntries.length === 0 && (
-              <p className="text-xs text-gray-400">No agents added yet — click above to add one.</p>
+            {agentSlots.length === 0 && (
+              <p className="text-xs text-gray-400">Optional — click above to add agents to this agency.</p>
             )}
-            {agentEntries.map((entry, i) => (
-              <div key={i} className="flex items-start gap-2 pl-3 border-l-2 border-gray-100">
-                <div className="flex-1 space-y-2">
-                  <Input
-                    value={entry.name}
-                    onChange={agentField(i, 'name')}
-                    placeholder="Agent name *"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <Select value={entry.agent_type} onChange={agentField(i, 'agent_type')} options={typeOpts} placeholder="Type (optional)…" />
-                    <Select value={entry.country} onChange={agentField(i, 'country')} options={COUNTRIES} placeholder="Country (optional)…" />
+            <div className="space-y-3">
+              {agentSlots.map((slot, i) => (
+                <div key={i} className="flex items-start gap-2 pl-3 border-l-2 border-gray-100">
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-500">
+                        {slot.mode === 'existing' ? 'Existing agent' : 'New agent'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => toggleMode(i)}
+                        className="text-xs text-gray-400 hover:text-gray-700"
+                      >
+                        {slot.mode === 'existing' ? '+ Create new instead' : '← Select existing'}
+                      </button>
+                    </div>
+                    {slot.mode === 'existing' ? (
+                      <Select
+                        value={slot.agentId}
+                        onChange={e => updateExisting(i, e.target.value)}
+                        options={availableAgentsFor(slot.agentId)}
+                        placeholder="Select agent…"
+                      />
+                    ) : (
+                      <div className="space-y-2">
+                        <Input
+                          value={slot.name}
+                          onChange={e => updateNew(i, 'name', e.target.value)}
+                          placeholder="Agent name *"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <Select
+                            value={slot.agent_type}
+                            onChange={e => updateNew(i, 'agent_type', e.target.value)}
+                            options={typeOpts}
+                            placeholder="Type (optional)…"
+                          />
+                          <Select
+                            value={slot.country}
+                            onChange={e => updateNew(i, 'country', e.target.value)}
+                            options={COUNTRIES}
+                            placeholder="Country (optional)…"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => removeSlot(i)}
+                    className="mt-6 text-gray-300 hover:text-red-400"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => removeAgentEntry(i)}
-                  className="mt-2 text-gray-300 hover:text-red-400"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
           <div className="flex gap-3 pt-1">
