@@ -26,7 +26,7 @@ type SimpleAgent = { id: string; name: string; agent_type: string | null }
 // Each slot is either "pick an existing agent" or "create a new one"
 type AgentSlot =
   | { mode: 'existing'; agentId: string }
-  | { mode: 'new'; name: string; agent_type: string; country: string }
+  | { mode: 'new'; name: string; agent_type: string; country: string; email: string; phone: string }
 
 type Props = {
   agencies: AgencyRow[]
@@ -76,7 +76,7 @@ export function AgenciesClient({ agencies, agentTypes, allAgents }: Props) {
     setAgentSlots(s => s.map((slot, idx) => {
       if (idx !== i) return slot
       return slot.mode === 'existing'
-        ? { mode: 'new', name: '', agent_type: '', country: '' }
+        ? { mode: 'new', name: '', agent_type: '', country: '', email: '', phone: '' }
         : { mode: 'existing', agentId: '' }
     }))
   }
@@ -85,7 +85,7 @@ export function AgenciesClient({ agencies, agentTypes, allAgents }: Props) {
     setAgentSlots(s => s.map((slot, idx) => idx === i ? { mode: 'existing', agentId } : slot))
   }
 
-  function updateNew(i: number, k: 'name' | 'agent_type' | 'country', value: string) {
+  function updateNew(i: number, k: 'name' | 'agent_type' | 'country' | 'email' | 'phone', value: string) {
     setAgentSlots(s => s.map((slot, idx) => {
       if (idx !== i || slot.mode !== 'new') return slot
       return { ...slot, [k]: value }
@@ -117,7 +117,7 @@ export function AgenciesClient({ agencies, agentTypes, allAgents }: Props) {
       const existingToLink = agentSlots.filter((s): s is { mode: 'existing'; agentId: string } =>
         s.mode === 'existing' && !!s.agentId
       )
-      const newToCreate = agentSlots.filter((s): s is { mode: 'new'; name: string; agent_type: string; country: string } =>
+      const newToCreate = agentSlots.filter((s): s is { mode: 'new'; name: string; agent_type: string; country: string; email: string; phone: string } =>
         s.mode === 'new' && !!s.name.trim()
       )
 
@@ -131,6 +131,8 @@ export function AgenciesClient({ agencies, agentTypes, allAgents }: Props) {
                 name: s.name.trim(),
                 agent_type: s.agent_type || null,
                 country: s.country || null,
+                email: s.email || null,
+                phone: s.phone || null,
                 agency_id: newAgency.id,
               }))
             )
@@ -297,6 +299,19 @@ export function AgenciesClient({ agencies, agentTypes, allAgents }: Props) {
                             onChange={e => updateNew(i, 'country', e.target.value)}
                             options={COUNTRIES}
                             placeholder="Country (optional)…"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            type="email"
+                            value={slot.email}
+                            onChange={e => updateNew(i, 'email', e.target.value)}
+                            placeholder="Email (optional)"
+                          />
+                          <Input
+                            value={slot.phone}
+                            onChange={e => updateNew(i, 'phone', e.target.value)}
+                            placeholder="Phone (optional)"
                           />
                         </div>
                       </div>

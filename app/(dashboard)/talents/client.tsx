@@ -51,6 +51,8 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
   const [agentId, setAgentId] = useState('')
   const [newAgentName, setNewAgentName] = useState('')
   const [newAgentType, setNewAgentType] = useState('')
+  const [newAgentEmail, setNewAgentEmail] = useState('')
+  const [newAgentPhone, setNewAgentPhone] = useState('')
   const [newAgentAgencyId, setNewAgentAgencyId] = useState('')
 
   const categoryOpts = talentCategories.map(c => ({ value: c.name, label: c.name }))
@@ -79,6 +81,8 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
     setAgentId('')
     setNewAgentName('')
     setNewAgentType('')
+    setNewAgentEmail('')
+    setNewAgentPhone('')
     setNewAgentAgencyId('')
   }
 
@@ -105,7 +109,7 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
       } else if (agentMode === 'new' && newAgentName) {
         const { data: createdAgent } = await supabase
           .from('agents')
-          .insert({ name: newAgentName, agent_type: newAgentType || null, agency_id: newAgentAgencyId || null })
+          .insert({ name: newAgentName, agent_type: newAgentType || null, email: newAgentEmail || null, phone: newAgentPhone || null, agency_id: newAgentAgencyId || null })
           .select('id')
           .single()
         if (createdAgent) {
@@ -298,6 +302,10 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
               <div className="space-y-2">
                 <Input value={newAgentName} onChange={e => setNewAgentName(e.target.value)} placeholder="Full name *" />
                 <Select value={newAgentType} onChange={e => setNewAgentType(e.target.value)} options={agentTypeOpts} placeholder="Agent type (optional)…" />
+                <div className="grid grid-cols-2 gap-2">
+                  <Input type="email" value={newAgentEmail} onChange={e => setNewAgentEmail(e.target.value)} placeholder="Email (optional)" />
+                  <Input value={newAgentPhone} onChange={e => setNewAgentPhone(e.target.value)} placeholder="Phone (optional)" />
+                </div>
                 <Select value={newAgentAgencyId} onChange={e => setNewAgentAgencyId(e.target.value)} options={allAgencies.map(a => ({ value: a.id, label: a.name }))} placeholder="Agency (optional)…" />
               </div>
             )}
