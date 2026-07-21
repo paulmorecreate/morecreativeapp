@@ -18,20 +18,19 @@ const COUNTRIES = [
   'South Korea','Spain','Sweden','Switzerland','Turkey','UAE','UK','USA',
 ].map(c => ({ value: c, label: c }))
 
-type AgentWithContacts = Agent & {
-  agent_contacts: { id: string; name: string | null; is_primary: boolean }[]
+type AgentWithAgency = Agent & {
   agency: { id: string; name: string } | null
 }
 
 type SimpleAgency = { id: string; name: string }
 
 type Props = {
-  agents: AgentWithContacts[]
+  agents: AgentWithAgency[]
   agentTypes: AgentType[]
   agencies: SimpleAgency[]
 }
 
-const EMPTY_FORM = { name: '', agent_type: '', agency_id: '', country: '', notes: '' }
+const EMPTY_FORM = { name: '', agent_type: '', agency_id: '', country: '', email: '', phone: '', notes: '' }
 
 export function AgentsClient({ agents, agentTypes, agencies }: Props) {
   const router = useRouter()
@@ -52,12 +51,11 @@ export function AgentsClient({ agents, agentTypes, agencies }: Props) {
 
   const q = search.toLowerCase()
   const filtered = agents.filter(a => {
-    const primary = a.agent_contacts?.find(c => c.is_primary)?.name ?? ''
     const matchSearch = !search ||
       a.name.toLowerCase().includes(q) ||
       (a.agent_type ?? '').toLowerCase().includes(q) ||
       (a.agency?.name ?? '').toLowerCase().includes(q) ||
-      primary.toLowerCase().includes(q)
+      (a.email ?? '').toLowerCase().includes(q)
     const matchType = !typeFilter || a.agent_type === typeFilter
     const matchAgency = !agencyFilter ||
       (agencyFilter === '__standalone__' ? !a.agency : a.agency?.id === agencyFilter)
@@ -96,6 +94,8 @@ export function AgentsClient({ agents, agentTypes, agencies }: Props) {
       agent_type: form.agent_type || null,
       agency_id: resolvedAgencyId,
       country: form.country || null,
+      email: form.email || null,
+      phone: form.phone || null,
       notes: form.notes || null,
     })
     setSaving(false)
@@ -154,7 +154,7 @@ export function AgentsClient({ agents, agentTypes, agencies }: Props) {
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Type</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Agency</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Country</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Primary Contact</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Email</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -166,35 +166,34 @@ export function AgentsClient({ agents, agentTypes, agencies }: Props) {
                 </td>
               </tr>
             )}
-            {filtered.map(agent => {
-              const primary = agent.agent_contacts?.find(c => c.is_primary)
-              return (
-                <tr key={agent.id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-4 py-3">
-                    <Link href={`/agents/${agent.id}`} className="font-medium text-gray-900 hover:text-black">
-                      {agent.name}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3"><Badge value={agent.agent_type} /></td>
-                  <td className="px-4 py-3 text-xs text-gray-500">
-                    {agent.agency
-                      ? <Link href={`/agencies/${agent.agency.id}`} className="hover:text-black">{agent.agency.name}</Link>
-                      : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-500">
-                    {agent.country ?? <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600 text-xs">
-                    {primary?.name ?? <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Link href={`/agents/${agent.id}`} className="text-gray-300 hover:text-gray-500">
-                      <ChevronRight className="w-4 h-4" />
-                    </Link>
-                  </td>
-                </tr>
-              )
-            })}
+            {filtered.map(agent => (
+              <tr key={agent.id} className="hover:bg-gray-50/50 transition-colors">
+                <td className="px-4 py-3">
+                  <Link href={`/agents/${agent.id}`} className="font-medium text-gray-900 hover:text-black">
+                    {agent.name}
+                  </Link>
+                </td>
+                <td className="px-4 py-3"><Badge value={agent.agent_type} /></td>
+                <td className="px-4 py-3 text-xs text-gray-500">
+                  {agent.agency
+                    ? <Link href={`/agencies/${agent.agency.id}`} className="hover:text-black">{agent.agency.name}</Link>
+                    : <span className="text-gray-300">—</span>}
+                </td>
+                <td className="px-4 py-3 text-xs text-gray-500">
+                  {agent.country ?? <span className="text-gray-300">—</span>}
+                </td>
+                <td className="px-4 py-3 text-xs text-gray-500">
+                  {agent.email
+                    ? <a href={`mailto:${agent.email}`} className="hover:text-black">{agent.email}</a>
+                    : <span className="text-gray-300">—</span>}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <Link href={`/agents/${agent.id}`} className="text-gray-300 hover:text-gray-500">
+                    <ChevronRight className="w-4 h-4" />
+                  </Link>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -213,6 +212,17 @@ export function AgentsClient({ agents, agentTypes, agencies }: Props) {
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">Country</label>
               <Select value={form.country} onChange={field('country')} options={COUNTRIES} placeholder="Select…" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Email</label>
+              <Input type="email" value={form.email} onChange={field('email')} placeholder="agent@agency.com" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Phone</label>
+              <Input value={form.phone} onChange={field('phone')} placeholder="+1 555 000 0000" />
             </div>
           </div>
 

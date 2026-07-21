@@ -164,6 +164,8 @@ export interface Agent {
   agent_type: string | null
   agency_id: string | null
   country: string | null
+  email: string | null
+  phone: string | null
   website: string | null
   notes: string | null
   created_at: string
