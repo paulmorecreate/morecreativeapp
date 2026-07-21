@@ -64,7 +64,9 @@ function UsersSection() {
       const data = await res.json()
       setUsers(data.sort((a: AppUser, b: AppUser) => a.email.localeCompare(b.email)))
     } else {
-      const data = await res.json()
+      const text = await res.text()
+      let data: { error?: string } = {}
+      try { data = JSON.parse(text) } catch {}
       setError(data.error ?? 'Failed to load users')
     }
     setLoading(false)
