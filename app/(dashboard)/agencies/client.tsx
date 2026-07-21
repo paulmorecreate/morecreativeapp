@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Search, ChevronRight, ExternalLink } from 'lucide-react'
-import { Agency } from '@/lib/supabase/types'
+import { Plus, Search, ChevronRight, ExternalLink, X } from 'lucide-react'
+import { Agency, AgentType } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
@@ -21,39 +21,81 @@ type AgencyRow = Agency & {
   agents: { id: string }[]
 }
 
+type AgentEntry = { name: string; agent_type: string; country: string }
+
 type Props = {
   agencies: AgencyRow[]
+  agentTypes: AgentType[]
 }
 
-export function AgenciesClient({ agencies }: Props) {
+export function AgenciesClient({ agencies, agentTypes }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ name: '', website: '', country: '', notes: '' })
+  const [agentEntries, setAgentEntries] = useState<AgentEntry[]>([])
 
   const filtered = agencies.filter(a =>
     !search || a.name.toLowerCase().includes(search.toLowerCase())
   )
+
+  const typeOpts = agentTypes.map(t => ({ value: t.name, label: t.name }))
 
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
   }
 
+  function agentField(i: number, k: keyof AgentEntry) {
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setAgentEntries(entries => entries.map((entry, idx) => idx === i ? { ...entry, [k]: e.target.value } : entry))
+  }
+
+  function addAgentEntry() {
+    setAgentEntries(e => [...e, { name: '', agent_type: '', country: '' }])
+  }
+
+  function removeAgentEntry(i: number) {
+    setAgentEntries(e => e.filter((_, idx) => idx !== i))
+  }
+
+  function resetModal() {
+    setForm({ name: '', website: '', country: '', notes: '' })
+    setAgentEntries([])
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
-    await supabase.from('agencies').insert({
-      name: form.name,
-      website: form.website || null,
-      country: form.country || null,
-      notes: form.notes || null,
-    })
+    const { data: newAgency } = await supabase
+      .from('agencies')
+      .insert({
+        name: form.name,
+        website: form.website || null,
+        country: form.country || null,
+        notes: form.notes || null,
+      })
+      .select('id')
+      .single()
+
+    if (newAgency && agentEntries.some(a => a.name.trim())) {
+      await supabase.from('agents').insert(
+        agentEntries
+          .filter(a => a.name.trim())
+          .map(a => ({
+            name: a.name.trim(),
+            agent_type: a.agent_type || null,
+            country: a.country || null,
+            agency_id: newAgency.id,
+          }))
+      )
+    }
+
     setSaving(false)
     setOpen(false)
-    setForm({ name: '', website: '', country: '', notes: '' })
+    resetModal()
     router.refresh()
   }
 
@@ -132,7 +174,7 @@ export function AgenciesClient({ agencies }: Props) {
         </table>
       </div>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Add Agency">
+      <Modal open={open} onClose={() => { setOpen(false); resetModal() }} title="Add Agency">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Agency Name *</label>
@@ -152,8 +194,48 @@ export function AgenciesClient({ agencies }: Props) {
             <label className="text-xs font-medium text-gray-700">Notes</label>
             <Textarea value={form.notes} onChange={field('notes')} rows={2} placeholder="Any context…" />
           </div>
+
+          {/* Agents section */}
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-gray-700">Agents</label>
+              <button
+                type="button"
+                onClick={addAgentEntry}
+                className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700"
+              >
+                <Plus className="w-3 h-3" /> Add agent
+              </button>
+            </div>
+            {agentEntries.length === 0 && (
+              <p className="text-xs text-gray-400">No agents added yet — click above to add one.</p>
+            )}
+            {agentEntries.map((entry, i) => (
+              <div key={i} className="flex items-start gap-2 pl-3 border-l-2 border-gray-100">
+                <div className="flex-1 space-y-2">
+                  <Input
+                    value={entry.name}
+                    onChange={agentField(i, 'name')}
+                    placeholder="Agent name *"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Select value={entry.agent_type} onChange={agentField(i, 'agent_type')} options={typeOpts} placeholder="Type (optional)…" />
+                    <Select value={entry.country} onChange={agentField(i, 'country')} options={COUNTRIES} placeholder="Country (optional)…" />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeAgentEntry(i)}
+                  className="mt-2 text-gray-300 hover:text-red-400"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+
           <div className="flex gap-3 pt-1">
-            <Button type="button" variant="secondary" onClick={() => setOpen(false)} className="flex-1">Cancel</Button>
+            <Button type="button" variant="secondary" onClick={() => { setOpen(false); resetModal() }} className="flex-1">Cancel</Button>
             <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : 'Add Agency'}</Button>
           </div>
         </form>
