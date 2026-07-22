@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { ClipboardList, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 export function TodoFab() {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -36,6 +38,7 @@ export function TodoFab() {
     setText('')
     setSuccess(true)
     setSubmitting(false)
+    router.refresh()
     setTimeout(() => {
       setSuccess(false)
       inputRef.current?.focus()
