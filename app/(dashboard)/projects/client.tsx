@@ -78,7 +78,7 @@ export function ProjectsClient({ projects, categories }: Props) {
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Projects</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {active.length} active{showCompleted && completed.length > 0 ? ` · ${completed.length} completed` : ''}
+            {displayed.length} of {projects.length}
           </p>
         </div>
         <Button onClick={() => setOpen(true)}>

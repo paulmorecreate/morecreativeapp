@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Menu } from 'lucide-react'
 import { Sidebar } from './sidebar'
+import { TodoFab } from './todo-fab'
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
@@ -51,6 +52,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
         </main>
       </div>
+
+      <TodoFab />
     </div>
   )
 }

@@ -15,7 +15,7 @@ import { COUNTRIES } from '@/lib/constants/countries'
 type TalentLink = {
   id: string
   talent_id: string
-  talent: { id: string; name: string; category: string | null; status: string | null } | null
+  talent: { id: string; name: string; category: string | null } | null
 }
 
 type SimpleRecord = { id: string; name: string }
@@ -199,7 +199,6 @@ export function AgentDetailClient({ agent, talentLinks, agentTypes, allTalents, 
                       {link.talent?.name ?? '—'}
                     </Link>
                     <Badge value={link.talent?.category} />
-                    <Badge value={link.talent?.status} />
                   </div>
                   <button onClick={() => unlinkTalent(link.id)} className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Remove link">
                     <Trash2 className="w-3.5 h-3.5" />

@@ -271,7 +271,7 @@ export function AgenciesClient({ agencies, agents }: Props) {
             <span className="inline-block w-1 h-6 rounded-full bg-gray-800" />
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Agencies</h2>
-              <p className="text-xs text-gray-400">{agencies.length} total</p>
+              <p className="text-xs text-gray-400">{sortedAgencies.length} of {agencies.length}</p>
             </div>
           </div>
           <Button onClick={() => setAgencyOpen(true)}>
@@ -359,7 +359,7 @@ export function AgenciesClient({ agencies, agents }: Props) {
             <span className="inline-block w-1 h-6 rounded-full bg-indigo-500" />
             <div>
               <h2 className="text-lg font-semibold text-indigo-700">Agents</h2>
-              <p className="text-xs text-gray-400">{agents.length} total</p>
+              <p className="text-xs text-gray-400">{sortedAgents.length} of {agents.length}</p>
             </div>
           </div>
           <Button onClick={() => setAgentOpen(true)}>

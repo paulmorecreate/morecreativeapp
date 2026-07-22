@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, AlertTriangle } from 'lucide-react'
-import { Stylist } from '@/lib/supabase/types'
+import { Person } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
@@ -14,12 +14,12 @@ type TalentLink = { id: string; talent_id: string; talent: { id: string; name: s
 type SimpleTalent = { id: string; name: string }
 
 type Props = {
-  stylist: Stylist
+  person: Person
   talentLinks: TalentLink[]
   allTalents: SimpleTalent[]
 }
 
-export function StylistDetailClient({ stylist, talentLinks, allTalents }: Props) {
+export function PersonDetailClient({ person, talentLinks, allTalents }: Props) {
   const router = useRouter()
 
   const [editOpen, setEditOpen] = useState(false)
@@ -33,12 +33,13 @@ export function StylistDetailClient({ stylist, talentLinks, allTalents }: Props)
   const [linkTalentSaving, setLinkTalentSaving] = useState(false)
 
   const [form, setForm] = useState({
-    name: stylist.name ?? '',
-    based: stylist.based ?? '',
-    email: stylist.email ?? '',
-    phone: stylist.phone ?? '',
-    url: stylist.url ?? '',
-    notes: stylist.notes ?? '',
+    name: person.name ?? '',
+    type: person.type ?? '',
+    based: person.based ?? '',
+    email: person.email ?? '',
+    phone: person.phone ?? '',
+    url: person.url ?? '',
+    notes: person.notes ?? '',
   })
 
   const linkedTalentIds = new Set(talentLinks.map(l => l.talent_id))
@@ -53,14 +54,15 @@ export function StylistDetailClient({ stylist, talentLinks, allTalents }: Props)
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
-    await supabase.from('stylists').update({
+    await supabase.from('people').update({
       name: form.name || null,
+      type: form.type || null,
       based: form.based || null,
       email: form.email || null,
       phone: form.phone || null,
       url: form.url || null,
       notes: form.notes || null,
-    }).eq('id', stylist.id)
+    }).eq('id', person.id)
     setSaving(false)
     setEditOpen(false)
     router.refresh()
@@ -69,8 +71,8 @@ export function StylistDetailClient({ stylist, talentLinks, allTalents }: Props)
   async function handleDelete() {
     setDeleting(true)
     const supabase = createClient()
-    await supabase.from('stylists').delete().eq('id', stylist.id)
-    router.push('/stylists')
+    await supabase.from('people').delete().eq('id', person.id)
+    router.push('/people')
     router.refresh()
   }
 
@@ -80,28 +82,31 @@ export function StylistDetailClient({ stylist, talentLinks, allTalents }: Props)
     e.preventDefault()
     if (!linkTalentId) return
     setLinkTalentSaving(true)
-    await createClient().from('talent_stylists').insert({ talent_id: linkTalentId, stylist_id: stylist.id })
+    await createClient().from('talent_people').insert({ talent_id: linkTalentId, person_id: person.id })
     setLinkTalentSaving(false)
     setLinkTalentOpen(false)
     router.refresh()
   }
 
   async function unlinkTalent(linkId: string) {
-    await createClient().from('talent_stylists').delete().eq('id', linkId)
+    await createClient().from('talent_people').delete().eq('id', linkId)
     router.refresh()
   }
 
   return (
     <div>
       <div className="mb-6">
-        <Link href="/stylists" className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 mb-4">
+        <Link href="/people" className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 mb-4">
           <ArrowLeft className="w-3.5 h-3.5" />
-          Stylists
+          People
         </Link>
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">{stylist.name}</h1>
-            {stylist.based && <p className="text-sm text-gray-400 mt-1">{stylist.based}</p>}
+            <h1 className="text-2xl font-semibold text-gray-900">{person.name}</h1>
+            <div className="flex items-center gap-3 mt-1">
+              {person.type && <span className="text-sm text-gray-500">{person.type}</span>}
+              {person.based && <span className="text-sm text-gray-400">{person.based}</span>}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="secondary" onClick={() => setEditOpen(true)}>
@@ -122,35 +127,39 @@ export function StylistDetailClient({ stylist, talentLinks, allTalents }: Props)
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Details</h2>
             <dl className="space-y-3">
               <div>
+                <dt className="text-xs text-gray-400 mb-0.5">Type</dt>
+                <dd className="text-sm text-gray-900">{person.type ?? <span className="text-gray-300">—</span>}</dd>
+              </div>
+              <div>
                 <dt className="text-xs text-gray-400 mb-0.5">Based</dt>
-                <dd className="text-sm text-gray-900">{stylist.based ?? <span className="text-gray-300">—</span>}</dd>
+                <dd className="text-sm text-gray-900">{person.based ?? <span className="text-gray-300">—</span>}</dd>
               </div>
               <div>
                 <dt className="text-xs text-gray-400 mb-0.5">Email</dt>
                 <dd className="text-sm">
-                  {stylist.email
-                    ? <a href={`mailto:${stylist.email}`} className="text-gray-900 hover:text-black">{stylist.email}</a>
+                  {person.email
+                    ? <a href={`mailto:${person.email}`} className="text-gray-900 hover:text-black">{person.email}</a>
                     : <span className="text-gray-300">—</span>}
                 </dd>
               </div>
               <div>
                 <dt className="text-xs text-gray-400 mb-0.5">Phone</dt>
-                <dd className="text-sm text-gray-900">{stylist.phone ?? <span className="text-gray-300">—</span>}</dd>
+                <dd className="text-sm text-gray-900">{person.phone ?? <span className="text-gray-300">—</span>}</dd>
               </div>
               <div>
                 <dt className="text-xs text-gray-400 mb-0.5">Website / Instagram</dt>
                 <dd className="text-sm">
-                  {stylist.url
-                    ? <a href={stylist.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-gray-900 hover:text-black">View link <ExternalLink className="w-3 h-3 text-gray-400" /></a>
+                  {person.url
+                    ? <a href={person.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-gray-900 hover:text-black">View link <ExternalLink className="w-3 h-3 text-gray-400" /></a>
                     : <span className="text-gray-300">—</span>}
                 </dd>
               </div>
             </dl>
           </div>
-          {stylist.notes && (
+          {person.notes && (
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Notes</h2>
-              <p className="text-sm text-gray-700 whitespace-pre-wrap">{stylist.notes}</p>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">{person.notes}</p>
             </div>
           )}
         </div>
@@ -208,11 +217,15 @@ export function StylistDetailClient({ stylist, talentLinks, allTalents }: Props)
         </form>
       </Modal>
 
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Stylist">
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Person">
         <form onSubmit={handleSave} className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Name</label>
             <Input value={form.name} onChange={field('name')} required />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Type</label>
+            <Input value={form.type} onChange={field('type')} placeholder="e.g. PR, Journalist, Stylist…" />
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Based</label>
@@ -243,16 +256,16 @@ export function StylistDetailClient({ stylist, talentLinks, allTalents }: Props)
         </form>
       </Modal>
 
-      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete Stylist">
+      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete Person">
         <div className="space-y-4">
           <div className="flex items-start gap-3 p-4 bg-red-50 rounded-lg border border-red-100">
             <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-            <p className="text-sm text-red-700">This will permanently delete <strong>{stylist.name}</strong>. This cannot be undone.</p>
+            <p className="text-sm text-red-700">This will permanently delete <strong>{person.name}</strong>. This cannot be undone.</p>
           </div>
           <div className="flex gap-3">
             <Button type="button" variant="secondary" onClick={() => setDeleteOpen(false)} className="flex-1">Cancel</Button>
             <Button type="button" onClick={handleDelete} disabled={deleting} className="flex-1 bg-red-600 hover:bg-red-700 text-white border-red-600">
-              {deleting ? 'Deleting…' : 'Delete Stylist'}
+              {deleting ? 'Deleting…' : 'Delete Person'}
             </Button>
           </div>
         </div>

@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Users, Briefcase, Calendar, ExternalLink, Circle } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
+import { TodoWidget } from '@/components/todo-widget'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -12,6 +13,7 @@ export default async function DashboardPage() {
     { count: projectCount },
     { data: upcomingProjects },
     { data: pendingRaw },
+    { data: todos },
   ] = await Promise.all([
     supabase.from('talents').select('*', { count: 'exact', head: true }),
     supabase.from('brands').select('*', { count: 'exact', head: true }),
@@ -27,6 +29,10 @@ export default async function DashboardPage() {
       .eq('accepted', false)
       .order('created_at', { ascending: false })
       .limit(30),
+    supabase.from('todos')
+      .select('*')
+      .order('completed', { ascending: true })
+      .order('created_at', { ascending: true }),
   ])
 
   // Filter out entries from completed projects
@@ -58,6 +64,9 @@ export default async function DashboardPage() {
           </Link>
         ))}
       </div>
+
+      {/* To Do */}
+      <TodoWidget todos={todos ?? []} />
 
       <div className="grid grid-cols-2 gap-6">
         {/* Pending Acceptances */}
@@ -129,6 +138,7 @@ export default async function DashboardPage() {
           </div>
         </div>
       </div>
+
     </div>
   )
 }

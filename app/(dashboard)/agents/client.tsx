@@ -103,7 +103,7 @@ export function AgentsClient({ agents, agentTypes, agencies }: Props) {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Agents</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{agents.length} total</p>
+          <p className="text-sm text-gray-500 mt-0.5">{filtered.length} of {agents.length}</p>
         </div>
         <Button onClick={() => setOpen(true)}>
           <Plus className="w-4 h-4" />

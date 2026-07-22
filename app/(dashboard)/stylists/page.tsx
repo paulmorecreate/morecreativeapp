@@ -5,7 +5,7 @@ export default async function StylistsPage() {
   const supabase = await createClient()
   const { data: stylists } = await supabase
     .from('stylists')
-    .select('*, stylist_contacts(id, name, is_primary)')
+    .select('*')
     .order('name')
 
   return <StylistsClient stylists={(stylists ?? []) as any} />

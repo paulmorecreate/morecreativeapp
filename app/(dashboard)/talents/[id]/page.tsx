@@ -6,7 +6,7 @@ export default async function TalentPage({ params }: { params: Promise<{ id: str
   const { id } = await params
   const supabase = await createClient()
 
-  const [{ data: talent }, { data: talentProjects }, { data: eventDetails }, { data: conversations }, { data: agentLinks }, { data: talentCategories }, { data: allAgents }, { data: agentTypes }, { data: allAgencies }, { data: talentLevels }] = await Promise.all([
+  const [{ data: talent }, { data: talentProjects }, { data: eventDetails }, { data: conversations }, { data: agentLinks }, { data: talentCategories }, { data: allAgents }, { data: agentTypes }, { data: allAgencies }, { data: talentLevels }, { data: stylistLinks }, { data: personLinks }, { data: allStylists }, { data: allPeople }] = await Promise.all([
     supabase.from('talents').select('*').eq('id', id).single(),
     supabase.from('project_brand_talents')
       .select('id, project_brand:project_brands(id, show_date, project:events(id, name, start_date, location, status, category), brand:brands(id, name))')
@@ -27,6 +27,10 @@ export default async function TalentPage({ params }: { params: Promise<{ id: str
     supabase.from('agent_types').select('id, name').order('name'),
     supabase.from('agencies').select('id, name').order('name'),
     supabase.from('talent_levels').select('*').order('name'),
+    supabase.from('talent_stylists').select('id, stylist_id, stylist:stylists(id, name)').eq('talent_id', id),
+    supabase.from('talent_people').select('id, person_id, person:people(id, name, type)').eq('talent_id', id),
+    supabase.from('stylists').select('id, name').order('name'),
+    supabase.from('people').select('id, name, type').order('name'),
   ])
 
   if (!talent) notFound()
@@ -43,6 +47,10 @@ export default async function TalentPage({ params }: { params: Promise<{ id: str
       agentTypes={agentTypes ?? []}
       allAgencies={allAgencies ?? []}
       talentLevels={talentLevels ?? []}
+      stylistLinks={(stylistLinks ?? []) as any}
+      personLinks={(personLinks ?? []) as any}
+      allStylists={(allStylists ?? []) as any}
+      allPeople={(allPeople ?? []) as any}
     />
   )
 }

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Scissors, Camera, Building2 } from 'lucide-react'
+import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Scissors, Camera, Building2, Users2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 
@@ -17,6 +17,7 @@ const directoryNav = [
   { href: '/agencies', label: 'Agencies', icon: Building2 },
   { href: '/stylists', label: 'Stylists', icon: Scissors },
   { href: '/photographers', label: 'Photographers', icon: Camera },
+  { href: '/people', label: 'People', icon: Users2 },
 ]
 
 export function Sidebar({ onClose }: { onClose?: () => void }) {

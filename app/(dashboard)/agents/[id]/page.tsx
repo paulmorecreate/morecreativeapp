@@ -9,7 +9,7 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
   const [{ data: agent }, { data: talentLinks }, { data: agentTypes }, { data: allTalents }, { data: agencies }] = await Promise.all([
     supabase.from('agents').select('*').eq('id', id).single(),
     supabase.from('talent_agents')
-      .select('id, talent_id, talent:talents(id, name, category, status)')
+      .select('id, talent_id, talent:talents(id, name, category)')
       .eq('agent_id', id)
       .order('created_at'),
     supabase.from('agent_types').select('*').order('name'),
