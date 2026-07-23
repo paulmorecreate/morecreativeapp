@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Search, ChevronRight } from 'lucide-react'
+import { Plus, Search, ChevronRight, Trash2 } from 'lucide-react'
 import { Event, ProjectCategory } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
@@ -29,6 +29,8 @@ export function ProjectsClient({ projects, categories }: Props) {
   const [showCompleted, setShowCompleted] = useState(false)
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<ProjectRow | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [form, setForm] = useState({
     name: '', location: '', category: '', start_date: '', end_date: '', notes: '',
   })
@@ -38,6 +40,15 @@ export function ProjectsClient({ projects, categories }: Props) {
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    await createClient().from('events').delete().eq('id', deleteTarget.id)
+    setDeleting(false)
+    setDeleteTarget(null)
+    router.refresh()
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -131,7 +142,7 @@ export function ProjectsClient({ projects, categories }: Props) {
             {displayed.map(project => (
               <tr
                 key={project.id}
-                className={`hover:bg-gray-50/50 transition-colors cursor-pointer ${project.status === 'completed' ? 'opacity-60' : ''}`}
+                className={`group hover:bg-gray-50/50 transition-colors cursor-pointer ${project.status === 'completed' ? 'opacity-60' : ''}`}
                 onClick={() => router.push(`/projects/${project.id}`)}
               >
                 <td className="px-4 py-3 font-medium text-gray-900">{project.name}</td>
@@ -139,14 +150,37 @@ export function ProjectsClient({ projects, categories }: Props) {
                 <td className="px-4 py-3 text-gray-500">{project.location ?? <span className="text-gray-300">—</span>}</td>
                 <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(project.start_date) ?? <span className="text-gray-300">—</span>}</td>
                 <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(project.end_date) ?? <span className="text-gray-300">—</span>}</td>
-                <td className="px-4 py-3 text-right text-gray-300 hover:text-gray-500">
-                  <ChevronRight className="w-4 h-4 inline" />
+                <td className="px-4 py-3 text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      onClick={e => { e.stopPropagation(); setDeleteTarget(project) }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-500"
+                      title="Delete project"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                    <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-colors" />
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Project">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Are you sure you want to delete <span className="font-semibold text-gray-900">{deleteTarget?.name}</span>? This will also remove all brands and talents linked to this project. This cannot be undone.
+          </p>
+          <div className="flex gap-3">
+            <Button type="button" variant="secondary" onClick={() => setDeleteTarget(null)} className="flex-1">Cancel</Button>
+            <Button type="button" onClick={handleDelete} disabled={deleting} className="flex-1 bg-red-600 hover:bg-red-700 text-white">
+              {deleting ? 'Deleting…' : 'Delete Project'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Add Project">
         <form onSubmit={handleSubmit} className="space-y-4">
