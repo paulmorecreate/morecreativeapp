@@ -9,13 +9,24 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const text = body?.message?.text?.trim()
+    const message = body?.message
+    const text = message?.text?.trim()
+    const chatId = message?.chat?.id
 
     // Ignore empty messages and bot commands
     if (!text || text.startsWith('/')) return NextResponse.json({ ok: true })
 
     const supabase = await createClient()
     await supabase.from('todos').insert({ title: text })
+
+    // Send confirmation reply
+    if (chatId) {
+      await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text: `✓ Added to your To Do list: "${text}"` }),
+      })
+    }
 
     return NextResponse.json({ ok: true })
   } catch {
