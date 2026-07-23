@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function POST(req: NextRequest) {
   const secret = req.headers.get('x-telegram-bot-api-secret-token')
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     // Ignore empty messages and bot commands
     if (!text || text.startsWith('/')) return NextResponse.json({ ok: true })
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     await supabase.from('todos').insert({ title: text })
 
     // Send confirmation reply
