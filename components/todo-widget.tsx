@@ -14,6 +14,7 @@ export function TodoWidget({ todos }: { todos: Todo[] }) {
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const editRef = useRef<HTMLInputElement>(null)
 
   const visible = todos.filter(t => showCompleted || !t.completed)
@@ -102,7 +103,7 @@ export function TodoWidget({ todos }: { todos: Todo[] }) {
         {visible.map(todo => (
           <div key={todo.id} className="group flex items-center gap-3 px-5 py-3 hover:bg-gray-50/50 transition-colors">
             <button
-              onClick={() => toggleComplete(todo)}
+              onClick={() => todo.completed ? toggleComplete(todo) : setConfirmingId(todo.id)}
               className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
                 todo.completed
                   ? 'bg-gray-900 border-gray-900'
@@ -112,7 +113,23 @@ export function TodoWidget({ todos }: { todos: Todo[] }) {
               {todo.completed && <Check className="w-2.5 h-2.5 text-white" />}
             </button>
 
-            {editingId === todo.id ? (
+            {confirmingId === todo.id ? (
+              <div className="flex-1 flex items-center gap-3">
+                <span className="text-sm text-gray-600">Mark as complete?</span>
+                <button
+                  onClick={() => { toggleComplete(todo); setConfirmingId(null) }}
+                  className="text-xs font-medium text-white bg-gray-900 px-2.5 py-1 rounded-md hover:bg-gray-700 transition-colors"
+                >
+                  Yes
+                </button>
+                <button
+                  onClick={() => setConfirmingId(null)}
+                  className="text-xs font-medium text-gray-500 hover:text-gray-900 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : editingId === todo.id ? (
               <input
                 ref={editRef}
                 value={editValue}
@@ -133,16 +150,18 @@ export function TodoWidget({ todos }: { todos: Todo[] }) {
               </span>
             )}
 
-            <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-              {!todo.completed && editingId !== todo.id && (
-                <button onClick={() => startEdit(todo)} className="text-gray-300 hover:text-gray-600" title="Edit">
-                  <Pencil className="w-3.5 h-3.5" />
+            {confirmingId !== todo.id && (
+              <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                {!todo.completed && editingId !== todo.id && (
+                  <button onClick={() => startEdit(todo)} className="text-gray-300 hover:text-gray-600" title="Edit">
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button onClick={() => deleteTodo(todo.id)} className="text-gray-300 hover:text-red-500" title="Delete">
+                  <Trash2 className="w-3.5 h-3.5" />
                 </button>
-              )}
-              <button onClick={() => deleteTodo(todo.id)} className="text-gray-300 hover:text-red-500" title="Delete">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
