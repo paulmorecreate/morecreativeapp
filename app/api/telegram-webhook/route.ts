@@ -13,18 +13,12 @@ export async function POST(req: NextRequest) {
     const text = message?.text?.trim()
     const chatId = message?.chat?.id
 
-    // Reply to /id command with the chat ID so it can be added to the allowlist
-    if (text === '/id' && chatId) {
-      await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text: `Your chat ID is: ${chatId}` }),
-      })
-      return NextResponse.json({ ok: true })
-    }
-
-    // Ignore empty messages and other bot commands
+    // Ignore empty messages and bot commands
     if (!text || text.startsWith('/')) return NextResponse.json({ ok: true })
+
+    // Only allow messages from whitelisted chat IDs
+    const allowed = (process.env.TELEGRAM_ALLOWED_CHAT_IDS ?? '').split(',').map(s => s.trim())
+    if (!allowed.includes(String(chatId))) return NextResponse.json({ ok: true })
 
     const supabase = createAdminClient()
     await supabase.from('todos').insert({ title: text })
