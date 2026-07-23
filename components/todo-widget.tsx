@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Plus, Trash2 } from 'lucide-react'
+import { Check, Plus, Trash2, Pencil } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 type Todo = { id: string; title: string; completed: boolean; created_at: string }
@@ -12,9 +12,30 @@ export function TodoWidget({ todos }: { todos: Todo[] }) {
   const [showCompleted, setShowCompleted] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   const [adding, setAdding] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const editRef = useRef<HTMLInputElement>(null)
 
   const visible = todos.filter(t => showCompleted || !t.completed)
   const pendingCount = todos.filter(t => !t.completed).length
+
+  useEffect(() => {
+    if (editingId) editRef.current?.focus()
+  }, [editingId])
+
+  function startEdit(todo: Todo) {
+    setEditingId(todo.id)
+    setEditValue(todo.title)
+  }
+
+  async function saveEdit(id: string) {
+    const trimmed = editValue.trim()
+    if (trimmed) {
+      await createClient().from('todos').update({ title: trimmed }).eq('id', id)
+      router.refresh()
+    }
+    setEditingId(null)
+  }
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
@@ -90,16 +111,38 @@ export function TodoWidget({ todos }: { todos: Todo[] }) {
             >
               {todo.completed && <Check className="w-2.5 h-2.5 text-white" />}
             </button>
-            <span className={`flex-1 text-sm ${todo.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>
-              {todo.title}
-            </span>
-            <button
-              onClick={() => deleteTodo(todo.id)}
-              className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-              title="Delete"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+
+            {editingId === todo.id ? (
+              <input
+                ref={editRef}
+                value={editValue}
+                onChange={e => setEditValue(e.target.value)}
+                onBlur={() => saveEdit(todo.id)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') saveEdit(todo.id)
+                  if (e.key === 'Escape') setEditingId(null)
+                }}
+                className="flex-1 text-sm text-gray-900 bg-transparent outline-none border-b border-gray-300 focus:border-gray-600 pb-px"
+              />
+            ) : (
+              <span
+                className={`flex-1 text-sm cursor-pointer ${todo.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}
+                onDoubleClick={() => !todo.completed && startEdit(todo)}
+              >
+                {todo.title}
+              </span>
+            )}
+
+            <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+              {!todo.completed && editingId !== todo.id && (
+                <button onClick={() => startEdit(todo)} className="text-gray-300 hover:text-gray-600" title="Edit">
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <button onClick={() => deleteTodo(todo.id)} className="text-gray-300 hover:text-red-500" title="Delete">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         ))}
       </div>
