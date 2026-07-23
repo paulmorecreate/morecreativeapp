@@ -29,7 +29,8 @@ export async function middleware(request: NextRequest) {
   const isPublicPath =
     pathname.startsWith('/login') ||
     pathname.startsWith('/forgot-password') ||
-    pathname.startsWith('/auth/callback')
+    pathname.startsWith('/auth/callback') ||
+    pathname.startsWith('/api/telegram-webhook')
 
   if (!user && !isPublicPath) {
     const url = request.nextUrl.clone()
