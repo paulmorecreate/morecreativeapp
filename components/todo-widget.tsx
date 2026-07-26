@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Plus, Trash2, ChevronUp, ChevronDown, ChevronsUpDown, AlertCircle } from 'lucide-react'
+import { Check, Plus, Trash2, ChevronUp, ChevronDown, ChevronsUpDown, AlertCircle, Search, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 type Todo = {
@@ -137,12 +137,18 @@ export function TodoWidget({ todos, userProfiles }: { todos: Todo[]; userProfile
   const [newAssigned, setNewAssigned] = useState<string[]>([])
   const [newDeadline, setNewDeadline] = useState('')
   const [adding, setAdding] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filterUsers, setFilterUsers] = useState<string[]>([])
   const editTitleRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { setLocalTodos(todos) }, [todos])
 
   const pendingCount = localTodos.filter(t => !t.completed).length
-  const visible = localTodos.filter(t => showCompleted || !t.completed)
+
+  const visible = localTodos
+    .filter(t => showCompleted || !t.completed)
+    .filter(t => !searchQuery.trim() || t.title.toLowerCase().includes(searchQuery.toLowerCase()))
+    .filter(t => filterUsers.length === 0 || filterUsers.some(uid => t.assigned_to?.includes(uid)))
 
   const sorted = [...visible].sort((a, b) => {
     if (!sortField) return 0
@@ -228,39 +234,89 @@ export function TodoWidget({ todos, userProfiles }: { todos: Todo[]; userProfile
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-        <div className="flex items-center gap-2">
+      {/* Header row */}
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+        <div className="flex items-center gap-2 shrink-0">
           <h2 className="text-sm font-semibold text-gray-900">To Do</h2>
           {pendingCount > 0 && (
             <span className="text-xs font-medium bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{pendingCount}</span>
           )}
         </div>
-        <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer select-none hover:text-gray-700 transition-colors">
+        {/* Search */}
+        <div className="flex-1 relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+          <input
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search tasks…"
+            className="w-full pl-8 pr-7 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-gray-400 text-gray-700 placeholder-gray-400 transition-colors"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+        <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer select-none hover:text-gray-700 transition-colors shrink-0">
           <input type="checkbox" checked={showCompleted} onChange={e => setShowCompleted(e.target.checked)} className="w-3.5 h-3.5 rounded border-gray-300 accent-gray-900" />
           Show Completed
         </label>
       </div>
+      {/* Assigned To filter pills */}
+      {userProfiles.length > 0 && (
+        <div className="flex items-center gap-2 px-5 py-2.5 border-b border-gray-100 bg-gray-50/40">
+          <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wide shrink-0">Filter</span>
+          <button
+            onClick={() => setFilterUsers([])}
+            className={`px-2.5 py-0.5 rounded-full text-xs font-medium border transition-all ${
+              filterUsers.length === 0 ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-400'
+            }`}
+          >
+            All
+          </button>
+          {userProfiles.map(u => {
+            const active = filterUsers.includes(u.id)
+            return (
+              <button
+                key={u.id}
+                onClick={() => setFilterUsers(prev =>
+                  prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id]
+                )}
+                className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border transition-all ${
+                  active ? 'border-gray-600 text-gray-800' : 'border-gray-200 text-gray-500 hover:border-gray-400'
+                }`}
+                style={active && u.color ? { backgroundColor: u.color } : {}}
+              >
+                {u.color && (
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: u.color, boxShadow: '0 0 0 1px rgba(0,0,0,0.12)' }} />
+                )}
+                {displayName(u)}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-gray-100 bg-gray-50/50">
-            <th className="w-8 px-3 py-2.5" />
-            <th className="text-left px-3 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wide cursor-pointer hover:text-gray-800 select-none" onClick={() => toggleSort('title')}>
+          <tr className="border-b border-gray-200 bg-gray-100">
+            <th className="w-8 px-3 py-3" />
+            <th className="text-left align-top px-3 py-3 font-bold text-gray-800 text-xs uppercase tracking-wider cursor-pointer hover:text-black select-none" onClick={() => toggleSort('title')}>
               Task <SortIcon field="title" sortField={sortField} sortDir={sortDir} />
             </th>
-            <th className="text-left px-3 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wide cursor-pointer hover:text-gray-800 select-none w-24" onClick={() => toggleSort('date')}>
+            <th className="text-left align-top px-3 py-3 font-bold text-gray-800 text-xs uppercase tracking-wider cursor-pointer hover:text-black select-none w-24" onClick={() => toggleSort('date')}>
               Date Added <SortIcon field="date" sortField={sortField} sortDir={sortDir} />
             </th>
-            <th className="text-left px-3 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wide cursor-pointer hover:text-gray-800 select-none w-32" onClick={() => toggleSort('assigned')}>
+            <th className="text-left align-top px-3 py-3 font-bold text-gray-800 text-xs uppercase tracking-wider cursor-pointer hover:text-black select-none w-32" onClick={() => toggleSort('assigned')}>
               Assigned To <SortIcon field="assigned" sortField={sortField} sortDir={sortDir} />
             </th>
-            <th className="text-left px-3 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wide cursor-pointer hover:text-gray-800 select-none w-28" onClick={() => toggleSort('deadline')}>
+            <th className="text-left align-top px-3 py-3 font-bold text-gray-800 text-xs uppercase tracking-wider cursor-pointer hover:text-black select-none w-28" onClick={() => toggleSort('deadline')}>
               Deadline <SortIcon field="deadline" sortField={sortField} sortDir={sortDir} />
             </th>
-            <th className="text-left px-3 py-2.5 font-medium text-gray-500 text-xs uppercase tracking-wide cursor-pointer hover:text-gray-800 select-none w-20" onClick={() => toggleSort('priority')}>
+            <th className="text-left align-top px-3 py-3 font-bold text-gray-800 text-xs uppercase tracking-wider cursor-pointer hover:text-black select-none w-20" onClick={() => toggleSort('priority')}>
               Priority <SortIcon field="priority" sortField={sortField} sortDir={sortDir} />
             </th>
-            <th className="w-8 px-3 py-2.5" />
+            <th className="w-8 px-3 py-3" />
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
@@ -317,7 +373,7 @@ export function TodoWidget({ todos, userProfiles }: { todos: Todo[]; userProfile
           {sorted.length === 0 && (
             <tr>
               <td colSpan={7} className="px-5 py-6 text-center text-sm text-gray-400">
-                {localTodos.length === 0 ? 'Nothing here yet.' : !showCompleted ? 'All done!' : 'No items.'}
+                {localTodos.length === 0 ? 'Nothing here yet.' : (searchQuery || filterUsers.length > 0) ? 'No tasks match.' : !showCompleted ? 'All done!' : 'No items.'}
               </td>
             </tr>
           )}
