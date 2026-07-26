@@ -14,6 +14,7 @@ export default async function DashboardPage() {
     { data: upcomingProjects },
     { data: pendingRaw },
     { data: todos },
+    { data: userProfiles },
   ] = await Promise.all([
     supabase.from('talents').select('*', { count: 'exact', head: true }),
     supabase.from('brands').select('*', { count: 'exact', head: true }),
@@ -33,6 +34,7 @@ export default async function DashboardPage() {
       .select('*')
       .order('completed', { ascending: true })
       .order('created_at', { ascending: true }),
+    supabase.from('user_profiles').select('*'),
   ])
 
   // Filter out entries from completed projects
@@ -66,7 +68,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* To Do */}
-      <TodoWidget todos={todos ?? []} />
+      <TodoWidget todos={todos ?? []} userProfiles={userProfiles ?? []} />
 
       <div className="grid grid-cols-2 gap-6">
         {/* Pending Acceptances */}

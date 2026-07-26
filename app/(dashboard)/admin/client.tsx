@@ -24,6 +24,21 @@ type AppUser = {
   last_sign_in_at?: string
 }
 
+type UserProfile = { id: string; email: string; color: string | null; first_name: string | null; surname: string | null }
+
+const USER_COLORS = [
+  { label: 'Blue',   value: '#dbeafe' },
+  { label: 'Green',  value: '#dcfce7' },
+  { label: 'Purple', value: '#f3e8ff' },
+  { label: 'Pink',   value: '#fce7f3' },
+  { label: 'Amber',  value: '#fef3c7' },
+  { label: 'Teal',   value: '#ccfbf1' },
+  { label: 'Orange', value: '#ffedd5' },
+  { label: 'Indigo', value: '#e0e7ff' },
+  { label: 'Lime',   value: '#ecfccb' },
+  { label: 'Rose',   value: '#ffe4e6' },
+]
+
 function Modal({
   title,
   onClose,
@@ -50,6 +65,7 @@ function Modal({
 
 function UsersSection() {
   const [users, setUsers] = useState<AppUser[]>([])
+  const [profiles, setProfiles] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showAddModal, setShowAddModal] = useState(false)
@@ -61,7 +77,10 @@ function UsersSection() {
 
   const loadUsers = useCallback(async () => {
     setLoading(true)
-    const res = await fetch('/api/admin/users')
+    const [res, { data: profileData }] = await Promise.all([
+      fetch('/api/admin/users'),
+      createClient().from('user_profiles').select('*'),
+    ])
     if (res.ok) {
       const data = await res.json()
       setUsers(data.sort((a: AppUser, b: AppUser) => a.email.localeCompare(b.email)))
@@ -71,8 +90,34 @@ function UsersSection() {
       try { data = JSON.parse(text) } catch {}
       setError(data.error ?? 'Failed to load users')
     }
+    setProfiles(profileData ?? [])
     setLoading(false)
   }, [])
+
+  async function setUserColor(user: AppUser, color: string) {
+    const profile = profiles.find(p => p.id === user.id)
+    const newColor = profile?.color === color ? null : color
+    await createClient().from('user_profiles').upsert({
+      id: user.id, email: user.email, color: newColor,
+      first_name: profile?.first_name ?? null, surname: profile?.surname ?? null,
+    })
+    setProfiles(prev => {
+      const existing = prev.find(p => p.id === user.id)
+      if (existing) return prev.map(p => p.id === user.id ? { ...p, color: newColor } : p)
+      return [...prev, { id: user.id, email: user.email, color: newColor, first_name: null, surname: null }]
+    })
+  }
+
+  async function saveUserName(user: AppUser, field: 'first_name' | 'surname', value: string) {
+    const profile = profiles.find(p => p.id === user.id)
+    const update = { id: user.id, email: user.email, color: profile?.color ?? null, first_name: profile?.first_name ?? null, surname: profile?.surname ?? null, [field]: value || null }
+    await createClient().from('user_profiles').upsert(update)
+    setProfiles(prev => {
+      const existing = prev.find(p => p.id === user.id)
+      if (existing) return prev.map(p => p.id === user.id ? { ...p, [field]: value || null } : p)
+      return [...prev, { id: user.id, email: user.email, color: null, first_name: null, surname: null, [field]: value || null }]
+    })
+  }
 
   useEffect(() => { loadUsers() }, [loadUsers])
 
@@ -155,33 +200,71 @@ function UsersSection() {
           {users.length === 0 && (
             <p className="px-5 py-4 text-sm text-gray-400">No users found.</p>
           )}
-          {users.map(u => (
-            <div key={u.id} className="flex items-center justify-between px-5 py-3 group">
-              <div>
-                <p className="text-sm text-gray-900">{u.email}</p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Added {formatDate(u.created_at)}
-                  {u.last_sign_in_at && ` · Last sign in ${formatDate(u.last_sign_in_at)}`}
-                </p>
+          {users.map(u => {
+            const profile = profiles.find(p => p.id === u.id)
+            return (
+              <div key={u.id} className="px-5 py-3 group">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-900">{u.email}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Added {formatDate(u.created_at)}
+                      {u.last_sign_in_at && ` · Last sign in ${formatDate(u.last_sign_in_at)}`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => { setPasswordTarget(u); setNewPassword(''); setFormError('') }}
+                      className="text-gray-400 hover:text-gray-700 transition-colors"
+                      title="Set password"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(u)}
+                      className="text-gray-200 hover:text-red-500 transition-colors"
+                      title="Delete user"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <input
+                    defaultValue={profile?.first_name ?? ''}
+                    onBlur={e => saveUserName(u, 'first_name', e.target.value.trim())}
+                    placeholder="First name"
+                    className="text-xs border border-gray-200 rounded-md px-2 py-1 text-gray-700 outline-none focus:border-gray-400 w-28"
+                  />
+                  <input
+                    defaultValue={profile?.surname ?? ''}
+                    onBlur={e => saveUserName(u, 'surname', e.target.value.trim())}
+                    placeholder="Surname"
+                    className="text-xs border border-gray-200 rounded-md px-2 py-1 text-gray-700 outline-none focus:border-gray-400 w-28"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 mt-2">
+                  <span className="text-xs text-gray-400 mr-1">Colour:</span>
+                  {USER_COLORS.map(c => (
+                    <button
+                      key={c.value}
+                      onClick={() => setUserColor(u, c.value)}
+                      title={c.label}
+                      className={`w-5 h-5 rounded-full border-2 transition-all ${
+                        profile?.color === c.value ? 'border-gray-700 scale-110' : 'border-transparent hover:border-gray-300'
+                      }`}
+                      style={{ backgroundColor: c.value }}
+                    />
+                  ))}
+                  {profile?.color && (
+                    <span className="text-xs text-gray-400 ml-1">
+                      ({USER_COLORS.find(c => c.value === profile.color)?.label ?? 'Custom'})
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={() => { setPasswordTarget(u); setNewPassword(''); setFormError('') }}
-                  className="text-gray-400 hover:text-gray-700 transition-colors"
-                  title="Set password"
-                >
-                  <KeyRound className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => handleDelete(u)}
-                  className="text-gray-200 hover:text-red-500 transition-colors"
-                  title="Delete user"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 

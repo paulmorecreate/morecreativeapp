@@ -9,6 +9,7 @@ export function TodoFab() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
+  const [priority, setPriority] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -18,6 +19,7 @@ export function TodoFab() {
       setTimeout(() => inputRef.current?.focus(), 50)
     } else {
       setText('')
+      setPriority('')
       setSuccess(false)
     }
   }, [open])
@@ -34,8 +36,9 @@ export function TodoFab() {
     e.preventDefault()
     if (!text.trim() || submitting) return
     setSubmitting(true)
-    await createClient().from('todos').insert({ title: text.trim() })
+    await createClient().from('todos').insert({ title: text.trim(), priority: priority || null })
     setText('')
+    setPriority('')
     setSuccess(true)
     setSubmitting(false)
     router.refresh()
@@ -58,7 +61,7 @@ export function TodoFab() {
               <X className="w-4 h-4" />
             </button>
           </div>
-          <form onSubmit={handleAdd} className="p-4">
+          <form onSubmit={handleAdd} className="p-4 space-y-3">
             <input
               ref={inputRef}
               value={text}
@@ -67,7 +70,18 @@ export function TodoFab() {
               className="w-full text-sm text-gray-700 placeholder-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 outline-none focus:border-gray-400 transition-colors"
               disabled={submitting}
             />
-            <div className="flex items-center justify-between mt-3">
+            <select
+              value={priority}
+              onChange={e => setPriority(e.target.value)}
+              className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 text-gray-600 bg-gray-50 outline-none"
+              disabled={submitting}
+            >
+              <option value="">No priority</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+            <div className="flex items-center justify-between">
               <span className={`text-xs transition-colors ${success ? 'text-green-600' : 'text-gray-400'}`}>
                 {success ? '✓ Added to your list' : 'Press Enter to add'}
               </span>
