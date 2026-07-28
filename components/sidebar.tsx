@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Scissors, Camera, Building2, Users2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -56,9 +57,7 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
     <aside className="flex flex-col w-56 shrink-0 bg-zinc-950 h-full">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-4 py-5 border-b border-zinc-800">
-        <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center shrink-0">
-          <span className="text-black font-bold text-xs tracking-wide">MC</span>
-        </div>
+        <Image src="/mc-logo.jpg" alt="More Creative" width={28} height={28} className="rounded-lg shrink-0 object-cover" />
         <span className="text-white font-semibold text-sm tracking-tight">More Creative</span>
       </div>
 

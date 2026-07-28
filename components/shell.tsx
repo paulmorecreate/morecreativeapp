@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { Menu } from 'lucide-react'
 import { Sidebar } from './sidebar'
 import { TodoFab } from './todo-fab'
@@ -38,9 +39,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-white flex items-center justify-center shrink-0">
-              <span className="text-black font-bold text-[10px] tracking-wide">MC</span>
-            </div>
+            <Image src="/mc-logo.jpg" alt="More Creative" width={24} height={24} className="rounded-md shrink-0 object-cover" />
             <span className="text-white font-semibold text-sm tracking-tight">More Creative</span>
           </div>
         </div>

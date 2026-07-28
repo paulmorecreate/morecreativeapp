@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -31,9 +32,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-black mb-4">
-            <span className="text-white font-bold text-sm tracking-wider">MC</span>
-          </div>
+          <Image src="/mc-logo.jpg" alt="More Creative" width={56} height={56} className="rounded-xl mx-auto mb-4 object-cover" />
           <h1 className="text-xl font-semibold text-gray-900">The More Creative</h1>
           <p className="text-sm text-gray-500 mt-1">Sign in to your workspace</p>
         </div>
