@@ -3,9 +3,11 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Scissors, Camera, Building2, Users2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
+import pkg from '@/package.json'
 
 const primaryNav = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -24,6 +26,14 @@ const directoryNav = [
 export function Sidebar({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname()
   const router = useRouter()
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data }) => {
+      setUserEmail(data.user?.email ?? null)
+    })
+  }, [])
 
   async function signOut() {
     const supabase = createClient()
@@ -57,8 +67,8 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
     <aside className="flex flex-col w-56 shrink-0 bg-zinc-950 h-full">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-4 py-5 border-b border-zinc-800">
-        <Image src="/mc-logo.jpg" alt="More Creative" width={28} height={28} className="rounded-lg shrink-0 object-cover" />
-        <span className="text-white font-semibold text-sm tracking-tight">More Creative</span>
+        <Image src="/mc-logo.jpg" alt="MoreCreative Operations Portal" width={28} height={28} className="rounded-lg shrink-0 object-cover" />
+        <span className="text-white font-semibold text-xs tracking-tight truncate">MoreCreative Operations Portal</span>
       </div>
 
       {/* Nav */}
@@ -83,6 +93,10 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
           <LogOut className="w-4 h-4 shrink-0" />
           Sign out
         </button>
+        {userEmail && (
+          <p className="px-3 pt-2 text-xs text-zinc-400 truncate" title={userEmail}>{userEmail}</p>
+        )}
+        <p className="px-3 text-xs text-zinc-500">v{pkg.version}</p>
       </div>
     </aside>
   )

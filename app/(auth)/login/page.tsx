@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import pkg from '@/package.json'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -32,8 +33,8 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <Image src="/mc-logo.jpg" alt="More Creative" width={56} height={56} className="rounded-xl mx-auto mb-4 object-cover" />
-          <h1 className="text-xl font-semibold text-gray-900">The More Creative</h1>
+          <Image src="/mc-logo.jpg" alt="MoreCreative Operations Portal" width={56} height={56} className="rounded-xl mx-auto mb-4 object-cover" />
+          <h1 className="text-xl font-semibold text-gray-900">MoreCreative Operations Portal</h1>
           <p className="text-sm text-gray-500 mt-1">Sign in to your workspace</p>
         </div>
 
@@ -81,6 +82,7 @@ export default function LoginPage() {
             </Link>
           </div>
         </form>
+        <p className="mt-6 text-center text-xs text-gray-400">v{pkg.version}</p>
       </div>
     </div>
   )
