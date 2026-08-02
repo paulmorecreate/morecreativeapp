@@ -247,3 +247,49 @@ export interface PhotographerContact {
   created_at: string
   updated_at: string
 }
+
+export interface InvoiceSettings {
+  id: string
+  company_name: string
+  company_phone: string | null
+  company_address: string | null
+  company_vat_number: string | null
+  bank_account_holder: string | null
+  bank_name: string | null
+  bank_account_number: string | null
+  bank_iban: string | null
+  bank_swift: string | null
+  updated_at: string
+}
+
+export interface InvoiceLineItem {
+  id: string
+  invoice_id: string
+  description: string
+  rate: number
+  qty: number
+  sort_order: number
+  created_at: string
+}
+
+export interface Invoice {
+  id: string
+  invoice_number: string
+  project_id: string | null
+  currency: 'AED' | 'EUR' | 'USD'
+  apply_vat: boolean
+  status: 'draft' | 'sent' | 'paid'
+  issue_date: string | null
+  due_date: string | null
+  billed_to_name: string | null
+  billed_to_company: string | null
+  billed_to_address: string | null
+  amount_paid: number
+  notes: string | null
+  created_at: string
+  updated_at: string
+  line_items?: InvoiceLineItem[]
+  project?: { id: string; name: string } | null
+}
+
+export type UserRole = 'admin' | 'finance' | 'general'

@@ -3,14 +3,33 @@ import { AdminClient } from './client'
 
 export default async function AdminPage() {
   const supabase = await createClient()
-  const [{ data: categories }, { data: industries }, { data: agentTypes }, { data: talentCategories }, { data: brandCategories }, { data: talentLevels }] = await Promise.all([
+
+  const { data: { user } } = await supabase.auth.getUser()
+  const { data: currentProfile } = user
+    ? await supabase.from('user_profiles').select('role').eq('id', user.id).single()
+    : { data: null }
+  const isAdmin = currentProfile?.role === 'admin'
+
+  const [{ data: categories }, { data: industries }, { data: agentTypes }, { data: talentCategories }, { data: brandCategories }, { data: talentLevels }, { data: invoiceSettings }] = await Promise.all([
     supabase.from('project_categories').select('*').order('name'),
     supabase.from('industries').select('*').order('name'),
     supabase.from('agent_types').select('*').order('name'),
     supabase.from('talent_categories').select('*').order('name'),
     supabase.from('brand_categories').select('*').order('name'),
     supabase.from('talent_levels').select('*').order('name'),
+    supabase.from('invoice_settings').select('*').limit(1).single(),
   ])
 
-  return <AdminClient categories={categories ?? []} industries={industries ?? []} agentTypes={agentTypes ?? []} talentCategories={talentCategories ?? []} brandCategories={brandCategories ?? []} talentLevels={talentLevels ?? []} />
+  return (
+    <AdminClient
+      categories={categories ?? []}
+      industries={industries ?? []}
+      agentTypes={agentTypes ?? []}
+      talentCategories={talentCategories ?? []}
+      brandCategories={brandCategories ?? []}
+      talentLevels={talentLevels ?? []}
+      invoiceSettings={invoiceSettings ?? null}
+      isAdmin={isAdmin}
+    />
+  )
 }

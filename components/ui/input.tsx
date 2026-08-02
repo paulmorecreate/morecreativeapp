@@ -12,17 +12,17 @@ export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
 }
 
 interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
-  options: { value: string; label: string }[]
+  options?: { value: string; label: string }[]
   placeholder?: string
 }
 
-export function Select({ options, placeholder, className, ...props }: SelectProps) {
+export function Select({ options, placeholder, className, children, ...props }: SelectProps) {
   return (
     <select {...props} className={cn(baseClass, className)}>
       {placeholder && <option value="">{placeholder}</option>}
-      {options.map(o => (
-        <option key={o.value} value={o.value}>{o.label}</option>
-      ))}
+      {options
+        ? options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)
+        : children}
     </select>
   )
 }

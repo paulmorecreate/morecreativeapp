@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2, KeyRound, X } from 'lucide-react'
-import { ProjectCategory, Industry, AgentType, TalentCategory, BrandCategory, TalentLevel } from '@/lib/supabase/types'
+import { ProjectCategory, Industry, AgentType, TalentCategory, BrandCategory, TalentLevel, InvoiceSettings, UserRole } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Input, Select, Textarea } from '@/components/ui/input'
 import { createClient } from '@/lib/supabase/client'
 
 type Props = {
@@ -15,6 +15,8 @@ type Props = {
   talentCategories: TalentCategory[]
   brandCategories: BrandCategory[]
   talentLevels: TalentLevel[]
+  invoiceSettings: InvoiceSettings | null
+  isAdmin: boolean
 }
 
 type AppUser = {
@@ -24,7 +26,7 @@ type AppUser = {
   last_sign_in_at?: string
 }
 
-type UserProfile = { id: string; email: string; color: string | null; first_name: string | null; surname: string | null }
+type UserProfile = { id: string; email: string; color: string | null; first_name: string | null; surname: string | null; role: UserRole | null }
 
 const USER_COLORS = [
   { label: 'Blue',   value: '#dbeafe' },
@@ -63,7 +65,13 @@ function Modal({
   )
 }
 
-function UsersSection() {
+const ROLE_LABELS: Record<UserRole, string> = {
+  admin: 'Admin',
+  finance: 'Finance',
+  general: 'General',
+}
+
+function UsersSection({ isAdmin }: { isAdmin: boolean }) {
   const [users, setUsers] = useState<AppUser[]>([])
   const [profiles, setProfiles] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(true)
@@ -99,23 +107,36 @@ function UsersSection() {
     const newColor = profile?.color === color ? null : color
     await createClient().from('user_profiles').upsert({
       id: user.id, email: user.email, color: newColor,
-      first_name: profile?.first_name ?? null, surname: profile?.surname ?? null,
+      first_name: profile?.first_name ?? null, surname: profile?.surname ?? null, role: profile?.role ?? 'general',
     })
     setProfiles(prev => {
       const existing = prev.find(p => p.id === user.id)
       if (existing) return prev.map(p => p.id === user.id ? { ...p, color: newColor } : p)
-      return [...prev, { id: user.id, email: user.email, color: newColor, first_name: null, surname: null }]
+      return [...prev, { id: user.id, email: user.email, color: newColor, first_name: null, surname: null, role: 'general' }]
     })
   }
 
   async function saveUserName(user: AppUser, field: 'first_name' | 'surname', value: string) {
     const profile = profiles.find(p => p.id === user.id)
-    const update = { id: user.id, email: user.email, color: profile?.color ?? null, first_name: profile?.first_name ?? null, surname: profile?.surname ?? null, [field]: value || null }
+    const update = { id: user.id, email: user.email, color: profile?.color ?? null, first_name: profile?.first_name ?? null, surname: profile?.surname ?? null, role: profile?.role ?? 'general', [field]: value || null }
     await createClient().from('user_profiles').upsert(update)
     setProfiles(prev => {
       const existing = prev.find(p => p.id === user.id)
       if (existing) return prev.map(p => p.id === user.id ? { ...p, [field]: value || null } : p)
-      return [...prev, { id: user.id, email: user.email, color: null, first_name: null, surname: null, [field]: value || null }]
+      return [...prev, { id: user.id, email: user.email, color: null, first_name: null, surname: null, role: 'general', [field]: value || null }]
+    })
+  }
+
+  async function setUserRole(user: AppUser, role: UserRole) {
+    const profile = profiles.find(p => p.id === user.id)
+    await createClient().from('user_profiles').upsert({
+      id: user.id, email: user.email, color: profile?.color ?? null,
+      first_name: profile?.first_name ?? null, surname: profile?.surname ?? null, role,
+    })
+    setProfiles(prev => {
+      const existing = prev.find(p => p.id === user.id)
+      if (existing) return prev.map(p => p.id === user.id ? { ...p, role } : p)
+      return [...prev, { id: user.id, email: user.email, color: null, first_name: null, surname: null, role }]
     })
   }
 
@@ -174,6 +195,14 @@ function UsersSection() {
 
   function formatDate(iso: string) {
     return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 col-span-2 px-5 py-8 text-center">
+        <p className="text-sm text-gray-400">User management is restricted to Admin users.</p>
+      </div>
+    )
   }
 
   return (
@@ -261,6 +290,24 @@ function UsersSection() {
                       ({USER_COLORS.find(c => c.value === profile.color)?.label ?? 'Custom'})
                     </span>
                   )}
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-xs text-gray-400">Role:</span>
+                  <div className="flex gap-1">
+                    {(['admin', 'finance', 'general'] as UserRole[]).map(r => (
+                      <button
+                        key={r}
+                        onClick={() => setUserRole(u, r)}
+                        className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
+                          (profile?.role ?? 'general') === r
+                            ? 'bg-gray-900 text-white border-gray-900'
+                            : 'text-gray-500 border-gray-200 hover:border-gray-400'
+                        }`}
+                      >
+                        {ROLE_LABELS[r]}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )
@@ -404,7 +451,7 @@ function StaticList({
   )
 }
 
-export function AdminClient({ categories, industries, agentTypes, talentCategories, brandCategories, talentLevels }: Props) {
+export function AdminClient({ categories, industries, agentTypes, talentCategories, brandCategories, talentLevels, invoiceSettings, isAdmin }: Props) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -470,7 +517,7 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
       </div>
 
       <div className="grid grid-cols-2 gap-5 max-w-3xl">
-        <UsersSection />
+        <UsersSection isAdmin={isAdmin} />
         <StaticList
           title="Project Categories"
           description="Appear in the Category dropdown when creating or editing a project."
@@ -513,7 +560,104 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
           onAdd={addTalentLevel}
           onDelete={deleteTalentLevel}
         />
+        <InvoiceSettingsPanel settings={invoiceSettings} />
       </div>
+    </div>
+  )
+}
+
+function InvoiceSettingsPanel({ settings }: { settings: InvoiceSettings | null }) {
+  const router = useRouter()
+  const supabase = createClient()
+  const [form, setForm] = useState({
+    company_name: settings?.company_name ?? 'MoreCreative/',
+    company_phone: settings?.company_phone ?? '',
+    company_address: settings?.company_address ?? '',
+    company_vat_number: settings?.company_vat_number ?? '',
+    bank_account_holder: settings?.bank_account_holder ?? '',
+    bank_name: settings?.bank_name ?? '',
+    bank_account_number: settings?.bank_account_number ?? '',
+    bank_iban: settings?.bank_iban ?? '',
+    bank_swift: settings?.bank_swift ?? '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    if (settings?.id) {
+      await supabase.from('invoice_settings').update({ ...form, updated_at: new Date().toISOString() }).eq('id', settings.id)
+    } else {
+      await supabase.from('invoice_settings').insert(form)
+    }
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+    router.refresh()
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 col-span-2">
+      <div className="px-5 py-4 border-b border-gray-100">
+        <h2 className="text-sm font-semibold text-gray-900">Invoice Settings</h2>
+        <p className="text-xs text-gray-400 mt-0.5">Company address and bank details printed on every invoice PDF</p>
+      </div>
+      <form onSubmit={handleSave} className="p-5 space-y-5">
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Company Details</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs text-gray-600">Company Name</label>
+              <Input value={form.company_name} onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-gray-600">Phone</label>
+              <Input value={form.company_phone} onChange={e => setForm(f => ({ ...f, company_phone: e.target.value }))} />
+            </div>
+            <div className="col-span-2 space-y-1">
+              <label className="text-xs text-gray-600">Address</label>
+              <Textarea value={form.company_address} onChange={e => setForm(f => ({ ...f, company_address: e.target.value }))} rows={3} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-gray-600">VAT Number</label>
+              <Input value={form.company_vat_number} onChange={e => setForm(f => ({ ...f, company_vat_number: e.target.value }))} />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Bank Details</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs text-gray-600">Account Holder Name</label>
+              <Input value={form.bank_account_holder} onChange={e => setForm(f => ({ ...f, bank_account_holder: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-gray-600">Bank Name</label>
+              <Input value={form.bank_name} onChange={e => setForm(f => ({ ...f, bank_name: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-gray-600">Account Number</label>
+              <Input value={form.bank_account_number} onChange={e => setForm(f => ({ ...f, bank_account_number: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-gray-600">IBAN</label>
+              <Input value={form.bank_iban} onChange={e => setForm(f => ({ ...f, bank_iban: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-gray-600">SWIFT / BIC</label>
+              <Input value={form.bank_swift} onChange={e => setForm(f => ({ ...f, bank_swift: e.target.value }))} />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-1">
+          <Button type="submit" disabled={saving}>
+            {saving ? 'Saving…' : saved ? 'Saved!' : 'Save Settings'}
+          </Button>
+        </div>
+      </form>
     </div>
   )
 }

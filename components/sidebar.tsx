@@ -4,9 +4,10 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Scissors, Camera, Building2, Users2 } from 'lucide-react'
+import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Scissors, Camera, Building2, Users2, Receipt } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
+import { UserRole } from '@/lib/supabase/types'
 import pkg from '@/package.json'
 
 const primaryNav = [
@@ -27,11 +28,20 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname()
   const router = useRouter()
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<UserRole | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
-    supabase.auth.getUser().then(({ data }) => {
-      setUserEmail(data.user?.email ?? null)
+    supabase.auth.getUser().then(async ({ data }) => {
+      const user = data.user
+      if (!user) return
+      setUserEmail(user.email ?? null)
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+      setUserRole((profile?.role as UserRole) ?? 'general')
     })
   }, [])
 
@@ -75,6 +85,9 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
       <nav className="flex-1 px-2 py-3 overflow-y-auto">
         <div className="space-y-0.5">
           {primaryNav.map(item => <NavLink key={item.href} {...item} />)}
+          {(userRole === 'admin' || userRole === 'finance') && (
+            <NavLink href="/finance" label="Finance" icon={Receipt} />
+          )}
         </div>
         <div className="my-3 h-px bg-zinc-800 mx-1" />
         <p className="px-3 mb-1.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest">Directory</p>
