@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag, Trash2, X, CheckCircle2, Circle, CheckCheck, AlertTriangle, Receipt, GripVertical } from 'lucide-react'
+import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag, Trash2, X, CheckCircle2, Circle, CheckCheck, AlertTriangle, Receipt, GripVertical, Loader2 } from 'lucide-react'
 import { Event, ProjectCategory, Invoice } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/client'
 import { Badge } from '@/components/ui/badge'
@@ -234,6 +234,10 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
 
   // Quick-add talent from pool to show
   const [quickAddShowId, setQuickAddShowId] = useState<string | null>(null)
+  const [assigningShowId, setAssigningShowId] = useState<string | null>(null)
+
+  // Clear assigning state once the server refresh delivers updated brandShows
+  useEffect(() => { setAssigningShowId(null) }, [brandShows])
 
   // Project-level talent modal (add only)
   const [projectTalentModal, setProjectTalentModal] = useState(false)
@@ -340,6 +344,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   async function assignTalentToShow(show: BrandShow, talentId: string) {
     setQuickAddShowId(null)
     if (show.project_brand_talents.some(t => t.talent_id === talentId)) return
+    setAssigningShowId(show.id)
     const supabase = createClient()
     await supabase.from('project_brand_talents').insert({
       project_brand_id: show.id,
@@ -595,7 +600,13 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                 </div>
               </div>
 
-              {dragOverShowId === show.id && draggingTalentId && (
+              {assigningShowId === show.id && (
+                <div className="px-5 py-3 flex items-center justify-center gap-2 bg-sky-500 text-white text-sm font-medium">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Adding to show…
+                </div>
+              )}
+              {dragOverShowId === show.id && draggingTalentId && assigningShowId !== show.id && (
                 <div className={cn(
                   'px-5 py-2 text-xs font-medium text-center',
                   dragDuplicateShowId === show.id ? 'text-amber-600 bg-amber-50' : 'text-sky-600 bg-sky-50'
