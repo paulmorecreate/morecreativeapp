@@ -1040,18 +1040,19 @@ function InlineShowTalentRow({
             </div>
           ))}
           {typingNote && (
-            <input
+            <textarea
               autoFocus
-              type="text"
+              rows={3}
               value={newNote}
               onChange={e => setNewNote(e.target.value)}
               onKeyDown={e => {
-                if (e.key === 'Enter') { e.preventDefault(); addNote() }
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addNote() }
                 if (e.key === 'Escape') { setTypingNote(false); setNewNote('') }
               }}
               onBlur={() => { if (!newNote.trim()) setTypingNote(false) }}
-              placeholder="Type and press Enter…"
-              className="text-xs w-full border-b border-gray-300 focus:border-gray-500 focus:outline-none bg-transparent py-0.5"
+              placeholder="Enter to save, Shift+Enter for new line…"
+              className="text-xs w-full border border-gray-200 rounded-lg px-2 py-1.5 focus:border-gray-400 focus:outline-none bg-white resize-y"
+              style={{ height: '72px' }}
               disabled={addingNote}
             />
           )}
@@ -1214,18 +1215,19 @@ function InlineProjectTalentRow({
             </div>
           ))}
           {typingNote && (
-            <input
+            <textarea
               autoFocus
-              type="text"
+              rows={3}
               value={newNote}
               onChange={e => setNewNote(e.target.value)}
               onKeyDown={e => {
-                if (e.key === 'Enter') { e.preventDefault(); addNote() }
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addNote() }
                 if (e.key === 'Escape') { setTypingNote(false); setNewNote('') }
               }}
               onBlur={() => { if (!newNote.trim()) setTypingNote(false) }}
-              placeholder="Type and press Enter…"
-              className="text-xs w-full border-b border-gray-300 focus:border-gray-500 focus:outline-none bg-transparent py-0.5"
+              placeholder="Enter to save, Shift+Enter for new line…"
+              className="text-xs w-full border border-gray-200 rounded-lg px-2 py-1.5 focus:border-gray-400 focus:outline-none bg-white resize-y"
+              style={{ height: '72px' }}
               disabled={addingNote}
             />
           )}
