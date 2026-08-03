@@ -875,11 +875,9 @@ function InlineShowTalentRow({
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     )
   )
-  const [newNote, setNewNote] = useState('')
-  const [addingNote, setAddingNote] = useState(false)
-  const [noteModalOpen, setNoteModalOpen] = useState(false)
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
-  const [editingNoteContent, setEditingNoteContent] = useState('')
+  const [noteModal, setNoteModal] = useState<null | { mode: 'add' } | { mode: 'edit'; note: TalentNote }>(null)
+  const [noteContent, setNoteContent] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
 
   async function save(data: Record<string, unknown>) {
     await supabase.from('project_brand_talents').update(data).eq('id', entry.id)
@@ -891,41 +889,31 @@ function InlineShowTalentRow({
     save({ creative: next.length ? next.join(', ') : null })
   }
 
-  async function addNote() {
-    if (!newNote.trim()) return
-    setAddingNote(true)
-    const { data } = await supabase
-      .from('project_brand_talent_notes')
-      .insert({ project_brand_talent_id: entry.id, content: newNote.trim() })
-      .select()
-      .single()
-    if (data) setNotesList(prev => [...prev, data as TalentNote])
-    setNewNote('')
-    setNoteModalOpen(false)
-    setAddingNote(false)
+  function openAddNote() { setNoteContent(''); setNoteModal({ mode: 'add' }) }
+  function openEditNote(note: TalentNote) { setNoteContent(note.content); setNoteModal({ mode: 'edit', note }) }
+  function closeNoteModal() { setNoteModal(null); setNoteContent('') }
+
+  async function saveNote() {
+    const content = noteContent.trim()
+    if (!content) return
+    setSavingNote(true)
+    if (noteModal?.mode === 'add') {
+      const { data } = await supabase
+        .from('project_brand_talent_notes')
+        .insert({ project_brand_talent_id: entry.id, content })
+        .select().single()
+      if (data) setNotesList(prev => [...prev, data as TalentNote])
+    } else if (noteModal?.mode === 'edit') {
+      await supabase.from('project_brand_talent_notes').update({ content }).eq('id', noteModal.note.id)
+      setNotesList(prev => prev.map(n => n.id === noteModal.note.id ? { ...n, content } : n))
+    }
+    closeNoteModal()
+    setSavingNote(false)
   }
 
   async function deleteNote(noteId: string) {
     await supabase.from('project_brand_talent_notes').delete().eq('id', noteId)
     setNotesList(prev => prev.filter(n => n.id !== noteId))
-  }
-
-  function startEditNote(note: TalentNote) {
-    setEditingNoteId(note.id)
-    setEditingNoteContent(note.content)
-  }
-
-  async function saveEditNote(noteId: string) {
-    const content = editingNoteContent.trim()
-    if (!content) return
-    await supabase.from('project_brand_talent_notes').update({ content }).eq('id', noteId)
-    setNotesList(prev => prev.map(n => n.id === noteId ? { ...n, content } : n))
-    setEditingNoteId(null)
-  }
-
-  function cancelEditNote() {
-    setEditingNoteId(null)
-    setEditingNoteContent('')
   }
 
   return (
@@ -938,7 +926,7 @@ function InlineShowTalentRow({
             {entry.talent?.name ?? '—'}
           </Link>
           {entry.talent?.category && <Badge value={entry.talent.category} />}
-          <button type="button" onClick={() => setNoteModalOpen(true)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+          <button type="button" onClick={openAddNote} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
             + note
           </button>
         </div>
@@ -1013,29 +1001,16 @@ function InlineShowTalentRow({
         <div className="space-y-0.5 min-w-[160px]">
           {notesList.map(note => (
             <div key={note.id} className="flex items-center gap-1">
-              {editingNoteId === note.id ? (
-                <input
-                  autoFocus
-                  type="text"
-                  value={editingNoteContent}
-                  onChange={e => setEditingNoteContent(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') { e.preventDefault(); saveEditNote(note.id) }
-                    if (e.key === 'Escape') { e.preventDefault(); cancelEditNote() }
-                  }}
-                  onBlur={() => saveEditNote(note.id)}
-                  className="text-xs flex-1 border-b border-gray-400 focus:border-gray-600 focus:outline-none bg-transparent py-0.5 min-w-0"
-                />
-              ) : (
-                <span onClick={() => startEditNote(note)} title={note.content} className="text-xs text-gray-700 flex-1 cursor-text hover:text-gray-900">
-                  {note.content}
-                </span>
-              )}
-              {editingNoteId !== note.id && (
-                <button type="button" onClick={() => deleteNote(note.id)} className="shrink-0 text-gray-400 hover:text-red-500 transition-colors">
-                  <X className="w-3 h-3" />
-                </button>
-              )}
+              <span
+                onClick={() => openEditNote(note)}
+                title="Click to edit"
+                className="text-xs text-gray-700 flex-1 cursor-text hover:text-gray-900"
+              >
+                {note.content}
+              </span>
+              <button type="button" onClick={() => deleteNote(note.id)} className="shrink-0 text-gray-400 hover:text-red-500 transition-colors">
+                <X className="w-3 h-3" />
+              </button>
             </div>
           ))}
         </div>
@@ -1053,21 +1028,25 @@ function InlineShowTalentRow({
         </button>
       </td>
     </tr>
-    <Modal open={noteModalOpen} onClose={() => { setNoteModalOpen(false); setNewNote('') }} title={`Add note — ${entry.talent?.name ?? ''}`}>
+    <Modal
+      open={noteModal !== null}
+      onClose={closeNoteModal}
+      title={noteModal?.mode === 'edit' ? `Edit note — ${entry.talent?.name ?? ''}` : `Add note — ${entry.talent?.name ?? ''}`}
+    >
       <div className="space-y-4">
         <Textarea
           autoFocus
           rows={4}
-          value={newNote}
-          onChange={e => setNewNote(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Escape') { setNoteModalOpen(false); setNewNote('') } }}
+          value={noteContent}
+          onChange={e => setNoteContent(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Escape') closeNoteModal() }}
           placeholder="Type your note…"
-          disabled={addingNote}
+          disabled={savingNote}
         />
         <div className="flex gap-3">
-          <Button type="button" variant="secondary" onClick={() => { setNoteModalOpen(false); setNewNote('') }} className="flex-1">Cancel</Button>
-          <Button type="button" onClick={addNote} disabled={addingNote || !newNote.trim()} className="flex-1">
-            {addingNote ? 'Saving…' : 'Save Note'}
+          <Button type="button" variant="secondary" onClick={closeNoteModal} className="flex-1">Cancel</Button>
+          <Button type="button" onClick={saveNote} disabled={savingNote || !noteContent.trim()} className="flex-1">
+            {savingNote ? 'Saving…' : 'Save Note'}
           </Button>
         </div>
       </div>
@@ -1113,47 +1092,40 @@ function InlineProjectTalentRow({
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     )
   )
-  const [newNote, setNewNote] = useState('')
-  const [addingNote, setAddingNote] = useState(false)
-  const [noteModalOpen, setNoteModalOpen] = useState(false)
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
-  const [editingNoteContent, setEditingNoteContent] = useState('')
+  const [noteModal, setNoteModal] = useState<null | { mode: 'add' } | { mode: 'edit'; note: TalentNote }>(null)
+  const [noteContent, setNoteContent] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
 
   const availableShows = brandShows.filter(
     s => !s.project_brand_talents.some(t => t.talent_id === pt.talent_id)
   )
 
-  async function addNote() {
-    if (!newNote.trim()) return
-    setAddingNote(true)
-    const { data } = await supabase
-      .from('project_talent_notes')
-      .insert({ project_talent_id: pt.id, content: newNote.trim() })
-      .select()
-      .single()
-    if (data) setNotesList(prev => [...prev, data as TalentNote])
-    setNewNote('')
-    setNoteModalOpen(false)
-    setAddingNote(false)
+  function openAddNote() { setNoteContent(''); setNoteModal({ mode: 'add' }) }
+  function openEditNote(note: TalentNote) { setNoteContent(note.content); setNoteModal({ mode: 'edit', note }) }
+  function closeNoteModal() { setNoteModal(null); setNoteContent('') }
+
+  async function saveNote() {
+    const content = noteContent.trim()
+    if (!content) return
+    setSavingNote(true)
+    if (noteModal?.mode === 'add') {
+      const { data } = await supabase
+        .from('project_talent_notes')
+        .insert({ project_talent_id: pt.id, content })
+        .select().single()
+      if (data) setNotesList(prev => [...prev, data as TalentNote])
+    } else if (noteModal?.mode === 'edit') {
+      await supabase.from('project_talent_notes').update({ content }).eq('id', noteModal.note.id)
+      setNotesList(prev => prev.map(n => n.id === noteModal.note.id ? { ...n, content } : n))
+    }
+    closeNoteModal()
+    setSavingNote(false)
   }
 
   async function deleteNote(noteId: string) {
     await supabase.from('project_talent_notes').delete().eq('id', noteId)
     setNotesList(prev => prev.filter(n => n.id !== noteId))
-  }
-
-  function startEditNote(note: TalentNote) {
-    setEditingNoteId(note.id)
-    setEditingNoteContent(note.content)
-  }
-
-  async function saveEditNote(noteId: string) {
-    const content = editingNoteContent.trim()
-    if (!content) return
-    await supabase.from('project_talent_notes').update({ content }).eq('id', noteId)
-    setNotesList(prev => prev.map(n => n.id === noteId ? { ...n, content } : n))
-    setEditingNoteId(null)
   }
 
   return (
@@ -1179,7 +1151,7 @@ function InlineProjectTalentRow({
             {pt.talent?.name ?? '—'}
           </Link>
           {pt.talent?.category && <Badge value={pt.talent.category} />}
-          <button type="button" onClick={() => setNoteModalOpen(true)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+          <button type="button" onClick={openAddNote} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
             + note
           </button>
         </div>
@@ -1190,29 +1162,16 @@ function InlineProjectTalentRow({
         <div className="space-y-0.5 min-w-[200px]">
           {notesList.map(note => (
             <div key={note.id} className="flex items-center gap-1">
-              {editingNoteId === note.id ? (
-                <input
-                  autoFocus
-                  type="text"
-                  value={editingNoteContent}
-                  onChange={e => setEditingNoteContent(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') { e.preventDefault(); saveEditNote(note.id) }
-                    if (e.key === 'Escape') { setEditingNoteId(null) }
-                  }}
-                  onBlur={() => saveEditNote(note.id)}
-                  className="text-xs flex-1 border-b border-gray-400 focus:border-gray-600 focus:outline-none bg-transparent py-0.5 min-w-0"
-                />
-              ) : (
-                <span onClick={() => startEditNote(note)} title={note.content} className="text-xs text-gray-700 flex-1 cursor-text hover:text-gray-900">
-                  {note.content}
-                </span>
-              )}
-              {editingNoteId !== note.id && (
-                <button type="button" onClick={() => deleteNote(note.id)} className="shrink-0 text-gray-400 hover:text-red-500 transition-colors">
-                  <X className="w-3 h-3" />
-                </button>
-              )}
+              <span
+                onClick={() => openEditNote(note)}
+                title="Click to edit"
+                className="text-xs text-gray-700 flex-1 cursor-text hover:text-gray-900"
+              >
+                {note.content}
+              </span>
+              <button type="button" onClick={() => deleteNote(note.id)} className="shrink-0 text-gray-400 hover:text-red-500 transition-colors">
+                <X className="w-3 h-3" />
+              </button>
             </div>
           ))}
         </div>
@@ -1276,21 +1235,25 @@ function InlineProjectTalentRow({
         </div>
       </td>
     </tr>
-    <Modal open={noteModalOpen} onClose={() => { setNoteModalOpen(false); setNewNote('') }} title={`Add note — ${pt.talent?.name ?? ''}`}>
+    <Modal
+      open={noteModal !== null}
+      onClose={closeNoteModal}
+      title={noteModal?.mode === 'edit' ? `Edit note — ${pt.talent?.name ?? ''}` : `Add note — ${pt.talent?.name ?? ''}`}
+    >
       <div className="space-y-4">
         <Textarea
           autoFocus
           rows={4}
-          value={newNote}
-          onChange={e => setNewNote(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Escape') { setNoteModalOpen(false); setNewNote('') } }}
+          value={noteContent}
+          onChange={e => setNoteContent(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Escape') closeNoteModal() }}
           placeholder="Type your note…"
-          disabled={addingNote}
+          disabled={savingNote}
         />
         <div className="flex gap-3">
-          <Button type="button" variant="secondary" onClick={() => { setNoteModalOpen(false); setNewNote('') }} className="flex-1">Cancel</Button>
-          <Button type="button" onClick={addNote} disabled={addingNote || !newNote.trim()} className="flex-1">
-            {addingNote ? 'Saving…' : 'Save Note'}
+          <Button type="button" variant="secondary" onClick={closeNoteModal} className="flex-1">Cancel</Button>
+          <Button type="button" onClick={saveNote} disabled={savingNote || !noteContent.trim()} className="flex-1">
+            {savingNote ? 'Saving…' : 'Save Note'}
           </Button>
         </div>
       </div>
