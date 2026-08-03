@@ -877,7 +877,7 @@ function InlineShowTalentRow({
   )
   const [newNote, setNewNote] = useState('')
   const [addingNote, setAddingNote] = useState(false)
-  const [typingNote, setTypingNote] = useState(false)
+  const [noteModalOpen, setNoteModalOpen] = useState(false)
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [editingNoteContent, setEditingNoteContent] = useState('')
 
@@ -901,7 +901,7 @@ function InlineShowTalentRow({
       .single()
     if (data) setNotesList(prev => [...prev, data as TalentNote])
     setNewNote('')
-    setTypingNote(false)
+    setNoteModalOpen(false)
     setAddingNote(false)
   }
 
@@ -929,6 +929,7 @@ function InlineShowTalentRow({
   }
 
   return (
+    <>
     <tr className="group border-b border-gray-50 hover:bg-gray-50/40 align-top">
       {/* Talent */}
       <td className="px-5 py-2.5 min-w-[140px]">
@@ -937,11 +938,9 @@ function InlineShowTalentRow({
             {entry.talent?.name ?? '—'}
           </Link>
           {entry.talent?.category && <Badge value={entry.talent.category} />}
-          {!typingNote && (
-            <button type="button" onClick={() => setTypingNote(true)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
-              + note
-            </button>
-          )}
+          <button type="button" onClick={() => setNoteModalOpen(true)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+            + note
+          </button>
         </div>
       </td>
 
@@ -1039,23 +1038,6 @@ function InlineShowTalentRow({
               )}
             </div>
           ))}
-          {typingNote && (
-            <textarea
-              autoFocus
-              rows={3}
-              value={newNote}
-              onChange={e => setNewNote(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addNote() }
-                if (e.key === 'Escape') { setTypingNote(false); setNewNote('') }
-              }}
-              onBlur={() => { if (!newNote.trim()) setTypingNote(false) }}
-              placeholder="Enter to save, Shift+Enter for new line…"
-              className="text-xs w-full border border-gray-200 rounded-lg px-2 py-1.5 focus:border-gray-400 focus:outline-none bg-white resize-y"
-              style={{ height: '72px' }}
-              disabled={addingNote}
-            />
-          )}
         </div>
       </td>
 
@@ -1071,6 +1053,26 @@ function InlineShowTalentRow({
         </button>
       </td>
     </tr>
+    <Modal open={noteModalOpen} onClose={() => { setNoteModalOpen(false); setNewNote('') }} title={`Add note — ${entry.talent?.name ?? ''}`}>
+      <div className="space-y-4">
+        <Textarea
+          autoFocus
+          rows={4}
+          value={newNote}
+          onChange={e => setNewNote(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Escape') { setNoteModalOpen(false); setNewNote('') } }}
+          placeholder="Type your note…"
+          disabled={addingNote}
+        />
+        <div className="flex gap-3">
+          <Button type="button" variant="secondary" onClick={() => { setNoteModalOpen(false); setNewNote('') }} className="flex-1">Cancel</Button>
+          <Button type="button" onClick={addNote} disabled={addingNote || !newNote.trim()} className="flex-1">
+            {addingNote ? 'Saving…' : 'Save Note'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+    </>
   )
 }
 
@@ -1113,7 +1115,7 @@ function InlineProjectTalentRow({
   )
   const [newNote, setNewNote] = useState('')
   const [addingNote, setAddingNote] = useState(false)
-  const [typingNote, setTypingNote] = useState(false)
+  const [noteModalOpen, setNoteModalOpen] = useState(false)
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [editingNoteContent, setEditingNoteContent] = useState('')
   const [showPicker, setShowPicker] = useState(false)
@@ -1132,7 +1134,7 @@ function InlineProjectTalentRow({
       .single()
     if (data) setNotesList(prev => [...prev, data as TalentNote])
     setNewNote('')
-    setTypingNote(false)
+    setNoteModalOpen(false)
     setAddingNote(false)
   }
 
@@ -1155,6 +1157,7 @@ function InlineProjectTalentRow({
   }
 
   return (
+    <>
     <tr
       draggable
       onDragStart={onDragStart}
@@ -1176,11 +1179,9 @@ function InlineProjectTalentRow({
             {pt.talent?.name ?? '—'}
           </Link>
           {pt.talent?.category && <Badge value={pt.talent.category} />}
-          {!typingNote && (
-            <button type="button" onClick={() => setTypingNote(true)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
-              + note
-            </button>
-          )}
+          <button type="button" onClick={() => setNoteModalOpen(true)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+            + note
+          </button>
         </div>
       </td>
 
@@ -1214,23 +1215,6 @@ function InlineProjectTalentRow({
               )}
             </div>
           ))}
-          {typingNote && (
-            <textarea
-              autoFocus
-              rows={3}
-              value={newNote}
-              onChange={e => setNewNote(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addNote() }
-                if (e.key === 'Escape') { setTypingNote(false); setNewNote('') }
-              }}
-              onBlur={() => { if (!newNote.trim()) setTypingNote(false) }}
-              placeholder="Enter to save, Shift+Enter for new line…"
-              className="text-xs w-full border border-gray-200 rounded-lg px-2 py-1.5 focus:border-gray-400 focus:outline-none bg-white resize-y"
-              style={{ height: '72px' }}
-              disabled={addingNote}
-            />
-          )}
         </div>
       </td>
 
@@ -1292,5 +1276,25 @@ function InlineProjectTalentRow({
         </div>
       </td>
     </tr>
+    <Modal open={noteModalOpen} onClose={() => { setNoteModalOpen(false); setNewNote('') }} title={`Add note — ${pt.talent?.name ?? ''}`}>
+      <div className="space-y-4">
+        <Textarea
+          autoFocus
+          rows={4}
+          value={newNote}
+          onChange={e => setNewNote(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Escape') { setNoteModalOpen(false); setNewNote('') } }}
+          placeholder="Type your note…"
+          disabled={addingNote}
+        />
+        <div className="flex gap-3">
+          <Button type="button" variant="secondary" onClick={() => { setNoteModalOpen(false); setNewNote('') }} className="flex-1">Cancel</Button>
+          <Button type="button" onClick={addNote} disabled={addingNote || !newNote.trim()} className="flex-1">
+            {addingNote ? 'Saving…' : 'Save Note'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+    </>
   )
 }
