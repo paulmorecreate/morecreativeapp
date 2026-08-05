@@ -45,7 +45,16 @@ export function ProjectsClient({ projects, categories }: Props) {
   async function handleDelete() {
     if (!deleteTarget) return
     setDeleting(true)
-    await createClient().from('events').delete().eq('id', deleteTarget.id)
+    const supabase = createClient()
+    const projectId = deleteTarget.id
+    const { data: invRows } = await supabase.from('invoices').select('id').eq('project_id', projectId)
+    if (invRows?.length) {
+      await supabase.from('invoice_line_items').delete().in('invoice_id', invRows.map(i => i.id))
+      await supabase.from('invoices').delete().eq('project_id', projectId)
+    }
+    await supabase.from('project_income').delete().eq('project_id', projectId)
+    await supabase.from('project_expenses').delete().eq('project_id', projectId)
+    await supabase.from('events').delete().eq('id', projectId)
     setDeleting(false)
     setDeleteTarget(null)
     router.refresh()
@@ -171,7 +180,7 @@ export function ProjectsClient({ projects, categories }: Props) {
       <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Project">
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Are you sure you want to delete <span className="font-semibold text-gray-900">{deleteTarget?.name}</span>? This will also remove all brands and talents linked to this project. This cannot be undone.
+            Are you sure you want to delete <span className="font-semibold text-gray-900">{deleteTarget?.name}</span>? This will also remove all brands, talents, invoices, income, and expense records linked to this project. This cannot be undone.
           </p>
           <div className="flex gap-3">
             <Button type="button" variant="secondary" onClick={() => setDeleteTarget(null)} className="flex-1">Cancel</Button>

@@ -2,152 +2,128 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { Plus, Search, Pencil } from 'lucide-react'
+import { Plus, Search, TrendingUp } from 'lucide-react'
 import { Opportunity } from '@/lib/supabase/types'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
-import { formatCurrency } from '@/lib/utils'
+import { cn, formatCurrency } from '@/lib/utils'
 
 type SimpleRecord = { id: string; name: string }
 
-const statusOpts = [
-  { value: 'prospect', label: 'Prospect' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'confirmed', label: 'Confirmed' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'cancelled', label: 'Cancelled' },
-]
-
-const typeOpts = [
-  { value: 'showroom', label: 'Showroom' },
-  { value: 'carpet', label: 'Red Carpet' },
-  { value: 'campaign', label: 'Campaign' },
-  { value: 'photoshoot', label: 'Photoshoot' },
-  { value: 'cover', label: 'Magazine Cover' },
-  { value: 'collaboration', label: 'Collaboration' },
-]
-
-const priorityOpts = [
-  { value: 'high', label: 'High' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'low', label: 'Low' },
-]
-
-interface Props {
-  opportunities: Opportunity[]
-  talents: SimpleRecord[]
-  brands: SimpleRecord[]
-  events: SimpleRecord[]
+type OppWithTalents = Opportunity & {
+  opportunity_talents: { id: string; status: string; talent: { id: string; name: string } | null }[]
 }
 
-export function OpportunitiesClient({ opportunities, talents, brands, events }: Props) {
+export const STAGES = [
+  { value: 'pitch', label: 'Pitch' },
+  { value: 'shortlisting', label: 'Shortlisting' },
+  { value: 'proposal_sent', label: 'Proposal Sent' },
+  { value: 'contract', label: 'Contract' },
+  { value: 'closed', label: 'Closed' },
+]
+
+export const MC_ROLES = [
+  { value: 'talent_broker', label: 'Talent Broker' },
+  { value: 'brand_broker', label: 'Brand Broker' },
+  { value: 'placement_service', label: 'Placement Service' },
+]
+
+export const CONSIDERATION_TYPES = [
+  { value: 'cash_commission', label: 'Cash + Commission' },
+  { value: 'flat_fee', label: 'Flat Placement Fee' },
+  { value: 'in_kind', label: 'In-Kind / Barter' },
+]
+
+export const STAGE_COLORS: Record<string, string> = {
+  pitch: 'bg-zinc-100 text-zinc-600',
+  shortlisting: 'bg-blue-50 text-blue-700',
+  proposal_sent: 'bg-amber-50 text-amber-700',
+  contract: 'bg-purple-50 text-purple-700',
+  closed: 'bg-green-50 text-green-700',
+}
+
+interface Props {
+  opportunities: OppWithTalents[]
+  talents: SimpleRecord[]
+}
+
+const emptyForm = {
+  name: '',
+  stage: 'pitch',
+  mc_role: 'talent_broker',
+  consideration_type: 'cash_commission',
+  counterpart_name: '',
+  internal_owner: '',
+  gross_fee: '',
+  commission_pct: '20',
+  event_date: '',
+  notes: '',
+}
+
+export function OpportunitiesClient({ opportunities, talents }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
+  const [stageFilter, setStageFilter] = useState('')
   const [open, setOpen] = useState(false)
-  const [editOpp, setEditOpp] = useState<Opportunity | null>(null)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({
-    talent_id: '', brand_id: '', event_id: '', type: '',
-    status: 'prospect', priority: 'medium', estimated_value: '',
-    follow_up: '', notes: '',
-  })
-  const [editForm, setEditForm] = useState({
-    talent_id: '', brand_id: '', event_id: '', type: '',
-    status: 'prospect', priority: 'medium', estimated_value: '',
-    follow_up: '', notes: '',
-  })
-
-  function openEdit(opp: Opportunity) {
-    setEditForm({
-      talent_id: opp.talent_id ?? '',
-      brand_id: opp.brand_id ?? '',
-      event_id: opp.event_id ?? '',
-      type: opp.type ?? '',
-      status: opp.status ?? 'prospect',
-      priority: opp.priority ?? 'medium',
-      estimated_value: opp.estimated_value != null ? String(opp.estimated_value) : '',
-      follow_up: opp.follow_up ?? '',
-      notes: opp.notes ?? '',
-    })
-    setEditOpp(opp)
-  }
-
-  async function handleEdit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!editOpp) return
-    setSaving(true)
-    const supabase = createClient()
-    await supabase.from('opportunities').update({
-      talent_id: editForm.talent_id || null,
-      brand_id: editForm.brand_id || null,
-      event_id: editForm.event_id || null,
-      type: editForm.type || null,
-      status: editForm.status,
-      priority: editForm.priority,
-      estimated_value: editForm.estimated_value ? parseFloat(editForm.estimated_value) : null,
-      follow_up: editForm.follow_up || null,
-      notes: editForm.notes || null,
-    }).eq('id', editOpp.id)
-    setSaving(false)
-    setEditOpp(null)
-    router.refresh()
-  }
-
-  function editField(k: keyof typeof editForm) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
-      setEditForm(f => ({ ...f, [k]: e.target.value }))
-  }
-
-  const filtered = opportunities.filter(o => {
-    const talentName = (o.talent as { name: string } | null)?.name ?? ''
-    const brandName = (o.brand as { name: string } | null)?.name ?? ''
-    const q = search.toLowerCase()
-    const matchSearch = !search || talentName.toLowerCase().includes(q) || brandName.toLowerCase().includes(q)
-    const matchStatus = !statusFilter || o.status === statusFilter
-    return matchSearch && matchStatus
-  })
+  const [form, setForm] = useState(emptyForm)
 
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
   }
 
+  const filtered = opportunities.filter(o => {
+    const q = search.toLowerCase()
+    const matchSearch = !search ||
+      o.name.toLowerCase().includes(q) ||
+      (o.counterpart_name ?? '').toLowerCase().includes(q) ||
+      o.opportunity_talents.some(t => t.talent?.name.toLowerCase().includes(q))
+    const matchStage = !stageFilter || o.stage === stageFilter
+    return matchSearch && matchStage
+  })
+
+  const totalFee = filtered.reduce((s, o) => s + (o.gross_fee ?? 0), 0)
+  const stageCounts = STAGES.reduce((acc, s) => {
+    acc[s.value] = opportunities.filter(o => o.stage === s.value).length
+    return acc
+  }, {} as Record<string, number>)
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!form.name.trim()) return
     setSaving(true)
     const supabase = createClient()
-    const payload: Record<string, unknown> = {
-      talent_id: form.talent_id || null,
-      brand_id: form.brand_id || null,
-      event_id: form.event_id || null,
-      type: form.type || null,
-      status: form.status,
-      priority: form.priority,
-      estimated_value: form.estimated_value ? parseFloat(form.estimated_value) : null,
-      follow_up: form.follow_up || null,
+    const { data } = await supabase.from('opportunities').insert({
+      name: form.name.trim(),
+      stage: form.stage,
+      mc_role: form.mc_role,
+      consideration_type: form.consideration_type,
+      counterpart_name: form.counterpart_name || null,
+      internal_owner: form.internal_owner || null,
+      gross_fee: form.gross_fee ? parseFloat(form.gross_fee) : null,
+      commission_pct: parseFloat(form.commission_pct) || 20,
+      event_date: form.event_date || null,
       notes: form.notes || null,
-    }
-    await supabase.from('opportunities').insert(payload)
+    }).select().single()
     setSaving(false)
     setOpen(false)
-    setForm({ talent_id: '', brand_id: '', event_id: '', type: '', status: 'prospect', priority: 'medium', estimated_value: '', follow_up: '', notes: '' })
-    router.refresh()
+    setForm(emptyForm)
+    if (data) router.push(`/opportunities/${data.id}`)
+    else router.refresh()
   }
-
-  const totalValue = filtered.reduce((s, o) => s + (o.estimated_value ?? 0), 0)
 
   return (
     <div>
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Opportunities</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {filtered.length} shown · {totalValue > 0 ? `${formatCurrency(totalValue)} pipeline` : 'no value tracked'}
+            {filtered.length} deal{filtered.length !== 1 ? 's' : ''}
+            {totalFee > 0 && ` · ${formatCurrency(totalFee)} gross pipeline`}
           </p>
         </div>
         <Button onClick={() => setOpen(true)}>
@@ -156,189 +132,163 @@ export function OpportunitiesClient({ opportunities, talents, brands, events }: 
         </Button>
       </div>
 
+      {/* Pipeline summary */}
+      <div className="grid grid-cols-5 gap-2 mb-5">
+        {STAGES.map(s => (
+          <button
+            key={s.value}
+            onClick={() => setStageFilter(stageFilter === s.value ? '' : s.value)}
+            className={cn(
+              'rounded-lg border px-3 py-2.5 text-left transition-all',
+              stageFilter === s.value
+                ? 'border-gray-900 bg-gray-900 text-white'
+                : 'border-gray-200 bg-white hover:border-gray-300'
+            )}
+          >
+            <p className={cn('text-xs font-medium', stageFilter === s.value ? 'text-gray-300' : 'text-gray-500')}>{s.label}</p>
+            <p className={cn('text-xl font-semibold mt-0.5', stageFilter === s.value ? 'text-white' : 'text-gray-900')}>
+              {stageCounts[s.value] ?? 0}
+            </p>
+          </button>
+        ))}
+      </div>
+
+      {/* Search */}
       <div className="flex gap-3 mb-5">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search talent or brand…"
+            placeholder="Search name, counterpart, talent…"
             className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/10 bg-white"
           />
         </div>
-        <select
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black/10 bg-white text-gray-700"
-        >
-          <option value="">All statuses</option>
-          {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
       </div>
 
+      {/* Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50">
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Talent</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Brand</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Event</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Type</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Status</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Priority</th>
-              <th className="text-right px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Value</th>
-              <th className="px-4 py-3" />
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Deal</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Stage</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Role</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Counterpart</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Talents</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Event date</th>
+              <th className="text-right px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Gross fee</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-400">
-                  {search || statusFilter ? 'No results.' : 'No opportunities yet.'}
+                <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-400">
+                  {search || stageFilter ? 'No results.' : 'No opportunities yet — add your first deal.'}
                 </td>
               </tr>
             )}
-            {filtered.map(opp => (
-              <tr key={opp.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => router.push(`/opportunities/${opp.id}`)}>
-                <td className="px-4 py-3 font-medium text-gray-900">
-                  {(opp.talent as { name: string } | null)?.name ?? <span className="text-gray-300">—</span>}
-                </td>
-                <td className="px-4 py-3 text-gray-700">
-                  {(opp.brand as { name: string } | null)?.name ?? <span className="text-gray-300">—</span>}
-                </td>
-                <td className="px-4 py-3 text-gray-500 text-xs">
-                  {(opp.event as { name: string } | null)?.name ?? '—'}
-                </td>
-                <td className="px-4 py-3 text-gray-500 text-xs capitalize">{opp.type?.replace(/_/g, ' ') ?? '—'}</td>
-                <td className="px-4 py-3"><Badge value={opp.status} /></td>
-                <td className="px-4 py-3"><Badge value={opp.priority} /></td>
-                <td className="px-4 py-3 text-right text-gray-600 font-medium">
-                  {opp.estimated_value ? formatCurrency(opp.estimated_value) : <span className="text-gray-300">—</span>}
-                </td>
-                <td className="px-4 py-3 text-right" onClick={e => { e.stopPropagation(); openEdit(opp) }}>
-                  <button className="text-gray-300 hover:text-gray-600 transition-colors">
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {filtered.map(opp => {
+              const netToTalent = opp.gross_fee != null
+                ? opp.gross_fee * (1 - opp.commission_pct / 100)
+                : null
+              return (
+                <tr
+                  key={opp.id}
+                  className="hover:bg-gray-50/50 transition-colors cursor-pointer"
+                  onClick={() => router.push(`/opportunities/${opp.id}`)}
+                >
+                  <td className="px-4 py-3 font-medium text-gray-900">{opp.name}</td>
+                  <td className="px-4 py-3">
+                    <span className={cn('inline-flex px-2 py-0.5 rounded-full text-xs font-medium', STAGE_COLORS[opp.stage] ?? 'bg-gray-100 text-gray-600')}>
+                      {STAGES.find(s => s.value === opp.stage)?.label ?? opp.stage}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">
+                    {MC_ROLES.find(r => r.value === opp.mc_role)?.label ?? opp.mc_role}
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">{opp.counterpart_name ?? <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">
+                    {opp.opportunity_talents.length > 0
+                      ? opp.opportunity_talents.map(t => t.talent?.name).filter(Boolean).join(', ')
+                      : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">
+                    {opp.event_date
+                      ? new Date(opp.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                      : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {opp.gross_fee != null ? (
+                      <div>
+                        <p className="font-medium text-gray-900">{formatCurrency(opp.gross_fee)}</p>
+                        {netToTalent != null && (
+                          <p className="text-xs text-gray-400">{formatCurrency(netToTalent)} net</p>
+                        )}
+                      </div>
+                    ) : <span className="text-gray-300">—</span>}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
 
+      {/* Add modal */}
       <Modal open={open} onClose={() => setOpen(false)} title="Add Opportunity">
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Deal name *</label>
+            <Input value={form.name} onChange={field('name')} placeholder="e.g. Roberto Cavalli FW26 Campaign" required />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Talent</label>
-              <Select
-                value={form.talent_id}
-                onChange={field('talent_id')}
-                options={talents.map(t => ({ value: t.id, label: t.name }))}
-                placeholder="Select talent…"
-              />
+              <label className="text-xs font-medium text-gray-700">Stage</label>
+              <Select value={form.stage} onChange={field('stage')} options={STAGES} />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Brand</label>
-              <Select
-                value={form.brand_id}
-                onChange={field('brand_id')}
-                options={brands.map(b => ({ value: b.id, label: b.name }))}
-                placeholder="Select brand…"
-              />
+              <label className="text-xs font-medium text-gray-700">MC role</label>
+              <Select value={form.mc_role} onChange={field('mc_role')} options={MC_ROLES} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Event</label>
-              <Select
-                value={form.event_id}
-                onChange={field('event_id')}
-                options={events.map(e => ({ value: e.id, label: e.name }))}
-                placeholder="Select event…"
-              />
+              <label className="text-xs font-medium text-gray-700">Consideration type</label>
+              <Select value={form.consideration_type} onChange={field('consideration_type')} options={CONSIDERATION_TYPES} />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Type</label>
-              <Select value={form.type} onChange={field('type')} options={typeOpts} placeholder="Select type…" />
+              <label className="text-xs font-medium text-gray-700">Counterpart / Client</label>
+              <Input value={form.counterpart_name} onChange={field('counterpart_name')} placeholder="Brand, publisher, or talent rep" />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Status</label>
-              <Select value={form.status} onChange={field('status')} options={statusOpts} />
+              <label className="text-xs font-medium text-gray-700">Gross fee (€)</label>
+              <Input type="number" value={form.gross_fee} onChange={field('gross_fee')} placeholder="0" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Priority</label>
-              <Select value={form.priority} onChange={field('priority')} options={priorityOpts} />
+              <label className="text-xs font-medium text-gray-700">Commission %</label>
+              <Input type="number" value={form.commission_pct} onChange={field('commission_pct')} placeholder="20" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Value (€)</label>
-              <Input type="number" value={form.estimated_value} onChange={field('estimated_value')} placeholder="0" />
+              <label className="text-xs font-medium text-gray-700">Event date</label>
+              <Input type="date" value={form.event_date} onChange={field('event_date')} />
             </div>
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Follow-up</label>
-            <Input value={form.follow_up} onChange={field('follow_up')} placeholder="What needs to happen next?" />
+            <label className="text-xs font-medium text-gray-700">Internal owner</label>
+            <Input value={form.internal_owner} onChange={field('internal_owner')} placeholder="e.g. Nima Samiee" />
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Notes</label>
-            <Textarea value={form.notes} onChange={field('notes')} rows={2} placeholder="Context, details…" />
+            <Textarea value={form.notes} onChange={field('notes')} rows={2} placeholder="Context, deal background…" />
           </div>
           <div className="flex gap-3 pt-1">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)} className="flex-1">Cancel</Button>
-            <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : 'Add Opportunity'}</Button>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal open={!!editOpp} onClose={() => setEditOpp(null)} title="Edit Opportunity">
-        <form onSubmit={handleEdit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Talent</label>
-              <Select value={editForm.talent_id} onChange={editField('talent_id')} options={talents.map(t => ({ value: t.id, label: t.name }))} placeholder="Select talent…" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Brand</label>
-              <Select value={editForm.brand_id} onChange={editField('brand_id')} options={brands.map(b => ({ value: b.id, label: b.name }))} placeholder="Select brand…" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Event</label>
-              <Select value={editForm.event_id} onChange={editField('event_id')} options={events.map(e => ({ value: e.id, label: e.name }))} placeholder="Select event…" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Type</label>
-              <Select value={editForm.type} onChange={editField('type')} options={typeOpts} placeholder="Select type…" />
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Status</label>
-              <Select value={editForm.status} onChange={editField('status')} options={statusOpts} />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Priority</label>
-              <Select value={editForm.priority} onChange={editField('priority')} options={priorityOpts} />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Value (€)</label>
-              <Input type="number" value={editForm.estimated_value} onChange={editField('estimated_value')} placeholder="0" />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Follow-up</label>
-            <Input value={editForm.follow_up} onChange={editField('follow_up')} placeholder="What needs to happen next?" />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Notes</label>
-            <Textarea value={editForm.notes} onChange={editField('notes')} rows={2} placeholder="Context, details…" />
-          </div>
-          <div className="flex gap-3 pt-1">
-            <Button type="button" variant="secondary" onClick={() => setEditOpp(null)} className="flex-1">Cancel</Button>
-            <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : 'Save Changes'}</Button>
+            <Button type="submit" disabled={saving || !form.name.trim()} className="flex-1">
+              {saving ? 'Saving…' : 'Add Opportunity'}
+            </Button>
           </div>
         </form>
       </Modal>

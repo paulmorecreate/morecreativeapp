@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Scissors, Camera, Building2, Users2, Receipt } from 'lucide-react'
+import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Scissors, Camera, Building2, Users2, Receipt, Handshake } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { UserRole } from '@/lib/supabase/types'
@@ -52,7 +52,7 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
     router.refresh()
   }
 
-  function NavLink({ href, label, icon: Icon }: { href: string; label: string; icon: React.ElementType }) {
+  function NavLink({ href, label, icon: Icon, indent }: { href: string; label: string; icon: React.ElementType; indent?: boolean }) {
     const active = pathname === href ||
       (href !== '/dashboard' && pathname.startsWith(href)) ||
       (href === '/agencies' && pathname.startsWith('/agents'))
@@ -61,7 +61,8 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
         href={href}
         onClick={onClose}
         className={cn(
-          'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all',
+          'flex items-center gap-2.5 py-2 rounded-lg text-sm transition-all',
+          indent ? 'pl-7 pr-3' : 'px-3',
           active
             ? 'bg-white/10 text-white font-medium'
             : 'text-zinc-400 hover:text-white hover:bg-white/5'
@@ -85,6 +86,7 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
       <nav className="flex-1 px-2 py-3 overflow-y-auto">
         <div className="space-y-0.5">
           {primaryNav.map(item => <NavLink key={item.href} {...item} />)}
+          <NavLink href="/opportunities" label="Opportunities" icon={Handshake} />
           {(userRole === 'admin' || userRole === 'finance') && (
             <NavLink href="/finance" label="Finance" icon={Receipt} />
           )}

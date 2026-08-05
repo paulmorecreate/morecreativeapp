@@ -2,8 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { ProjectDetailClient } from './client'
 
-export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export default async function ProjectPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> }) {
+  const [{ id }, { tab: tabParam }] = await Promise.all([params, searchParams])
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -21,6 +21,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     { data: stylists },
     { data: projectTalents },
     { data: invoices },
+    { data: income },
+    { data: expenses },
+    { data: expenseCategories },
+    { data: currencyRates },
   ] = await Promise.all([
     supabase.from('events').select('*').eq('id', id).single(),
     supabase.from('talents').select('id, name').order('name'),
@@ -38,6 +42,14 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     canViewFinance
       ? supabase.from('invoices').select('*').eq('project_id', id).order('created_at', { ascending: false })
       : Promise.resolve({ data: [] }),
+    canViewFinance
+      ? supabase.from('project_income').select('*').eq('project_id', id).order('created_at')
+      : Promise.resolve({ data: [] }),
+    canViewFinance
+      ? supabase.from('project_expenses').select('*').eq('project_id', id).order('created_at')
+      : Promise.resolve({ data: [] }),
+    supabase.from('expense_categories').select('*').order('name'),
+    supabase.from('currency_rates').select('*').order('currency'),
   ])
 
   if (!project) notFound()
@@ -52,7 +64,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       stylists={stylists ?? []}
       projectTalents={(projectTalents ?? []) as any}
       invoices={(invoices ?? []) as any}
+      income={(income ?? []) as any}
+      expenses={(expenses ?? []) as any}
+      expenseCategories={expenseCategories ?? []}
+      currencyRates={currencyRates ?? []}
       canViewFinance={canViewFinance}
+      initialTab={tabParam === 'finance' ? 'finance' : 'overview'}
     />
   )
 }

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag, Trash2, X, CheckCircle2, Circle, CheckCheck, AlertTriangle, Receipt, GripVertical, Loader2 } from 'lucide-react'
-import { Event, ProjectCategory, Invoice } from '@/lib/supabase/types'
+import { Event, ProjectCategory, Invoice, ProjectIncome, ProjectExpense, ExpenseCategory, CurrencyRate } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -88,7 +88,12 @@ type Props = {
   stylists: SimpleRecord[]
   projectTalents: ProjectTalent[]
   invoices: Invoice[]
+  income: ProjectIncome[]
+  expenses: ProjectExpense[]
+  expenseCategories: ExpenseCategory[]
+  currencyRates: CurrencyRate[]
   canViewFinance: boolean
+  initialTab?: 'overview' | 'finance'
 }
 
 const EMPTY_TALENT_FORM = {
@@ -101,24 +106,117 @@ const EMPTY_TALENT_FORM = {
   notes: '',
 }
 
-const CURRENCY_SYMBOL: Record<string, string> = { AED: 'AED ', EUR: '€', USD: '$' }
-const STATUS_BADGE: Record<string, string> = {
+const CURRENCY_SYMBOL: Record<string, string> = { AED: 'AED ', EUR: '€', USD: '$', GBP: '£' }
+const INVOICE_STATUS_BADGE: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-600',
   sent: 'bg-blue-50 text-blue-700',
   paid: 'bg-green-50 text-green-700',
 }
+const INCOME_STATUS_BADGE: Record<string, string> = {
+  pending: 'bg-amber-50 text-amber-700',
+  invoiced: 'bg-green-50 text-green-700',
+}
+const INCOME_TYPES = [
+  { value: 'commission', label: 'Commission' },
+  { value: 'talent_fee', label: 'Talent Fee' },
+  { value: 'placement_fee', label: 'Placement Fee' },
+  { value: 'other', label: 'Other' },
+]
+const CURRENCIES = ['AED', 'EUR', 'USD', 'GBP']
 
 function fmtAmount(currency: string, amount: number) {
   return `${CURRENCY_SYMBOL[currency] ?? ''}${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
 }
 
-function ProjectFinanceTab({ projectId, invoices: initial }: { projectId: string; invoices: Invoice[] }) {
+function toAED(amount: number, currency: string, rates: CurrencyRate[]): number {
+  const rate = rates.find(r => r.currency === currency)?.rate_to_aed ?? 1
+  return amount * rate
+}
+
+function PLSummary({ income, expenses, rates }: { income: ProjectIncome[]; expenses: ProjectExpense[]; rates: CurrencyRate[] }) {
+  const totalIncomeAED = income.reduce((s, i) => s + toAED(i.amount, i.currency, rates), 0)
+  const totalExpensesAED = expenses.reduce((s, e) => s + toAED(e.amount, e.currency, rates), 0)
+  const grossProfit = totalIncomeAED - totalExpensesAED
+  const commissionAED = income
+    .filter(i => i.type === 'commission')
+    .reduce((s, i) => s + toAED(i.amount, i.currency, rates), 0)
+
+  const cards = [
+    { label: 'Total Income', value: totalIncomeAED, color: 'text-gray-900' },
+    { label: 'Total Expenses', value: totalExpensesAED, color: 'text-gray-900' },
+    { label: 'Gross Profit', value: grossProfit, color: grossProfit >= 0 ? 'text-green-600' : 'text-red-600' },
+    { label: 'MC Commission', value: commissionAED, color: 'text-gray-900' },
+  ]
+
+  return (
+    <div className="grid grid-cols-4 gap-3 mb-6">
+      {cards.map(c => (
+        <div key={c.label} className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+          <p className="text-xs text-gray-400 mb-1">{c.label}</p>
+          <p className={cn('text-lg font-semibold', c.color)}>
+            AED {c.value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          </p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ProjectFinanceTab({
+  projectId,
+  invoices: initialInvoices,
+  income: initialIncome,
+  expenses: initialExpenses,
+  expenseCategories,
+  currencyRates,
+}: {
+  projectId: string
+  invoices: Invoice[]
+  income: ProjectIncome[]
+  expenses: ProjectExpense[]
+  expenseCategories: ExpenseCategory[]
+  currencyRates: CurrencyRate[]
+}) {
   const router = useRouter()
   const supabase = createClient()
-  const [invoices, setInvoices] = useState<Invoice[]>(initial)
   const [creating, setCreating] = useState(false)
 
-  async function handleNew() {
+  // Add income
+  const [addIncomeOpen, setAddIncomeOpen] = useState(false)
+  const [incomeSaving, setIncomeSaving] = useState(false)
+  const [incomeForm, setIncomeForm] = useState({ description: '', type: 'commission', amount: '', currency: 'AED', status: 'pending', date: '' })
+
+  // Edit income
+  const [editIncome, setEditIncome] = useState<ProjectIncome | null>(null)
+  const [editIncomeForm, setEditIncomeForm] = useState({ description: '', type: 'commission', amount: '', currency: 'AED', status: 'pending', date: '' })
+  const [editIncomeSaving, setEditIncomeSaving] = useState(false)
+
+  // Add expense
+  const [addExpenseOpen, setAddExpenseOpen] = useState(false)
+  const [expenseSaving, setExpenseSaving] = useState(false)
+  const [expenseForm, setExpenseForm] = useState({ description: '', category: '', newCategory: '', amount: '', currency: 'AED', date: '' })
+
+  // Edit expense
+  const [editExpense, setEditExpense] = useState<ProjectExpense | null>(null)
+  const [editExpenseForm, setEditExpenseForm] = useState({ description: '', category: '', newCategory: '', amount: '', currency: 'AED', date: '' })
+  const [editExpenseSaving, setEditExpenseSaving] = useState(false)
+
+  // Delete confirmation
+  type DeleteTarget = { table: 'project_income' | 'project_expenses' | 'invoices'; id: string; label: string; amount: string }
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  function openEditIncome(inc: ProjectIncome) {
+    setEditIncomeForm({ description: inc.description, type: inc.type, amount: String(inc.amount), currency: inc.currency, status: inc.status, date: inc.date ?? '' })
+    setEditIncome(inc)
+  }
+
+  function openEditExpense(exp: ProjectExpense) {
+    setEditExpenseForm({ description: exp.description, category: exp.category, newCategory: '', amount: String(exp.amount), currency: exp.currency, date: exp.date ?? '' })
+    setEditExpense(exp)
+  }
+
+  async function handleNewInvoice() {
     setCreating(true)
     const year = new Date().getFullYear()
     const { data: last } = await supabase
@@ -128,59 +226,287 @@ function ProjectFinanceTab({ projectId, invoices: initial }: { projectId: string
       .order('invoice_number', { ascending: false })
       .limit(1)
       .single()
-
     let seq = 1
     if (last?.invoice_number) {
       const parts = last.invoice_number.split('-')
       seq = (parseInt(parts[1] ?? '0', 10) || 0) + 1
     }
     const invoice_number = `${year}-${String(seq).padStart(4, '0')}`
-
     const { data: inv, error } = await supabase
       .from('invoices')
       .insert({ invoice_number, project_id: projectId, status: 'draft' })
       .select()
       .single()
-
     setCreating(false)
     if (!error && inv) router.push(`/finance/${inv.id}`)
   }
 
+  async function handleAddIncome(e: React.FormEvent) {
+    e.preventDefault()
+    if (!incomeForm.description.trim() || !incomeForm.amount) return
+    setIncomeSaving(true)
+    await supabase.from('project_income').insert({
+      project_id: projectId,
+      description: incomeForm.description.trim(),
+      type: incomeForm.type,
+      amount: parseFloat(incomeForm.amount),
+      currency: incomeForm.currency,
+      status: incomeForm.status,
+      date: incomeForm.date || null,
+    })
+    setIncomeSaving(false)
+    setAddIncomeOpen(false)
+    setIncomeForm({ description: '', type: 'commission', amount: '', currency: 'AED', status: 'pending', date: '' })
+    router.refresh()
+  }
+
+  async function handleEditIncome(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editIncome || !editIncomeForm.description.trim() || !editIncomeForm.amount) return
+    setEditIncomeSaving(true)
+    await supabase.from('project_income').update({
+      description: editIncomeForm.description.trim(),
+      type: editIncomeForm.type,
+      amount: parseFloat(editIncomeForm.amount),
+      currency: editIncomeForm.currency,
+      status: editIncomeForm.status,
+      date: editIncomeForm.date || null,
+    }).eq('id', editIncome.id)
+    setEditIncomeSaving(false)
+    setEditIncome(null)
+    router.refresh()
+  }
+
+  async function handleAddExpense(e: React.FormEvent) {
+    e.preventDefault()
+    if (!expenseForm.description.trim() || !expenseForm.amount) return
+    setExpenseSaving(true)
+    let category = expenseForm.category
+    if (category === '__new__' && expenseForm.newCategory.trim()) {
+      const { data: newCat } = await supabase
+        .from('expense_categories')
+        .insert({ name: expenseForm.newCategory.trim() })
+        .select()
+        .single()
+      category = newCat?.name ?? expenseForm.newCategory.trim()
+    }
+    await supabase.from('project_expenses').insert({
+      project_id: projectId,
+      description: expenseForm.description.trim(),
+      category,
+      amount: parseFloat(expenseForm.amount),
+      currency: expenseForm.currency,
+      date: expenseForm.date || null,
+    })
+    setExpenseSaving(false)
+    setAddExpenseOpen(false)
+    setExpenseForm({ description: '', category: '', newCategory: '', amount: '', currency: 'AED', date: '' })
+    router.refresh()
+  }
+
+  async function handleEditExpense(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editExpense || !editExpenseForm.description.trim() || !editExpenseForm.amount) return
+    setEditExpenseSaving(true)
+    let category = editExpenseForm.category
+    if (category === '__new__' && editExpenseForm.newCategory.trim()) {
+      const { data: newCat } = await supabase
+        .from('expense_categories')
+        .insert({ name: editExpenseForm.newCategory.trim() })
+        .select()
+        .single()
+      category = newCat?.name ?? editExpenseForm.newCategory.trim()
+    }
+    await supabase.from('project_expenses').update({
+      description: editExpenseForm.description.trim(),
+      category,
+      amount: parseFloat(editExpenseForm.amount),
+      currency: editExpenseForm.currency,
+      date: editExpenseForm.date || null,
+    }).eq('id', editExpense.id)
+    setEditExpenseSaving(false)
+    setEditExpense(null)
+    router.refresh()
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    await supabase.from(deleteTarget.table).delete().eq('id', deleteTarget.id)
+    setDeleting(false)
+    setDeleteTarget(null)
+    router.refresh()
+  }
+
+  async function updateIncomeStatus(id: string, status: string) {
+    await supabase.from('project_income').update({ status }).eq('id', id)
+    router.refresh()
+  }
+
+  const categoryOptions = [
+    ...expenseCategories.map(c => ({ value: c.name, label: c.name })),
+    { value: '__new__', label: '+ Add new category…' },
+  ]
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-500">{invoices.length} invoice{invoices.length !== 1 ? 's' : ''}</p>
-        <Button variant="secondary" onClick={handleNew} disabled={creating}>
-          <Plus className="w-3.5 h-3.5" />
-          {creating ? 'Creating…' : 'New Invoice'}
-        </Button>
-      </div>
-      {invoices.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 px-5 py-10 text-center">
-          <Receipt className="w-8 h-8 text-gray-200 mx-auto mb-3" />
-          <p className="text-sm text-gray-400">No invoices for this project yet.</p>
+    <div className="space-y-6">
+      <PLSummary income={initialIncome} expenses={initialExpenses} rates={currencyRates} />
+
+      {/* Income */}
+      <div className="bg-white rounded-xl border border-gray-200">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="text-sm font-semibold text-gray-900">Income</h3>
+          <button onClick={() => setAddIncomeOpen(true)} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700">
+            <Plus className="w-3 h-3" /> Add
+          </button>
         </div>
-      ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        {initialIncome.length === 0 ? (
+          <p className="px-5 py-4 text-sm text-gray-400">No income recorded yet.</p>
+        ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100">
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Invoice #</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Billed To</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Due Date</th>
-                <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Amount Due</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
+              <tr className="border-b border-gray-50 bg-gray-50/50">
+                <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-400">Description</th>
+                <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-400">Type</th>
+                <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-400">Date</th>
+                <th className="px-5 py-2.5 text-right text-xs font-medium text-gray-400">Amount</th>
+                <th className="px-5 py-2.5 text-right text-xs font-medium text-gray-400">AED equiv.</th>
+                <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-400">Status</th>
+                <th className="px-2 py-2.5 w-16" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {invoices.map(inv => {
-                const subtotal = 0 // line items not fetched here — show total from stored data
-                return (
-                  <tr
-                    key={inv.id}
-                    onClick={() => router.push(`/finance/${inv.id}`)}
-                    className="hover:bg-gray-50 cursor-pointer transition-colors"
-                  >
+              {initialIncome.map(inc => (
+                <tr key={inc.id} className="group">
+                  <td className="px-5 py-3 text-gray-900">{inc.description}</td>
+                  <td className="px-5 py-3 text-gray-500 text-xs">
+                    {INCOME_TYPES.find(t => t.value === inc.type)?.label ?? inc.type}
+                  </td>
+                  <td className="px-5 py-3 text-gray-500 text-xs">
+                    {inc.date ? new Date(inc.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-5 py-3 text-right font-medium text-gray-900">{fmtAmount(inc.currency, inc.amount)}</td>
+                  <td className="px-5 py-3 text-right text-gray-400 text-xs">
+                    {inc.currency !== 'AED'
+                      ? `AED ${toAED(inc.amount, inc.currency, currencyRates).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+                      : '—'}
+                  </td>
+                  <td className="px-5 py-3">
+                    <select
+                      value={inc.status}
+                      onChange={e => updateIncomeStatus(inc.id, e.target.value)}
+                      className={cn('text-xs font-medium px-2 py-0.5 rounded-full border-0 focus:outline-none cursor-pointer', INCOME_STATUS_BADGE[inc.status] ?? 'bg-gray-100 text-gray-600')}
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="invoiced">Invoiced</option>
+                    </select>
+                  </td>
+                  <td className="px-2 py-3">
+                    <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
+                      <button onClick={() => openEditIncome(inc)} className="text-gray-300 hover:text-gray-600">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteTarget({ table: 'project_income', id: inc.id, label: inc.description, amount: fmtAmount(inc.currency, inc.amount) })}
+                        className="text-gray-300 hover:text-red-500"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Expenses */}
+      <div className="bg-white rounded-xl border border-gray-200">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="text-sm font-semibold text-gray-900">Expenses</h3>
+          <button onClick={() => setAddExpenseOpen(true)} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700">
+            <Plus className="w-3 h-3" /> Add
+          </button>
+        </div>
+        {initialExpenses.length === 0 ? (
+          <p className="px-5 py-4 text-sm text-gray-400">No expenses recorded yet.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-50 bg-gray-50/50">
+                <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-400">Description</th>
+                <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-400">Category</th>
+                <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-400">Date</th>
+                <th className="px-5 py-2.5 text-right text-xs font-medium text-gray-400">Amount</th>
+                <th className="px-5 py-2.5 text-right text-xs font-medium text-gray-400">AED equiv.</th>
+                <th className="px-2 py-2.5 w-16" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {initialExpenses.map(exp => (
+                <tr key={exp.id} className="group">
+                  <td className="px-5 py-3 text-gray-900">{exp.description}</td>
+                  <td className="px-5 py-3 text-gray-500 text-xs">{exp.category}</td>
+                  <td className="px-5 py-3 text-gray-500 text-xs">
+                    {exp.date ? new Date(exp.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-5 py-3 text-right font-medium text-gray-900">{fmtAmount(exp.currency, exp.amount)}</td>
+                  <td className="px-5 py-3 text-right text-gray-400 text-xs">
+                    {exp.currency !== 'AED'
+                      ? `AED ${toAED(exp.amount, exp.currency, currencyRates).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+                      : '—'}
+                  </td>
+                  <td className="px-2 py-3">
+                    <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
+                      <button onClick={() => openEditExpense(exp)} className="text-gray-300 hover:text-gray-600">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteTarget({ table: 'project_expenses', id: exp.id, label: exp.description, amount: fmtAmount(exp.currency, exp.amount) })}
+                        className="text-gray-300 hover:text-red-500"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Invoices */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-900">Invoices</h3>
+          <Button variant="secondary" onClick={handleNewInvoice} disabled={creating}>
+            <Plus className="w-3.5 h-3.5" />
+            {creating ? 'Creating…' : 'New Invoice'}
+          </Button>
+        </div>
+        {initialInvoices.length === 0 ? (
+          <div className="bg-white rounded-xl border border-gray-200 px-5 py-8 text-center">
+            <Receipt className="w-7 h-7 text-gray-200 mx-auto mb-2" />
+            <p className="text-sm text-gray-400">No invoices for this project yet.</p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Invoice #</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Billed To</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Due Date</th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Currency</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
+                  <th className="px-3 py-3 w-10" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {initialInvoices.map(inv => (
+                  <tr key={inv.id} onClick={() => router.push(`/finance/${inv.id}`)} className="hover:bg-gray-50 cursor-pointer transition-colors group">
                     <td className="px-5 py-3 font-medium text-gray-900">{inv.invoice_number}</td>
                     <td className="px-5 py-3 text-gray-700">
                       {inv.billed_to_name ?? <span className="text-gray-300">—</span>}
@@ -189,30 +515,215 @@ function ProjectFinanceTab({ projectId, invoices: initial }: { projectId: string
                     <td className="px-5 py-3 text-gray-500">
                       {inv.due_date ? new Date(inv.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                     </td>
-                    <td className="px-5 py-3 text-right font-medium text-gray-900">
-                      {inv.currency}
-                    </td>
+                    <td className="px-5 py-3 text-right font-medium text-gray-500">{inv.currency}</td>
                     <td className="px-5 py-3">
-                      <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', STATUS_BADGE[inv.status] ?? '')}>
+                      <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', INVOICE_STATUS_BADGE[inv.status] ?? '')}>
                         {inv.status}
                       </span>
                     </td>
+                    <td className="px-3 py-3">
+                      <button
+                        onClick={e => { e.stopPropagation(); setDeleteTarget({ table: 'invoices', id: inv.id, label: inv.invoice_number, amount: inv.billed_to_name ?? '' }) }}
+                        className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
                   </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Add Income modal */}
+      <Modal open={addIncomeOpen} onClose={() => setAddIncomeOpen(false)} title="Add Income">
+        <form onSubmit={handleAddIncome} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Description *</label>
+            <Input value={incomeForm.description} onChange={e => setIncomeForm(f => ({ ...f, description: e.target.value }))} placeholder="e.g. Sara Sampaio — Manokhi commission" required />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Type</label>
+              <Select value={incomeForm.type} onChange={e => setIncomeForm(f => ({ ...f, type: e.target.value }))} options={INCOME_TYPES} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Status</label>
+              <Select value={incomeForm.status} onChange={e => setIncomeForm(f => ({ ...f, status: e.target.value }))} options={[{ value: 'pending', label: 'Pending' }, { value: 'invoiced', label: 'Invoiced' }]} />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Amount *</label>
+              <Input type="number" value={incomeForm.amount} onChange={e => setIncomeForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" required />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Currency</label>
+              <Select value={incomeForm.currency} onChange={e => setIncomeForm(f => ({ ...f, currency: e.target.value }))} options={CURRENCIES.map(c => ({ value: c, label: c }))} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Date</label>
+              <Input type="date" value={incomeForm.date} onChange={e => setIncomeForm(f => ({ ...f, date: e.target.value }))} />
+            </div>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setAddIncomeOpen(false)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={incomeSaving || !incomeForm.description.trim() || !incomeForm.amount} className="flex-1">{incomeSaving ? 'Saving…' : 'Add Income'}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Income modal */}
+      <Modal open={!!editIncome} onClose={() => setEditIncome(null)} title="Edit Income">
+        <form onSubmit={handleEditIncome} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Description *</label>
+            <Input value={editIncomeForm.description} onChange={e => setEditIncomeForm(f => ({ ...f, description: e.target.value }))} required />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Type</label>
+              <Select value={editIncomeForm.type} onChange={e => setEditIncomeForm(f => ({ ...f, type: e.target.value }))} options={INCOME_TYPES} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Status</label>
+              <Select value={editIncomeForm.status} onChange={e => setEditIncomeForm(f => ({ ...f, status: e.target.value }))} options={[{ value: 'pending', label: 'Pending' }, { value: 'invoiced', label: 'Invoiced' }]} />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Amount *</label>
+              <Input type="number" value={editIncomeForm.amount} onChange={e => setEditIncomeForm(f => ({ ...f, amount: e.target.value }))} required />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Currency</label>
+              <Select value={editIncomeForm.currency} onChange={e => setEditIncomeForm(f => ({ ...f, currency: e.target.value }))} options={CURRENCIES.map(c => ({ value: c, label: c }))} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Date</label>
+              <Input type="date" value={editIncomeForm.date} onChange={e => setEditIncomeForm(f => ({ ...f, date: e.target.value }))} />
+            </div>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setEditIncome(null)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={editIncomeSaving || !editIncomeForm.description.trim() || !editIncomeForm.amount} className="flex-1">{editIncomeSaving ? 'Saving…' : 'Save Changes'}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Add Expense modal */}
+      <Modal open={addExpenseOpen} onClose={() => setAddExpenseOpen(false)} title="Add Expense">
+        <form onSubmit={handleAddExpense} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Description *</label>
+            <Input value={expenseForm.description} onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))} placeholder="e.g. Business class flights LHR → OTP" required />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Category *</label>
+            <Select value={expenseForm.category} onChange={e => setExpenseForm(f => ({ ...f, category: e.target.value, newCategory: '' }))} options={categoryOptions} placeholder="Select category…" />
+          </div>
+          {expenseForm.category === '__new__' && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">New category name *</label>
+              <Input value={expenseForm.newCategory} onChange={e => setExpenseForm(f => ({ ...f, newCategory: e.target.value }))} placeholder="e.g. Venue Hire" autoFocus />
+            </div>
+          )}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Amount *</label>
+              <Input type="number" value={expenseForm.amount} onChange={e => setExpenseForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" required />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Currency</label>
+              <Select value={expenseForm.currency} onChange={e => setExpenseForm(f => ({ ...f, currency: e.target.value }))} options={CURRENCIES.map(c => ({ value: c, label: c }))} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Date</label>
+              <Input type="date" value={expenseForm.date} onChange={e => setExpenseForm(f => ({ ...f, date: e.target.value }))} />
+            </div>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setAddExpenseOpen(false)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={expenseSaving || !expenseForm.description.trim() || !expenseForm.amount || !expenseForm.category || (expenseForm.category === '__new__' && !expenseForm.newCategory.trim())} className="flex-1">{expenseSaving ? 'Saving…' : 'Add Expense'}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Expense modal */}
+      <Modal open={!!editExpense} onClose={() => setEditExpense(null)} title="Edit Expense">
+        <form onSubmit={handleEditExpense} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Description *</label>
+            <Input value={editExpenseForm.description} onChange={e => setEditExpenseForm(f => ({ ...f, description: e.target.value }))} required />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Category *</label>
+            <Select value={editExpenseForm.category} onChange={e => setEditExpenseForm(f => ({ ...f, category: e.target.value, newCategory: '' }))} options={categoryOptions} />
+          </div>
+          {editExpenseForm.category === '__new__' && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">New category name *</label>
+              <Input value={editExpenseForm.newCategory} onChange={e => setEditExpenseForm(f => ({ ...f, newCategory: e.target.value }))} placeholder="e.g. Venue Hire" autoFocus />
+            </div>
+          )}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Amount *</label>
+              <Input type="number" value={editExpenseForm.amount} onChange={e => setEditExpenseForm(f => ({ ...f, amount: e.target.value }))} required />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Currency</label>
+              <Select value={editExpenseForm.currency} onChange={e => setEditExpenseForm(f => ({ ...f, currency: e.target.value }))} options={CURRENCIES.map(c => ({ value: c, label: c }))} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Date</label>
+              <Input type="date" value={editExpenseForm.date} onChange={e => setEditExpenseForm(f => ({ ...f, date: e.target.value }))} />
+            </div>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setEditExpense(null)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={editExpenseSaving || !editExpenseForm.description.trim() || !editExpenseForm.amount || !editExpenseForm.category || (editExpenseForm.category === '__new__' && !editExpenseForm.newCategory.trim())} className="flex-1">{editExpenseSaving ? 'Saving…' : 'Save Changes'}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Delete confirmation modal */}
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete entry?">
+        {deleteTarget && (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-red-50 border border-red-100 px-4 py-3">
+              <p className="text-sm font-medium text-red-800">{deleteTarget.label}</p>
+              <p className="text-sm text-red-600 mt-0.5">{deleteTarget.amount}</p>
+            </div>
+            <p className="text-sm text-gray-600">
+              {deleteTarget.table === 'invoices'
+                ? 'This will permanently delete the invoice and all its line items. This cannot be undone.'
+                : `This will permanently remove this ${deleteTarget.table === 'project_income' ? 'income line' : 'expense'} and update the P&L totals. This cannot be undone.`}
+            </p>
+            <div className="flex gap-3 pt-1">
+              <Button type="button" variant="secondary" onClick={() => setDeleteTarget(null)} className="flex-1">Cancel</Button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={deleting}
+                className="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {deleting ? 'Deleting…' : 'Yes, delete it'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
 
-export function ProjectDetailClient({ project, talents, brands, categories, brandShows, stylists, projectTalents, invoices, canViewFinance }: Props) {
+export function ProjectDetailClient({ project, talents, brands, categories, brandShows, stylists, projectTalents, invoices, income, expenses, expenseCategories, currencyRates, canViewFinance, initialTab = 'overview' }: Props) {
   const router = useRouter()
 
   // Tab
-  const [tab, setTab] = useState<'overview' | 'finance'>('overview')
+  const [tab, setTab] = useState<'overview' | 'finance'>(initialTab)
 
   // Project edit
   const [open, setOpen] = useState(false)
@@ -268,6 +779,13 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   async function handleDeleteProject() {
     setDeletingProject(true)
     const supabase = createClient()
+    const { data: invRows } = await supabase.from('invoices').select('id').eq('project_id', project.id)
+    if (invRows?.length) {
+      await supabase.from('invoice_line_items').delete().in('invoice_id', invRows.map(i => i.id))
+      await supabase.from('invoices').delete().eq('project_id', project.id)
+    }
+    await supabase.from('project_income').delete().eq('project_id', project.id)
+    await supabase.from('project_expenses').delete().eq('project_id', project.id)
     await supabase.from('events').delete().eq('id', project.id)
     router.push('/projects')
   }
@@ -484,7 +1002,14 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
       )}
 
       {tab === 'finance' && canViewFinance && (
-        <ProjectFinanceTab projectId={project.id} invoices={invoices} />
+        <ProjectFinanceTab
+          projectId={project.id}
+          invoices={invoices}
+          income={income}
+          expenses={expenses}
+          expenseCategories={expenseCategories}
+          currencyRates={currencyRates}
+        />
       )}
 
       {(tab === 'overview' || !canViewFinance) && (
@@ -791,7 +1316,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
           <div className="flex items-start gap-3 p-4 bg-red-50 rounded-lg border border-red-100">
             <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
             <p className="text-sm text-red-700">
-              This will permanently delete <strong>{project.name}</strong> and all associated brand shows and talent entries. This cannot be undone.
+              This will permanently delete <strong>{project.name}</strong> and all associated brand shows, talent entries, invoices, income, and expense records. This cannot be undone.
             </p>
           </div>
           <div className="flex gap-3">

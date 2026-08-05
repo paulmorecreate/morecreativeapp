@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2, KeyRound, X } from 'lucide-react'
-import { ProjectCategory, Industry, AgentType, TalentCategory, BrandCategory, TalentLevel, InvoiceSettings, UserRole } from '@/lib/supabase/types'
+import { ProjectCategory, Industry, AgentType, TalentCategory, BrandCategory, TalentLevel, InvoiceSettings, UserRole, ExpenseCategory, CurrencyRate } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { createClient } from '@/lib/supabase/client'
@@ -16,6 +16,8 @@ type Props = {
   brandCategories: BrandCategory[]
   talentLevels: TalentLevel[]
   invoiceSettings: InvoiceSettings | null
+  expenseCategories: ExpenseCategory[]
+  currencyRates: CurrencyRate[]
   isAdmin: boolean
 }
 
@@ -451,7 +453,7 @@ function StaticList({
   )
 }
 
-export function AdminClient({ categories, industries, agentTypes, talentCategories, brandCategories, talentLevels, invoiceSettings, isAdmin }: Props) {
+export function AdminClient({ categories, industries, agentTypes, talentCategories, brandCategories, talentLevels, invoiceSettings, expenseCategories, currencyRates, isAdmin }: Props) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -509,6 +511,15 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
     router.refresh()
   }
 
+  async function addExpenseCategory(name: string) {
+    await supabase.from('expense_categories').insert({ name })
+    router.refresh()
+  }
+  async function deleteExpenseCategory(id: string) {
+    await supabase.from('expense_categories').delete().eq('id', id)
+    router.refresh()
+  }
+
   return (
     <div>
       <div className="mb-6">
@@ -560,8 +571,73 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
           onAdd={addTalentLevel}
           onDelete={deleteTalentLevel}
         />
+        <StaticList
+          title="Expense Categories"
+          description="Appear in the Category dropdown when logging project expenses."
+          items={expenseCategories}
+          onAdd={addExpenseCategory}
+          onDelete={deleteExpenseCategory}
+        />
+        <CurrencyRatesPanel rates={currencyRates} />
         <InvoiceSettingsPanel settings={invoiceSettings} />
       </div>
+    </div>
+  )
+}
+
+function CurrencyRatesPanel({ rates: initial }: { rates: CurrencyRate[] }) {
+  const router = useRouter()
+  const supabase = createClient()
+  const [rates, setRates] = useState<Record<string, string>>(
+    Object.fromEntries(initial.map(r => [r.currency, String(r.rate_to_aed)]))
+  )
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    await Promise.all(
+      Object.entries(rates).map(([currency, rate]) =>
+        supabase
+          .from('currency_rates')
+          .update({ rate_to_aed: parseFloat(rate) || 1, updated_at: new Date().toISOString() })
+          .eq('currency', currency)
+      )
+    )
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+    router.refresh()
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200">
+      <div className="px-5 py-4 border-b border-gray-100">
+        <h2 className="text-sm font-semibold text-gray-900">Currency Rates → AED</h2>
+        <p className="text-xs text-gray-400 mt-0.5">Used to convert income and expenses to AED in the project P&L</p>
+      </div>
+      <form onSubmit={handleSave} className="p-5 space-y-3">
+        {initial.filter(r => r.currency !== 'AED').map(r => (
+          <div key={r.currency} className="flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700 w-10">1 {r.currency}</span>
+            <span className="text-sm text-gray-400">=</span>
+            <Input
+              type="number"
+              step="0.0001"
+              value={rates[r.currency] ?? ''}
+              onChange={e => setRates(prev => ({ ...prev, [r.currency]: e.target.value }))}
+              className="w-28"
+            />
+            <span className="text-sm text-gray-400">AED</span>
+          </div>
+        ))}
+        <div className="flex justify-end pt-2">
+          <Button type="submit" disabled={saving}>
+            {saving ? 'Saving…' : saved ? 'Saved!' : 'Save Rates'}
+          </Button>
+        </div>
+      </form>
     </div>
   )
 }

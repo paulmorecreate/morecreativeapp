@@ -10,7 +10,17 @@ export default async function AdminPage() {
     : { data: null }
   const isAdmin = currentProfile?.role === 'admin'
 
-  const [{ data: categories }, { data: industries }, { data: agentTypes }, { data: talentCategories }, { data: brandCategories }, { data: talentLevels }, { data: invoiceSettings }] = await Promise.all([
+  const [
+    { data: categories },
+    { data: industries },
+    { data: agentTypes },
+    { data: talentCategories },
+    { data: brandCategories },
+    { data: talentLevels },
+    { data: invoiceSettings },
+    { data: expenseCategories },
+    { data: currencyRates },
+  ] = await Promise.all([
     supabase.from('project_categories').select('*').order('name'),
     supabase.from('industries').select('*').order('name'),
     supabase.from('agent_types').select('*').order('name'),
@@ -18,6 +28,8 @@ export default async function AdminPage() {
     supabase.from('brand_categories').select('*').order('name'),
     supabase.from('talent_levels').select('*').order('name'),
     supabase.from('invoice_settings').select('*').limit(1).single(),
+    supabase.from('expense_categories').select('*').order('name'),
+    supabase.from('currency_rates').select('*').order('currency'),
   ])
 
   return (
@@ -29,6 +41,8 @@ export default async function AdminPage() {
       brandCategories={brandCategories ?? []}
       talentLevels={talentLevels ?? []}
       invoiceSettings={invoiceSettings ?? null}
+      expenseCategories={expenseCategories ?? []}
+      currencyRates={currencyRates ?? []}
       isAdmin={isAdmin}
     />
   )

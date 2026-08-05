@@ -6,30 +6,41 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
   const { id } = await params
   const supabase = await createClient()
 
-  const [{ data: opp }, { data: conversations }, { data: talents }, { data: brands }, { data: events }] = await Promise.all([
-    supabase.from('opportunities')
-      .select('*, talent:talents(*), brand:brands(id,name,link), event:events(id,name)')
-      .eq('id', id)
-      .single(),
-    supabase.from('conversations')
+  const [
+    { data: opp },
+    { data: oppTalents },
+    { data: contacts },
+    { data: blockers },
+    { data: talents },
+  ] = await Promise.all([
+    supabase.from('opportunities').select('*').eq('id', id).single(),
+    supabase
+      .from('opportunity_talents')
+      .select('*, talent:talents(id, name, ig_link, ig_followers)')
+      .eq('opportunity_id', id)
+      .order('created_at'),
+    supabase
+      .from('opportunity_contacts')
       .select('*')
-      .eq('entity_type', 'opportunity')
-      .eq('entity_id', id)
-      .order('created_at', { ascending: false }),
+      .eq('opportunity_id', id)
+      .order('created_at'),
+    supabase
+      .from('opportunity_blockers')
+      .select('*')
+      .eq('opportunity_id', id)
+      .order('created_at'),
     supabase.from('talents').select('id, name').order('name'),
-    supabase.from('brands').select('id, name').order('name'),
-    supabase.from('events').select('id, name').order('name'),
   ])
 
   if (!opp) notFound()
 
   return (
     <OpportunityDetailClient
-      opp={opp as any}
-      conversations={conversations ?? []}
+      opp={opp}
+      oppTalents={oppTalents ?? []}
+      contacts={contacts ?? []}
+      blockers={blockers ?? []}
       talents={talents ?? []}
-      brands={brands ?? []}
-      events={events ?? []}
     />
   )
 }

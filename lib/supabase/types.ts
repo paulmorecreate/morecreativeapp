@@ -78,20 +78,47 @@ export interface Event {
 
 export interface Opportunity {
   id: string
-  talent_id: string | null
-  brand_id: string | null
-  event_id: string | null
-  type: string | null
-  status: string | null
-  estimated_value: number | null
-  priority: string | null
-  follow_up: string | null
+  name: string
+  stage: string
+  mc_role: string
+  consideration_type: string
+  counterpart_name: string | null
+  internal_owner: string | null
+  gross_fee: number | null
+  commission_pct: number
+  event_date: string | null
   notes: string | null
   created_at: string
   updated_at: string
-  talent?: Talent
-  brand?: Brand
-  event?: Event
+}
+
+export interface OpportunityTalent {
+  id: string
+  opportunity_id: string
+  talent_id: string
+  status: string
+  notes: string | null
+  created_at: string
+  talent?: Pick<Talent, 'id' | 'name' | 'ig_link' | 'ig_followers'>
+}
+
+export interface OpportunityContact {
+  id: string
+  opportunity_id: string
+  name: string
+  email: string | null
+  role: string | null
+  company: string | null
+  created_at: string
+}
+
+export interface OpportunityBlocker {
+  id: string
+  opportunity_id: string
+  description: string
+  resolved: boolean
+  due_date: string | null
+  created_at: string
 }
 
 export interface TalentEventDetail {
@@ -290,6 +317,41 @@ export interface Invoice {
   updated_at: string
   line_items?: InvoiceLineItem[]
   project?: { id: string; name: string } | null
+}
+
+export interface ProjectIncome {
+  id: string
+  project_id: string
+  description: string
+  type: string
+  amount: number
+  currency: string
+  status: string
+  date: string | null
+  created_at: string
+}
+
+export interface ProjectExpense {
+  id: string
+  project_id: string
+  description: string
+  category: string
+  amount: number
+  currency: string
+  date: string | null
+  created_at: string
+}
+
+export interface ExpenseCategory {
+  id: string
+  name: string
+  created_at: string
+}
+
+export interface CurrencyRate {
+  currency: string
+  rate_to_aed: number
+  updated_at: string
 }
 
 export type UserRole = 'admin' | 'finance' | 'general'

@@ -130,7 +130,12 @@ export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, sett
   async function handleDelete() {
     setDeleting(true)
     await supabase.from('invoices').delete().eq('id', invoice.id)
-    router.push('/finance')
+    router.push(invoice.project_id ? `/projects/${invoice.project_id}?tab=finance` : '/finance')
+  }
+
+  async function handleSaveAndClose() {
+    await handleSave()
+    router.push(form.project_id ? `/projects/${form.project_id}?tab=finance` : '/finance')
   }
 
   function addLineItem() {
@@ -157,7 +162,7 @@ export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, sett
     <div className="max-w-4xl">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => router.push('/finance')} className="text-gray-400 hover:text-gray-700 transition-colors">
+        <button onClick={() => router.push(form.project_id ? `/projects/${form.project_id}?tab=finance` : '/finance')} className="text-gray-400 hover:text-gray-700 transition-colors">
           <ArrowLeft className="w-4 h-4" />
         </button>
         <div className="flex-1">
@@ -174,6 +179,9 @@ export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, sett
             settings={settings}
             fileName={`${form.invoice_number}.pdf`}
           />
+          <Button variant="secondary" onClick={handleSaveAndClose} disabled={saving}>
+            {saving ? 'Saving…' : 'Save & Close'}
+          </Button>
           <Button onClick={handleSave} disabled={saving}>
             <Save className="w-3.5 h-3.5" />
             {saving ? 'Saving…' : saved ? 'Saved!' : 'Save'}
