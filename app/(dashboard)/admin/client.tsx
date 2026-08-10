@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, KeyRound, X } from 'lucide-react'
+import { Plus, Trash2, KeyRound, X, ChevronDown } from 'lucide-react'
 import { ProjectCategory, Industry, AgentType, TalentCategory, BrandCategory, TalentLevel, InvoiceSettings, UserRole, ExpenseCategory, CurrencyRate } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
-import { Input, Select, Textarea } from '@/components/ui/input'
+import { Input, Textarea } from '@/components/ui/input'
 import { createClient } from '@/lib/supabase/client'
 
 type Props = {
@@ -43,23 +43,25 @@ const USER_COLORS = [
   { label: 'Rose',   value: '#ffe4e6' },
 ]
 
-function Modal({
-  title,
-  onClose,
-  children,
-}: {
-  title: string
-  onClose: () => void
-  children: React.ReactNode
-}) {
+const ROLE_LABELS: Record<UserRole, string> = {
+  admin: 'Admin',
+  finance: 'Finance',
+  general: 'General',
+}
+
+function roleBadgeClass(role: UserRole | null) {
+  if (role === 'admin') return 'bg-gray-900 text-white'
+  if (role === 'finance') return 'bg-blue-50 text-blue-700 border border-blue-100'
+  return 'bg-gray-100 text-gray-500'
+}
+
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700">
-            <X className="w-4 h-4" />
-          </button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X className="w-4 h-4" /></button>
         </div>
         <div className="px-5 py-4">{children}</div>
       </div>
@@ -67,17 +69,12 @@ function Modal({
   )
 }
 
-const ROLE_LABELS: Record<UserRole, string> = {
-  admin: 'Admin',
-  finance: 'Finance',
-  general: 'General',
-}
-
 function UsersSection({ isAdmin }: { isAdmin: boolean }) {
   const [users, setUsers] = useState<AppUser[]>([])
   const [profiles, setProfiles] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [passwordTarget, setPasswordTarget] = useState<AppUser | null>(null)
   const [addForm, setAddForm] = useState({ email: '', password: '' })
@@ -168,11 +165,8 @@ function UsersSection({ isAdmin }: { isAdmin: boolean }) {
     if (!confirm(`Delete ${user.email}? This cannot be undone.`)) return
     const res = await fetch(`/api/admin/users?id=${user.id}`, { method: 'DELETE' })
     const data = await res.json()
-    if (!res.ok) {
-      alert(data.error ?? 'Failed to delete user')
-    } else {
-      loadUsers()
-    }
+    if (!res.ok) alert(data.error ?? 'Failed to delete user')
+    else loadUsers()
   }
 
   async function handleSetPassword(e: React.FormEvent) {
@@ -186,29 +180,21 @@ function UsersSection({ isAdmin }: { isAdmin: boolean }) {
       body: JSON.stringify({ id: passwordTarget.id, password: newPassword }),
     })
     const data = await res.json()
-    if (!res.ok) {
-      setFormError(data.error ?? 'Failed to update password')
-    } else {
-      setPasswordTarget(null)
-      setNewPassword('')
-    }
+    if (!res.ok) setFormError(data.error ?? 'Failed to update password')
+    else { setPasswordTarget(null); setNewPassword('') }
     setSaving(false)
-  }
-
-  function formatDate(iso: string) {
-    return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
   }
 
   if (!isAdmin) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 col-span-2 px-5 py-8 text-center">
+      <div className="bg-white rounded-xl border border-gray-200 px-5 py-8 text-center max-w-xl">
         <p className="text-sm text-gray-400">User management is restricted to Admin users.</p>
       </div>
     )
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 col-span-2">
+    <div className="bg-white rounded-xl border border-gray-200 max-w-xl">
       <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
         <div>
           <h2 className="text-sm font-semibold text-gray-900">Users</h2>
@@ -220,30 +206,40 @@ function UsersSection({ isAdmin }: { isAdmin: boolean }) {
         </Button>
       </div>
 
-      {loading && (
-        <div className="px-5 py-4 text-sm text-gray-400">Loading…</div>
-      )}
-      {error && (
-        <div className="px-5 py-4 text-sm text-red-500">{error}</div>
-      )}
+      {loading && <div className="px-5 py-4 text-sm text-gray-400">Loading…</div>}
+      {error && <div className="px-5 py-4 text-sm text-red-500">{error}</div>}
+
       {!loading && !error && (
         <div className="divide-y divide-gray-50">
-          {users.length === 0 && (
-            <p className="px-5 py-4 text-sm text-gray-400">No users found.</p>
-          )}
+          {users.length === 0 && <p className="px-5 py-4 text-sm text-gray-400">No users found.</p>}
           {users.map(u => {
             const profile = profiles.find(p => p.id === u.id)
+            const role = profile?.role ?? 'general'
+            const displayName = [profile?.first_name, profile?.surname].filter(Boolean).join(' ')
+            const isExpanded = expandedUserId === u.id
+
             return (
-              <div key={u.id} className="px-5 py-3 group">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-900">{u.email}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      Added {formatDate(u.created_at)}
-                      {u.last_sign_in_at && ` · Last sign in ${formatDate(u.last_sign_in_at)}`}
-                    </p>
+              <div key={u.id}>
+                {/* Compact row */}
+                <div
+                  className="flex items-center gap-3 px-5 py-3 cursor-pointer hover:bg-gray-50 group transition-colors"
+                  onClick={() => setExpandedUserId(isExpanded ? null : u.id)}
+                >
+                  <div
+                    className="w-6 h-6 rounded-full shrink-0 border border-gray-200"
+                    style={{ backgroundColor: profile?.color ?? '#f3f4f6' }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-900 truncate">{displayName || u.email}</p>
+                    {displayName && <p className="text-xs text-gray-400 truncate">{u.email}</p>}
                   </div>
-                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${roleBadgeClass(role)}`}>
+                    {ROLE_LABELS[role]}
+                  </span>
+                  <div
+                    className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={e => e.stopPropagation()}
+                  >
                     <button
                       onClick={() => { setPasswordTarget(u); setNewPassword(''); setFormError('') }}
                       className="text-gray-400 hover:text-gray-700 transition-colors"
@@ -259,58 +255,58 @@ function UsersSection({ isAdmin }: { isAdmin: boolean }) {
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
+                  <ChevronDown className={`w-4 h-4 text-gray-300 shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                 </div>
-                <div className="flex items-center gap-2 mt-2">
-                  <input
-                    defaultValue={profile?.first_name ?? ''}
-                    onBlur={e => saveUserName(u, 'first_name', e.target.value.trim())}
-                    placeholder="First name"
-                    className="text-xs border border-gray-200 rounded-md px-2 py-1 text-gray-700 outline-none focus:border-gray-400 w-28"
-                  />
-                  <input
-                    defaultValue={profile?.surname ?? ''}
-                    onBlur={e => saveUserName(u, 'surname', e.target.value.trim())}
-                    placeholder="Surname"
-                    className="text-xs border border-gray-200 rounded-md px-2 py-1 text-gray-700 outline-none focus:border-gray-400 w-28"
-                  />
-                </div>
-                <div className="flex items-center gap-1.5 mt-2">
-                  <span className="text-xs text-gray-400 mr-1">Colour:</span>
-                  {USER_COLORS.map(c => (
-                    <button
-                      key={c.value}
-                      onClick={() => setUserColor(u, c.value)}
-                      title={c.label}
-                      className={`w-5 h-5 rounded-full border-2 transition-all ${
-                        profile?.color === c.value ? 'border-gray-700 scale-110' : 'border-transparent hover:border-gray-300'
-                      }`}
-                      style={{ backgroundColor: c.value }}
-                    />
-                  ))}
-                  {profile?.color && (
-                    <span className="text-xs text-gray-400 ml-1">
-                      ({USER_COLORS.find(c => c.value === profile.color)?.label ?? 'Custom'})
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="text-xs text-gray-400">Role:</span>
-                  <div className="flex gap-1">
-                    {(['admin', 'finance', 'general'] as UserRole[]).map(r => (
-                      <button
-                        key={r}
-                        onClick={() => setUserRole(u, r)}
-                        className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
-                          (profile?.role ?? 'general') === r
-                            ? 'bg-gray-900 text-white border-gray-900'
-                            : 'text-gray-500 border-gray-200 hover:border-gray-400'
-                        }`}
-                      >
-                        {ROLE_LABELS[r]}
-                      </button>
-                    ))}
+
+                {/* Expanded editing panel */}
+                {isExpanded && (
+                  <div className="px-5 pb-4 pt-3 bg-gray-50 border-t border-gray-100 space-y-3">
+                    <div className="flex gap-2">
+                      <input
+                        defaultValue={profile?.first_name ?? ''}
+                        onBlur={e => saveUserName(u, 'first_name', e.target.value.trim())}
+                        placeholder="First name"
+                        className="text-xs border border-gray-200 rounded-md px-2 py-1.5 text-gray-700 outline-none focus:border-gray-400 flex-1"
+                      />
+                      <input
+                        defaultValue={profile?.surname ?? ''}
+                        onBlur={e => saveUserName(u, 'surname', e.target.value.trim())}
+                        placeholder="Surname"
+                        className="text-xs border border-gray-200 rounded-md px-2 py-1.5 text-gray-700 outline-none focus:border-gray-400 flex-1"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-gray-400 w-12 shrink-0">Colour</span>
+                      {USER_COLORS.map(c => (
+                        <button
+                          key={c.value}
+                          onClick={() => setUserColor(u, c.value)}
+                          title={c.label}
+                          className={`w-5 h-5 rounded-full border-2 transition-all ${
+                            profile?.color === c.value ? 'border-gray-700 scale-110' : 'border-transparent hover:border-gray-300'
+                          }`}
+                          style={{ backgroundColor: c.value }}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400 w-12 shrink-0">Role</span>
+                      <div className="flex gap-1">
+                        {(['admin', 'finance', 'general'] as UserRole[]).map(r => (
+                          <button
+                            key={r}
+                            onClick={() => setUserRole(u, r)}
+                            className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
+                              role === r ? 'bg-gray-900 text-white border-gray-900' : 'text-gray-500 border-gray-200 hover:border-gray-400'
+                            }`}
+                          >
+                            {ROLE_LABELS[r]}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )
           })}
@@ -320,37 +316,18 @@ function UsersSection({ isAdmin }: { isAdmin: boolean }) {
       {showAddModal && (
         <Modal title="Add User" onClose={() => setShowAddModal(false)}>
           <form onSubmit={handleAddUser} className="space-y-3">
-            {formError && (
-              <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{formError}</p>
-            )}
+            {formError && <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{formError}</p>}
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-700">Email</label>
-              <Input
-                type="email"
-                required
-                value={addForm.email}
-                onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))}
-                placeholder="name@morecreative.com"
-              />
+              <Input type="email" required value={addForm.email} onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))} placeholder="name@morecreative.com" />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-700">Password</label>
-              <Input
-                type="password"
-                required
-                minLength={6}
-                value={addForm.password}
-                onChange={e => setAddForm(f => ({ ...f, password: e.target.value }))}
-                placeholder="Min. 6 characters"
-              />
+              <Input type="password" required minLength={6} value={addForm.password} onChange={e => setAddForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 6 characters" />
             </div>
             <div className="flex gap-2 pt-1">
-              <Button type="submit" disabled={saving} className="flex-1">
-                {saving ? 'Creating…' : 'Create user'}
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => setShowAddModal(false)}>
-                Cancel
-              </Button>
+              <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Creating…' : 'Create user'}</Button>
+              <Button type="button" variant="secondary" onClick={() => setShowAddModal(false)}>Cancel</Button>
             </div>
           </form>
         </Modal>
@@ -359,27 +336,14 @@ function UsersSection({ isAdmin }: { isAdmin: boolean }) {
       {passwordTarget && (
         <Modal title={`Set password for ${passwordTarget.email}`} onClose={() => setPasswordTarget(null)}>
           <form onSubmit={handleSetPassword} className="space-y-3">
-            {formError && (
-              <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{formError}</p>
-            )}
+            {formError && <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{formError}</p>}
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-700">New password</label>
-              <Input
-                type="password"
-                required
-                minLength={6}
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                placeholder="Min. 6 characters"
-              />
+              <Input type="password" required minLength={6} value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Min. 6 characters" />
             </div>
             <div className="flex gap-2 pt-1">
-              <Button type="submit" disabled={saving} className="flex-1">
-                {saving ? 'Saving…' : 'Set password'}
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => setPasswordTarget(null)}>
-                Cancel
-              </Button>
+              <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : 'Set password'}</Button>
+              <Button type="button" variant="secondary" onClick={() => setPasswordTarget(null)}>Cancel</Button>
             </div>
           </form>
         </Modal>
@@ -414,172 +378,30 @@ function StaticList({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200">
-      <div className="px-5 py-4 border-b border-gray-100">
+    <div className="bg-white rounded-xl border border-gray-200 flex flex-col">
+      <div className="px-4 py-3.5 border-b border-gray-100">
         <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
         <p className="text-xs text-gray-400 mt-0.5">{description}</p>
       </div>
-      <div className="divide-y divide-gray-50">
-        {items.length === 0 && (
-          <p className="px-5 py-4 text-sm text-gray-400">None yet.</p>
-        )}
+      <div className="divide-y divide-gray-50 flex-1">
+        {items.length === 0 && <p className="px-4 py-3 text-sm text-gray-400">None yet.</p>}
         {items.map(item => (
-          <div key={item.id} className="flex items-center justify-between px-5 py-3 group">
+          <div key={item.id} className="flex items-center justify-between px-4 py-2.5 group">
             <span className="text-sm text-gray-900">{item.name}</span>
-            <button
-              onClick={() => onDelete(item.id)}
-              className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-            >
+            <button onClick={() => onDelete(item.id)} className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
               <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>
         ))}
       </div>
-      <div className="px-5 py-4 border-t border-gray-100">
+      <div className="px-4 py-3 border-t border-gray-100">
         <form onSubmit={handleAdd} className="flex gap-2">
-          <Input
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="New item…"
-            className="flex-1"
-          />
+          <Input value={name} onChange={e => setName(e.target.value)} placeholder="New item…" className="flex-1" />
           <Button type="submit" disabled={saving || !name.trim()}>
             <Plus className="w-3.5 h-3.5" />
             Add
           </Button>
         </form>
-      </div>
-    </div>
-  )
-}
-
-export function AdminClient({ categories, industries, agentTypes, talentCategories, brandCategories, talentLevels, invoiceSettings, expenseCategories, currencyRates, isAdmin }: Props) {
-  const router = useRouter()
-  const supabase = createClient()
-
-  async function addCategory(name: string) {
-    await supabase.from('project_categories').insert({ name })
-    router.refresh()
-  }
-  async function deleteCategory(id: string) {
-    await supabase.from('project_categories').delete().eq('id', id)
-    router.refresh()
-  }
-
-  async function addIndustry(name: string) {
-    await supabase.from('industries').insert({ name })
-    router.refresh()
-  }
-  async function deleteIndustry(id: string) {
-    await supabase.from('industries').delete().eq('id', id)
-    router.refresh()
-  }
-
-  async function addAgentType(name: string) {
-    await supabase.from('agent_types').insert({ name })
-    router.refresh()
-  }
-  async function deleteAgentType(id: string) {
-    await supabase.from('agent_types').delete().eq('id', id)
-    router.refresh()
-  }
-
-  async function addTalentCategory(name: string) {
-    await supabase.from('talent_categories').insert({ name })
-    router.refresh()
-  }
-  async function deleteTalentCategory(id: string) {
-    await supabase.from('talent_categories').delete().eq('id', id)
-    router.refresh()
-  }
-
-  async function addBrandCategory(name: string) {
-    await supabase.from('brand_categories').insert({ name })
-    router.refresh()
-  }
-  async function deleteBrandCategory(id: string) {
-    await supabase.from('brand_categories').delete().eq('id', id)
-    router.refresh()
-  }
-
-  async function addTalentLevel(name: string) {
-    await supabase.from('talent_levels').insert({ name })
-    router.refresh()
-  }
-  async function deleteTalentLevel(id: string) {
-    await supabase.from('talent_levels').delete().eq('id', id)
-    router.refresh()
-  }
-
-  async function addExpenseCategory(name: string) {
-    await supabase.from('expense_categories').insert({ name })
-    router.refresh()
-  }
-  async function deleteExpenseCategory(id: string) {
-    await supabase.from('expense_categories').delete().eq('id', id)
-    router.refresh()
-  }
-
-  return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Admin</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Manage users and static data used across the app</p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-5 max-w-3xl">
-        <UsersSection isAdmin={isAdmin} />
-        <StaticList
-          title="Project Categories"
-          description="Appear in the Category dropdown when creating or editing a project."
-          items={categories}
-          onAdd={addCategory}
-          onDelete={deleteCategory}
-        />
-        <StaticList
-          title="Industries"
-          description="Appear in the Industry dropdown when creating or editing a brand."
-          items={industries}
-          onAdd={addIndustry}
-          onDelete={deleteIndustry}
-        />
-        <StaticList
-          title="Agent Types"
-          description="Appear in the Agent Type dropdown when creating or editing an agent."
-          items={agentTypes}
-          onAdd={addAgentType}
-          onDelete={deleteAgentType}
-        />
-        <StaticList
-          title="Talent Categories"
-          description="Appear in the Category dropdown when creating or editing a talent."
-          items={talentCategories}
-          onAdd={addTalentCategory}
-          onDelete={deleteTalentCategory}
-        />
-        <StaticList
-          title="Brand Categories"
-          description="Appear in the Category dropdown when creating or editing a brand."
-          items={brandCategories}
-          onAdd={addBrandCategory}
-          onDelete={deleteBrandCategory}
-        />
-        <StaticList
-          title="Talent Levels"
-          description="Appear in the Talent Level dropdown when creating or editing a talent."
-          items={talentLevels}
-          onAdd={addTalentLevel}
-          onDelete={deleteTalentLevel}
-        />
-        <StaticList
-          title="Expense Categories"
-          description="Appear in the Category dropdown when logging project expenses."
-          items={expenseCategories}
-          onAdd={addExpenseCategory}
-          onDelete={deleteExpenseCategory}
-        />
-        <CurrencyRatesPanel rates={currencyRates} />
-        <InvoiceSettingsPanel settings={invoiceSettings} />
       </div>
     </div>
   )
@@ -599,10 +421,7 @@ function CurrencyRatesPanel({ rates: initial }: { rates: CurrencyRate[] }) {
     setSaving(true)
     await Promise.all(
       Object.entries(rates).map(([currency, rate]) =>
-        supabase
-          .from('currency_rates')
-          .update({ rate_to_aed: parseFloat(rate) || 1, updated_at: new Date().toISOString() })
-          .eq('currency', currency)
+        supabase.from('currency_rates').update({ rate_to_aed: parseFloat(rate) || 1, updated_at: new Date().toISOString() }).eq('currency', currency)
       )
     )
     setSaving(false)
@@ -633,9 +452,7 @@ function CurrencyRatesPanel({ rates: initial }: { rates: CurrencyRate[] }) {
           </div>
         ))}
         <div className="flex justify-end pt-2">
-          <Button type="submit" disabled={saving}>
-            {saving ? 'Saving…' : saved ? 'Saved!' : 'Save Rates'}
-          </Button>
+          <Button type="submit" disabled={saving}>{saving ? 'Saving…' : saved ? 'Saved!' : 'Save Rates'}</Button>
         </div>
       </form>
     </div>
@@ -674,7 +491,7 @@ function InvoiceSettingsPanel({ settings }: { settings: InvoiceSettings | null }
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 col-span-2">
+    <div className="bg-white rounded-xl border border-gray-200">
       <div className="px-5 py-4 border-b border-gray-100">
         <h2 className="text-sm font-semibold text-gray-900">Invoice Settings</h2>
         <p className="text-xs text-gray-400 mt-0.5">Company address and bank details printed on every invoice PDF</p>
@@ -701,7 +518,6 @@ function InvoiceSettingsPanel({ settings }: { settings: InvoiceSettings | null }
             </div>
           </div>
         </div>
-
         <div>
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Bank Details</p>
           <div className="grid grid-cols-2 gap-3">
@@ -727,13 +543,80 @@ function InvoiceSettingsPanel({ settings }: { settings: InvoiceSettings | null }
             </div>
           </div>
         </div>
-
         <div className="flex justify-end pt-1">
-          <Button type="submit" disabled={saving}>
-            {saving ? 'Saving…' : saved ? 'Saved!' : 'Save Settings'}
-          </Button>
+          <Button type="submit" disabled={saving}>{saving ? 'Saving…' : saved ? 'Saved!' : 'Save Settings'}</Button>
         </div>
       </form>
+    </div>
+  )
+}
+
+type Tab = 'users' | 'lookups' | 'finance'
+
+export function AdminClient({ categories, industries, agentTypes, talentCategories, brandCategories, talentLevels, invoiceSettings, expenseCategories, currencyRates, isAdmin }: Props) {
+  const router = useRouter()
+  const supabase = createClient()
+  const [activeTab, setActiveTab] = useState<Tab>('users')
+
+  async function addCategory(name: string) { await supabase.from('project_categories').insert({ name }); router.refresh() }
+  async function deleteCategory(id: string) { await supabase.from('project_categories').delete().eq('id', id); router.refresh() }
+  async function addIndustry(name: string) { await supabase.from('industries').insert({ name }); router.refresh() }
+  async function deleteIndustry(id: string) { await supabase.from('industries').delete().eq('id', id); router.refresh() }
+  async function addAgentType(name: string) { await supabase.from('agent_types').insert({ name }); router.refresh() }
+  async function deleteAgentType(id: string) { await supabase.from('agent_types').delete().eq('id', id); router.refresh() }
+  async function addTalentCategory(name: string) { await supabase.from('talent_categories').insert({ name }); router.refresh() }
+  async function deleteTalentCategory(id: string) { await supabase.from('talent_categories').delete().eq('id', id); router.refresh() }
+  async function addBrandCategory(name: string) { await supabase.from('brand_categories').insert({ name }); router.refresh() }
+  async function deleteBrandCategory(id: string) { await supabase.from('brand_categories').delete().eq('id', id); router.refresh() }
+  async function addTalentLevel(name: string) { await supabase.from('talent_levels').insert({ name }); router.refresh() }
+  async function deleteTalentLevel(id: string) { await supabase.from('talent_levels').delete().eq('id', id); router.refresh() }
+  async function addExpenseCategory(name: string) { await supabase.from('expense_categories').insert({ name }); router.refresh() }
+  async function deleteExpenseCategory(id: string) { await supabase.from('expense_categories').delete().eq('id', id); router.refresh() }
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-gray-900">Admin</h1>
+        <p className="text-sm text-gray-500 mt-0.5">Manage users and static data used across the app</p>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-0.5 mb-6 border-b border-gray-200">
+        {(['users', 'lookups', 'finance'] as Tab[]).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
+              activeTab === tab
+                ? 'border-gray-900 text-gray-900'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'users' && <UsersSection isAdmin={isAdmin} />}
+
+      {activeTab === 'lookups' && (
+        <div className="grid grid-cols-3 gap-4 max-w-4xl">
+          <StaticList title="Project Categories" description="Category dropdown on projects." items={categories} onAdd={addCategory} onDelete={deleteCategory} />
+          <StaticList title="Industries" description="Industry dropdown on brands." items={industries} onAdd={addIndustry} onDelete={deleteIndustry} />
+          <StaticList title="Agent Types" description="Agent type dropdown on agents." items={agentTypes} onAdd={addAgentType} onDelete={deleteAgentType} />
+          <StaticList title="Talent Categories" description="Category dropdown on talents." items={talentCategories} onAdd={addTalentCategory} onDelete={deleteTalentCategory} />
+          <StaticList title="Brand Categories" description="Category dropdown on brands." items={brandCategories} onAdd={addBrandCategory} onDelete={deleteBrandCategory} />
+          <StaticList title="Talent Levels" description="Talent level dropdown on talents." items={talentLevels} onAdd={addTalentLevel} onDelete={deleteTalentLevel} />
+          <StaticList title="Expense Categories" description="Category dropdown on expenses." items={expenseCategories} onAdd={addExpenseCategory} onDelete={deleteExpenseCategory} />
+        </div>
+      )}
+
+      {activeTab === 'finance' && (
+        <div className="space-y-5 max-w-2xl">
+          <CurrencyRatesPanel rates={currencyRates} />
+          <InvoiceSettingsPanel settings={invoiceSettings} />
+        </div>
+      )}
     </div>
   )
 }

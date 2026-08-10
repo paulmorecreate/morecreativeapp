@@ -29,6 +29,12 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
   const router = useRouter()
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<UserRole | null>(null)
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [passwordSuccess, setPasswordSuccess] = useState(false)
+  const [passwordLoading, setPasswordLoading] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
@@ -44,6 +50,33 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
       setUserRole((profile?.role as UserRole) ?? 'general')
     })
   }, [])
+
+  async function changePassword() {
+    setPasswordError(null)
+    if (newPassword.length < 6) {
+      setPasswordError('Password must be at least 6 characters.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match.')
+      return
+    }
+    setPasswordLoading(true)
+    const supabase = createClient()
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    setPasswordLoading(false)
+    if (error) {
+      setPasswordError(error.message)
+    } else {
+      setPasswordSuccess(true)
+      setTimeout(() => {
+        setShowPasswordModal(false)
+        setPasswordSuccess(false)
+        setNewPassword('')
+        setConfirmPassword('')
+      }, 1500)
+    }
+  }
 
   async function signOut() {
     const supabase = createClient()
@@ -109,10 +142,70 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
           Sign out
         </button>
         {userEmail && (
-          <p className="px-3 pt-2 text-xs text-zinc-400 truncate" title={userEmail}>{userEmail}</p>
+          <button
+            onClick={() => setShowPasswordModal(true)}
+            className="px-3 pt-2 text-xs text-zinc-400 hover:text-white transition-colors text-left w-full truncate"
+            title={`${userEmail} — click to change password`}
+          >
+            {userEmail}
+          </button>
         )}
         <p className="px-3 text-xs text-zinc-500">v{pkg.version}</p>
       </div>
+
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => { setShowPasswordModal(false); setNewPassword(''); setConfirmPassword(''); setPasswordError(null) }}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-full max-w-sm mx-4 space-y-4" onClick={e => e.stopPropagation()}>
+            <h2 className="text-white font-semibold text-base">Change Password</h2>
+            {passwordSuccess ? (
+              <p className="text-green-400 text-sm">Password updated successfully.</p>
+            ) : (
+              <>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-zinc-400 mb-1 block">New password</label>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={e => setNewPassword(e.target.value)}
+                      autoFocus
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-500"
+                      placeholder="Min. 6 characters"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-zinc-400 mb-1 block">Confirm new password</label>
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={e => setConfirmPassword(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && changePassword()}
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-500"
+                      placeholder="Repeat password"
+                    />
+                  </div>
+                </div>
+                {passwordError && <p className="text-red-400 text-xs">{passwordError}</p>}
+                <div className="flex gap-2 justify-end pt-1">
+                  <button
+                    onClick={() => { setShowPasswordModal(false); setNewPassword(''); setConfirmPassword(''); setPasswordError(null) }}
+                    className="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={changePassword}
+                    disabled={passwordLoading}
+                    className="px-4 py-2 text-sm bg-white text-zinc-900 rounded-lg font-medium hover:bg-zinc-100 disabled:opacity-50 transition-colors"
+                  >
+                    {passwordLoading ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </aside>
   )
 }
