@@ -9,6 +9,7 @@ export default async function AdminPage() {
     ? await supabase.from('user_profiles').select('role').eq('id', user.id).single()
     : { data: null }
   const isAdmin = currentProfile?.role === 'admin'
+  const canViewFinance = currentProfile?.role === 'admin' || currentProfile?.role === 'finance'
 
   const [
     { data: categories },
@@ -44,6 +45,7 @@ export default async function AdminPage() {
       expenseCategories={expenseCategories ?? []}
       currencyRates={currencyRates ?? []}
       isAdmin={isAdmin}
+      canViewFinance={canViewFinance}
     />
   )
 }

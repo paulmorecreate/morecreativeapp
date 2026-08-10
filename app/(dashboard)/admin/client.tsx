@@ -19,6 +19,7 @@ type Props = {
   expenseCategories: ExpenseCategory[]
   currencyRates: CurrencyRate[]
   isAdmin: boolean
+  canViewFinance: boolean
 }
 
 type AppUser = {
@@ -553,7 +554,7 @@ function InvoiceSettingsPanel({ settings }: { settings: InvoiceSettings | null }
 
 type Tab = 'users' | 'lookups' | 'finance'
 
-export function AdminClient({ categories, industries, agentTypes, talentCategories, brandCategories, talentLevels, invoiceSettings, expenseCategories, currencyRates, isAdmin }: Props) {
+export function AdminClient({ categories, industries, agentTypes, talentCategories, brandCategories, talentLevels, invoiceSettings, expenseCategories, currencyRates, isAdmin, canViewFinance }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const [activeTab, setActiveTab] = useState<Tab>('users')
@@ -582,7 +583,7 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
 
       {/* Tabs */}
       <div className="flex gap-0.5 mb-6 border-b border-gray-200">
-        {(['users', 'lookups', 'finance'] as Tab[]).map(tab => (
+        {(['users', 'lookups', ...(canViewFinance ? ['finance'] : [])] as Tab[]).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
