@@ -24,6 +24,7 @@ export default function LoginPage() {
       setError(error.message)
       setLoading(false)
     } else {
+      fetch('/api/auth/log-login', { method: 'POST' }).catch(() => {})
       router.push('/')
       router.refresh()
     }

@@ -20,6 +20,16 @@ type Props = {
   currencyRates: CurrencyRate[]
   isAdmin: boolean
   canViewFinance: boolean
+  loginAudit: LoginAuditRow[]
+}
+
+type LoginAuditRow = {
+  id: string
+  email: string
+  ip_address: string | null
+  browser: string | null
+  os: string | null
+  logged_in_at: string
 }
 
 type AppUser = {
@@ -552,9 +562,9 @@ function InvoiceSettingsPanel({ settings }: { settings: InvoiceSettings | null }
   )
 }
 
-type Tab = 'users' | 'lookups' | 'finance'
+type Tab = 'users' | 'lookups' | 'finance' | 'audit'
 
-export function AdminClient({ categories, industries, agentTypes, talentCategories, brandCategories, talentLevels, invoiceSettings, expenseCategories, currencyRates, isAdmin, canViewFinance }: Props) {
+export function AdminClient({ categories, industries, agentTypes, talentCategories, brandCategories, talentLevels, invoiceSettings, expenseCategories, currencyRates, isAdmin, canViewFinance, loginAudit }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const [activeTab, setActiveTab] = useState<Tab>('users')
@@ -583,7 +593,7 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
 
       {/* Tabs */}
       <div className="flex gap-0.5 mb-6 border-b border-gray-200">
-        {(['users', 'lookups', ...(canViewFinance ? ['finance'] : [])] as Tab[]).map(tab => (
+        {(['users', 'lookups', ...(canViewFinance ? ['finance'] : []), ...(isAdmin ? ['audit'] : [])] as Tab[]).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -616,6 +626,48 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
         <div className="space-y-5 max-w-2xl">
           <CurrencyRatesPanel rates={currencyRates} />
           <InvoiceSettingsPanel settings={invoiceSettings} />
+        </div>
+      )}
+
+      {activeTab === 'audit' && (
+        <div className="bg-white rounded-xl border border-gray-200 max-w-4xl">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h2 className="text-sm font-semibold text-gray-900">Login Audit</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Most recent 200 sign-ins across all users</p>
+          </div>
+          {loginAudit.length === 0 ? (
+            <p className="px-5 py-6 text-sm text-gray-400">No logins recorded yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">User</th>
+                    <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">When</th>
+                    <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">Browser</th>
+                    <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">OS</th>
+                    <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">IP</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {loginAudit.map(row => (
+                    <tr key={row.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-5 py-3 text-gray-900">{row.email}</td>
+                      <td className="px-5 py-3 text-gray-500 whitespace-nowrap">
+                        {new Date(row.logged_in_at).toLocaleString('en-GB', {
+                          day: 'numeric', month: 'short', year: 'numeric',
+                          hour: '2-digit', minute: '2-digit',
+                        })}
+                      </td>
+                      <td className="px-5 py-3 text-gray-500">{row.browser ?? '—'}</td>
+                      <td className="px-5 py-3 text-gray-500">{row.os ?? '—'}</td>
+                      <td className="px-5 py-3 text-gray-400 font-mono text-xs">{row.ip_address ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

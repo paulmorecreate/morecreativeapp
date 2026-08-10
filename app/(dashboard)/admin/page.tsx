@@ -21,6 +21,7 @@ export default async function AdminPage() {
     { data: invoiceSettings },
     { data: expenseCategories },
     { data: currencyRates },
+    { data: loginAudit },
   ] = await Promise.all([
     supabase.from('project_categories').select('*').order('name'),
     supabase.from('industries').select('*').order('name'),
@@ -31,6 +32,9 @@ export default async function AdminPage() {
     supabase.from('invoice_settings').select('*').limit(1).single(),
     supabase.from('expense_categories').select('*').order('name'),
     supabase.from('currency_rates').select('*').order('currency'),
+    isAdmin
+      ? supabase.from('login_audit').select('*').order('logged_in_at', { ascending: false }).limit(200)
+      : Promise.resolve({ data: [] }),
   ])
 
   return (
@@ -46,6 +50,7 @@ export default async function AdminPage() {
       currencyRates={currencyRates ?? []}
       isAdmin={isAdmin}
       canViewFinance={canViewFinance}
+      loginAudit={loginAudit ?? []}
     />
   )
 }
