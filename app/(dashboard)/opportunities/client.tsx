@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, TrendingUp } from 'lucide-react'
+import { Plus, Search, TrendingUp, Trash2 } from 'lucide-react'
 import { Opportunity } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
@@ -69,6 +69,8 @@ export function OpportunitiesClient({ opportunities, talents }: Props) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(emptyForm)
+  const [deleteTarget, setDeleteTarget] = useState<OppWithTalents | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -90,6 +92,16 @@ export function OpportunitiesClient({ opportunities, talents }: Props) {
     acc[s.value] = opportunities.filter(o => o.stage === s.value).length
     return acc
   }, {} as Record<string, number>)
+
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    const supabase = createClient()
+    await supabase.from('opportunities').delete().eq('id', deleteTarget.id)
+    setDeleting(false)
+    setDeleteTarget(null)
+    router.refresh()
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -178,12 +190,13 @@ export function OpportunitiesClient({ opportunities, talents }: Props) {
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Talents</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Event date</th>
               <th className="text-right px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Gross fee</th>
+              <th className="w-8 px-3 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-400">
+                <td colSpan={8} className="px-4 py-12 text-center text-sm text-gray-400">
                   {search || stageFilter ? 'No results.' : 'No opportunities yet — add your first deal.'}
                 </td>
               </tr>
@@ -195,7 +208,7 @@ export function OpportunitiesClient({ opportunities, talents }: Props) {
               return (
                 <tr
                   key={opp.id}
-                  className="hover:bg-gray-50/50 transition-colors cursor-pointer"
+                  className="hover:bg-gray-50/50 transition-colors cursor-pointer group"
                   onClick={() => router.push(`/opportunities/${opp.id}`)}
                 >
                   <td className="px-4 py-3 font-medium text-gray-900">{opp.name}</td>
@@ -228,12 +241,55 @@ export function OpportunitiesClient({ opportunities, talents }: Props) {
                       </div>
                     ) : <span className="text-gray-300">—</span>}
                   </td>
+                  <td className="px-3 py-3 w-8">
+                    <button
+                      onClick={e => { e.stopPropagation(); setDeleteTarget(opp) }}
+                      className="text-gray-300 hover:text-red-500 hover:bg-red-50 rounded p-0.5 transition-colors opacity-0 group-hover:opacity-100"
+                      title="Delete opportunity"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </td>
                 </tr>
               )
             })}
           </tbody>
         </table>
       </div>
+
+      {/* Delete confirmation */}
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete opportunity?">
+        {deleteTarget && (
+          <div className="space-y-4">
+            <div className="bg-red-50 rounded-lg px-4 py-3">
+              <p className="text-sm font-medium text-red-800">{deleteTarget.name}</p>
+              {deleteTarget.counterpart_name && (
+                <p className="text-sm text-red-600 mt-0.5">{deleteTarget.counterpart_name}</p>
+              )}
+            </div>
+            <p className="text-sm text-gray-600">
+              This will permanently delete the opportunity and all associated talents, contacts, and open items. This cannot be undone.
+            </p>
+            <div className="flex gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {deleting ? 'Deleting…' : 'Yes, delete it'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Add modal */}
       <Modal open={open} onClose={() => setOpen(false)} title="Add Opportunity">

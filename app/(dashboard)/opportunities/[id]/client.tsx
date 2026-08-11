@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Pencil, Plus, Check, X, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Pencil, Plus, Check, X, AlertCircle, Trash2 } from 'lucide-react'
 import { Opportunity, OpportunityTalent, OpportunityContact, OpportunityBlocker } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
@@ -38,6 +38,17 @@ type Props = {
 
 export function OpportunityDetailClient({ opp, oppTalents, contacts, blockers, talents }: Props) {
   const router = useRouter()
+
+  // Delete opportunity
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleDelete() {
+    setDeleting(true)
+    const supabase = createClient()
+    await supabase.from('opportunities').delete().eq('id', opp.id)
+    router.push('/opportunities')
+  }
 
   // Edit deal
   const [editOpen, setEditOpen] = useState(false)
@@ -215,10 +226,15 @@ export function OpportunityDetailClient({ opp, oppTalents, contacts, blockers, t
               <p className="text-sm text-gray-500 mt-0.5">{opp.counterpart_name}</p>
             )}
           </div>
-          <Button variant="secondary" onClick={() => setEditOpen(true)}>
-            <Pencil className="w-3.5 h-3.5" />
-            Edit
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => setEditOpen(true)}>
+              <Pencil className="w-3.5 h-3.5" />
+              Edit
+            </Button>
+            <Button variant="secondary" onClick={() => setDeleteOpen(true)} className="text-red-500 hover:text-red-700 border-red-200 hover:border-red-300">
+              <Trash2 className="w-3.5 h-3.5" /> Delete
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -451,6 +467,38 @@ export function OpportunityDetailClient({ opp, oppTalents, contacts, blockers, t
           </div>
         </div>
       </div>
+
+      {/* Delete confirmation */}
+      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete opportunity?">
+        <div className="space-y-4">
+          <div className="bg-red-50 rounded-lg px-4 py-3">
+            <p className="text-sm font-medium text-red-800">{opp.name}</p>
+            {opp.counterpart_name && (
+              <p className="text-sm text-red-600 mt-0.5">{opp.counterpart_name}</p>
+            )}
+          </div>
+          <p className="text-sm text-gray-600">
+            This will permanently delete the opportunity and all associated talents, contacts, and open items. This cannot be undone.
+          </p>
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={() => setDeleteOpen(false)}
+              className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {deleting ? 'Deleting…' : 'Yes, delete it'}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Edit deal modal */}
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Opportunity">
