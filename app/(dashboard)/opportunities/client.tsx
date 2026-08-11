@@ -244,7 +244,7 @@ export function OpportunitiesClient({ opportunities, talents }: Props) {
                   <td className="px-3 py-3 w-8">
                     <button
                       onClick={e => { e.stopPropagation(); setDeleteTarget(opp) }}
-                      className="text-gray-300 hover:text-red-500 hover:bg-red-50 rounded p-0.5 transition-colors opacity-0 group-hover:opacity-100"
+                      className="text-gray-300 hover:text-red-500 hover:bg-red-50 rounded p-0.5 transition-colors"
                       title="Delete opportunity"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
