@@ -45,6 +45,11 @@ type Props = {
 
 export function BrandDetailClient({ brand, brandProjects, conversations, contacts, industries, brandCategories }: Props) {
   const router = useRouter()
+
+  const knownCategoryNames = new Set(brandCategories.map(c => c.name))
+  const initialFormCategory = brand.category && !knownCategoryNames.has(brand.category) ? 'Other' : (brand.category ?? '')
+  const initialCategoryOther = brand.category && !knownCategoryNames.has(brand.category) ? brand.category : ''
+
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -58,10 +63,11 @@ export function BrandDetailClient({ brand, brandProjects, conversations, contact
   const [convoSaving, setConvoSaving] = useState(false)
   const [convoForm, setConvoForm] = useState({ channel: 'note', content: '', follow_up: '', status: 'open' })
   const [editConvoForm, setEditConvoForm] = useState({ channel: 'note', content: '', follow_up: '', status: 'open' })
+  const [categoryOther, setCategoryOther] = useState(initialCategoryOther)
   const [form, setForm] = useState({
     name: brand.name ?? '',
     link: brand.link ?? '',
-    category: brand.category ?? '',
+    category: initialFormCategory,
     industry: brand.industry ?? '',
     country: brand.country ?? '',
     notes: brand.notes ?? '',
@@ -189,10 +195,13 @@ export function BrandDetailClient({ brand, brandProjects, conversations, contact
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
+    const effectiveCategory = form.category === 'Other'
+      ? (categoryOther.trim() || 'Other')
+      : form.category
     await supabase.from('brands').update({
       name: form.name || null,
       link: form.link || null,
-      category: form.category || null,
+      category: effectiveCategory || null,
       industry: form.industry || null,
       country: form.country || null,
       notes: form.notes || null,
@@ -469,6 +478,13 @@ export function BrandDetailClient({ brand, brandProjects, conversations, contact
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Category</label>
             <Select value={form.category} onChange={field('category')} options={categoryOpts} placeholder="Select…" />
+            {form.category === 'Other' && (
+              <Input
+                value={categoryOther}
+                onChange={e => setCategoryOther(e.target.value)}
+                placeholder="Please specify…"
+              />
+            )}
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Instagram / Website URL</label>

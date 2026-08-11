@@ -53,6 +53,7 @@ export function BrandsClient({ brands, industries, brandCategories, allProjects 
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [categoryOther, setCategoryOther] = useState('')
   const [form, setForm] = useState({
     name: '', link: '', category: '',
     industry: '', country: '', notes: '',
@@ -142,12 +143,17 @@ export function BrandsClient({ brands, industries, brandCategories, allProjects 
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
+    const effectiveCategory = form.category === 'Other'
+      ? (categoryOther.trim() || 'Other')
+      : form.category
     const payload = Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v || null]))
     payload.name = form.name
+    payload.category = effectiveCategory || null
     await supabase.from('brands').insert(payload)
     setSaving(false)
     setOpen(false)
     setForm({ name: '', link: '', category: '', industry: '', country: '', notes: '' })
+    setCategoryOther('')
     router.refresh()
   }
 
@@ -371,7 +377,7 @@ export function BrandsClient({ brands, industries, brandCategories, allProjects 
         </div>
       </Modal>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Add Brand">
+      <Modal open={open} onClose={() => { setOpen(false); setCategoryOther('') }} title="Add Brand">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Name *</label>
@@ -382,6 +388,13 @@ export function BrandsClient({ brands, industries, brandCategories, allProjects 
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">Category</label>
               <Select value={form.category} onChange={field('category')} options={categoryOpts} placeholder="Select…" />
+              {form.category === 'Other' && (
+                <Input
+                  value={categoryOther}
+                  onChange={e => setCategoryOther(e.target.value)}
+                  placeholder="Please specify…"
+                />
+              )}
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">Industry</label>
@@ -401,7 +414,7 @@ export function BrandsClient({ brands, industries, brandCategories, allProjects 
             <Textarea value={form.notes} onChange={field('notes')} rows={2} placeholder="Status update, situation…" />
           </div>
           <div className="flex gap-3 pt-1">
-            <Button type="button" variant="secondary" onClick={() => setOpen(false)} className="flex-1">Cancel</Button>
+            <Button type="button" variant="secondary" onClick={() => { setOpen(false); setCategoryOther('') }} className="flex-1">Cancel</Button>
             <Button type="submit" disabled={saving || brandNameExists} className="flex-1">{saving ? 'Saving…' : 'Add Brand'}</Button>
           </div>
         </form>
