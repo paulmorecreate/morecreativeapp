@@ -1753,7 +1753,7 @@ function InlineProjectTalentRow({
             type="button"
             onClick={onRemove}
             title="Remove from project"
-            className="text-gray-300 hover:text-red-500 hover:bg-red-50 rounded p-0.5 transition-colors opacity-0 group-hover:opacity-100"
+            className="text-gray-300 hover:text-red-500 hover:bg-red-50 rounded p-0.5 transition-colors"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
