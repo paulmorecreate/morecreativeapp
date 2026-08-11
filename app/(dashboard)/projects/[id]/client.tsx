@@ -20,7 +20,9 @@ const projectStatusOpts = [
 const showTypeOpts = [
   { value: 'Show', label: 'Show' },
   { value: 'Presentation', label: 'Presentation' },
+  { value: 'Other', label: 'Other' },
 ]
+const STANDARD_SHOW_TYPES = new Set(showTypeOpts.map(o => o.value))
 
 const talentStatusOpts = [
   { value: 'In Conversation', label: 'In Conversation' },
@@ -742,6 +744,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   // Brand show modal
   const [showModal, setShowModal] = useState<null | 'add' | BrandShow>(null)
   const [showForm, setShowForm] = useState({ brand_id: '', show_type: '', show_date: '', show_time: '', notes: '' })
+  const [showTypeOther, setShowTypeOther] = useState('')
 
   // Quick-add talent from pool to show
   const [quickAddShowId, setQuickAddShowId] = useState<string | null>(null)
@@ -812,25 +815,31 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   // Brand show handlers
   function openAddShow() {
     setShowForm({ brand_id: '', show_type: '', show_date: '', show_time: '', notes: '' })
+    setShowTypeOther('')
     setShowModal('add')
   }
   function openEditShow(show: BrandShow) {
+    const isNonStandard = show.show_type != null && !STANDARD_SHOW_TYPES.has(show.show_type)
     setShowForm({
       brand_id: show.brand_id,
-      show_type: show.show_type ?? '',
+      show_type: isNonStandard ? 'Other' : (show.show_type ?? ''),
       show_date: show.show_date ?? '',
       show_time: show.show_time ?? '',
       notes: show.notes ?? '',
     })
+    setShowTypeOther(isNonStandard ? (show.show_type ?? '') : '')
     setShowModal(show)
   }
   async function handleShowSubmit(e: React.FormEvent) {
     e.preventDefault(); setSaving(true)
     const supabase = createClient()
+    const effectiveShowType = showForm.show_type === 'Other'
+      ? (showTypeOther.trim() || 'Other')
+      : showForm.show_type
     const payload = {
       project_id: project.id,
       brand_id: showForm.brand_id || null,
-      show_type: showForm.show_type || null,
+      show_type: effectiveShowType || null,
       show_date: showForm.show_date || null,
       show_time: showForm.show_time || null,
       notes: showForm.notes || null,
@@ -1218,7 +1227,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
       {/* Add/Edit Brand */}
       <Modal
         open={showModal !== null}
-        onClose={() => setShowModal(null)}
+        onClose={() => { setShowModal(null); setShowTypeOther('') }}
         title={isEditingShow ? 'Edit Brand' : 'Add Brand'}
       >
         <form onSubmit={handleShowSubmit} className="space-y-4">
@@ -1238,8 +1247,15 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                 value={showForm.show_type}
                 onChange={showField('show_type')}
                 options={showTypeOpts}
-                placeholder="Show or Presentation…"
+                placeholder="Select type…"
               />
+              {showForm.show_type === 'Other' && (
+                <Input
+                  value={showTypeOther}
+                  onChange={e => setShowTypeOther(e.target.value)}
+                  placeholder="Please specify…"
+                />
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
