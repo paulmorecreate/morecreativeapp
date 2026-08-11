@@ -355,3 +355,14 @@ export interface CurrencyRate {
 }
 
 export type UserRole = 'admin' | 'finance' | 'general'
+
+export interface ScheduleEvent {
+  id: string
+  title: string
+  month: number
+  year: number
+  category: 'global' | 'regional' | 'custom'
+  region: string | null
+  project_id: string | null
+  created_at: string
+}
