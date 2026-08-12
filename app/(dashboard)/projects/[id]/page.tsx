@@ -25,6 +25,11 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     { data: expenses },
     { data: expenseCategories },
     { data: currencyRates },
+    { data: talentCategories },
+    { data: talentLevels },
+    { data: agents },
+    { data: agentTypes },
+    { data: people },
   ] = await Promise.all([
     supabase.from('events').select('*').eq('id', id).single(),
     supabase.from('talents').select('id, name').order('name'),
@@ -50,6 +55,11 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       : Promise.resolve({ data: [] }),
     supabase.from('expense_categories').select('*').order('name'),
     supabase.from('currency_rates').select('*').order('currency'),
+    supabase.from('talent_categories').select('id, name').order('name'),
+    supabase.from('talent_levels').select('id, name').order('name'),
+    supabase.from('agents').select('id, name, agent_type').order('name'),
+    supabase.from('agent_types').select('id, name').order('name'),
+    supabase.from('people').select('id, name, type').order('name'),
   ])
 
   if (!project) notFound()
@@ -70,6 +80,11 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       currencyRates={currencyRates ?? []}
       canViewFinance={canViewFinance}
       initialTab={tabParam === 'finance' ? 'finance' : 'overview'}
+      talentCategories={talentCategories ?? []}
+      talentLevels={talentLevels ?? []}
+      agents={agents ?? []}
+      agentTypes={agentTypes ?? []}
+      people={people ?? []}
     />
   )
 }

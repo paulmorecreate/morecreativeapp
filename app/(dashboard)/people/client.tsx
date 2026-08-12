@@ -28,6 +28,9 @@ export function PeopleClient({ people }: { people: Person[] }) {
     (p.email ?? '').toLowerCase().includes(q)
   )
 
+  const nameExists = form.name.trim() !== '' &&
+    people.some(p => p.name.trim().toLowerCase() === form.name.trim().toLowerCase())
+
   async function handleDelete() {
     if (!deleteTarget) return
     setDeleting(true)
@@ -156,6 +159,7 @@ export function PeopleClient({ people }: { people: Person[] }) {
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Name *</label>
             <Input value={form.name} onChange={field('name')} required placeholder="Full name" />
+            {nameExists && <p className="text-xs text-red-500 mt-1">A person with this name already exists.</p>}
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Type</label>
@@ -185,7 +189,7 @@ export function PeopleClient({ people }: { people: Person[] }) {
           </div>
           <div className="flex gap-3 pt-1">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)} className="flex-1">Cancel</Button>
-            <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : 'Add Person'}</Button>
+            <Button type="submit" disabled={saving || nameExists} className="flex-1">{saving ? 'Saving…' : 'Add Person'}</Button>
           </div>
         </form>
       </Modal>

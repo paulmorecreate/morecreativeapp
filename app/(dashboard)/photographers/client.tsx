@@ -42,6 +42,9 @@ export function PhotographersClient({ photographers }: { photographers: Photogra
     p.photographer_contacts?.some(c => (c.name ?? '').toLowerCase().includes(q))
   )
 
+  const nameExists = form.name.trim() !== '' &&
+    photographers.some(p => p.name.trim().toLowerCase() === form.name.trim().toLowerCase())
+
   async function handleDelete() {
     if (!deleteTarget) return
     setDeleting(true)
@@ -175,6 +178,7 @@ export function PhotographersClient({ photographers }: { photographers: Photogra
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Name *</label>
             <Input value={form.name} onChange={field('name')} required placeholder="Full name" />
+            {nameExists && <p className="text-xs text-red-500 mt-1">A photographer with this name already exists.</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -202,7 +206,7 @@ export function PhotographersClient({ photographers }: { photographers: Photogra
           </div>
           <div className="flex gap-3 pt-1">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)} className="flex-1">Cancel</Button>
-            <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : 'Add Photographer'}</Button>
+            <Button type="submit" disabled={saving || nameExists} className="flex-1">{saving ? 'Saving…' : 'Add Photographer'}</Button>
           </div>
         </form>
       </Modal>

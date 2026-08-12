@@ -55,8 +55,18 @@ export async function PATCH(request: NextRequest) {
   const user = await getAuthenticatedUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { id, password } = await request.json()
+  const body = await request.json()
+  const { id, action, password } = body
   const admin = createAdminClient()
+
+  if (action === 'lock' || action === 'unlock') {
+    if (id === user.id) return NextResponse.json({ error: 'Cannot lock your own account' }, { status: 400 })
+    const ban_duration = action === 'lock' ? '876600h' : 'none'
+    const { error } = await admin.auth.admin.updateUserById(id, { ban_duration } as any)
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    return NextResponse.json({ ok: true })
+  }
+
   const { error } = await admin.auth.admin.updateUserById(id, { password })
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ ok: true })

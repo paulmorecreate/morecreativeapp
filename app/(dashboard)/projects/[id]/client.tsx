@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag, Trash2, X, CheckCircle2, Circle, CheckCheck, AlertTriangle, Receipt, GripVertical, Loader2 } from 'lucide-react'
+import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag, Trash2, X, CheckCircle2, Circle, CheckCheck, AlertTriangle, Receipt, GripVertical, Loader2, Search, Check } from 'lucide-react'
 import { Event, ProjectCategory, Invoice, ProjectIncome, ProjectExpense, ExpenseCategory, CurrencyRate } from '@/lib/supabase/types'
+import { COUNTRIES } from '@/lib/constants/countries'
 import { createClient } from '@/lib/supabase/client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -96,6 +97,50 @@ type Props = {
   currencyRates: CurrencyRate[]
   canViewFinance: boolean
   initialTab?: 'overview' | 'finance'
+  talentCategories: SimpleRecord[]
+  talentLevels: SimpleRecord[]
+  agents: { id: string; name: string; agent_type: string | null }[]
+  agentTypes: SimpleRecord[]
+  people: { id: string; name: string; type: string | null }[]
+}
+
+const EMPTY_NEW_TALENT = {
+  name: '', category: '', talent_level: '', email: '', phone: '',
+  ig_link: '', tiktok_link: '', ig_followers: '', tiktok_followers: '',
+  country: '', notes: '',
+}
+
+function MultiSelectList<T extends { id: string; name: string }>({
+  items, selected: sel, onToggle, emptyMsg, labelFn,
+}: {
+  items: T[]; selected: string[]; onToggle: (id: string) => void; emptyMsg: string; labelFn?: (item: T) => string
+}) {
+  const [q, setQ] = useState('')
+  if (items.length === 0) return <p className="text-xs text-gray-400 py-2">{emptyMsg}</p>
+  const visible = q ? items.filter(item => (labelFn ? labelFn(item) : item.name).toLowerCase().includes(q.toLowerCase())) : items
+  return (
+    <div className="space-y-1.5">
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search…"
+          className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-black/10 bg-white" />
+      </div>
+      <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
+        {visible.length === 0
+          ? <p className="px-3 py-2 text-xs text-gray-400">No results.</p>
+          : visible.map(item => {
+              const isSelected = sel.includes(item.id)
+              return (
+                <button key={item.id} type="button" onClick={() => onToggle(item.id)}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left transition-colors ${isSelected ? 'bg-gray-900 text-white' : 'hover:bg-gray-50 text-gray-700'}`}>
+                  <span>{labelFn ? labelFn(item) : item.name}</span>
+                  {isSelected && <Check className="w-3 h-3 shrink-0" />}
+                </button>
+              )
+            })}
+      </div>
+    </div>
+  )
 }
 
 const EMPTY_TALENT_FORM = {
@@ -721,7 +766,7 @@ function ProjectFinanceTab({
   )
 }
 
-export function ProjectDetailClient({ project, talents, brands, categories, brandShows, stylists, projectTalents, invoices, income, expenses, expenseCategories, currencyRates, canViewFinance, initialTab = 'overview' }: Props) {
+export function ProjectDetailClient({ project, talents, brands, categories, brandShows, stylists, projectTalents, invoices, income, expenses, expenseCategories, currencyRates, canViewFinance, initialTab = 'overview', talentCategories, talentLevels, agents: allAgents, agentTypes, people: allPeople }: Props) {
   const router = useRouter()
 
   // Tab
@@ -756,6 +801,23 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   // Project-level talent modal (add only)
   const [projectTalentModal, setProjectTalentModal] = useState(false)
   const [projectTalentForm, setProjectTalentForm] = useState({ talent_id: '' })
+  const [projectTalentMode, setProjectTalentMode] = useState<'existing' | 'new'>('existing')
+  const [newTalentForm, setNewTalentForm] = useState(EMPTY_NEW_TALENT)
+  const [ntAgentMode, setNtAgentMode] = useState<'' | 'existing' | 'new'>('')
+  const [ntSelectedAgentIds, setNtSelectedAgentIds] = useState<string[]>([])
+  const [ntNewAgentName, setNtNewAgentName] = useState('')
+  const [ntNewAgentType, setNtNewAgentType] = useState('')
+  const [ntNewAgentEmail, setNtNewAgentEmail] = useState('')
+  const [ntNewAgentPhone, setNtNewAgentPhone] = useState('')
+  const [ntStylistMode, setNtStylistMode] = useState<'' | 'existing' | 'new'>('')
+  const [ntSelectedStylistIds, setNtSelectedStylistIds] = useState<string[]>([])
+  const [ntNewStylistName, setNtNewStylistName] = useState('')
+  const [ntPersonMode, setNtPersonMode] = useState<'' | 'existing' | 'new'>('')
+  const [ntSelectedPersonIds, setNtSelectedPersonIds] = useState<string[]>([])
+  const [ntNewPersonName, setNtNewPersonName] = useState('')
+  const [ntNewPersonType, setNtNewPersonType] = useState('')
+  const newTalentNameExists = newTalentForm.name.trim() !== '' &&
+    talents.some(t => t.name.trim().toLowerCase() === newTalentForm.name.trim().toLowerCase())
 
   // Drag-and-drop talent → show
   const [draggingTalentId, setDraggingTalentId] = useState<string | null>(null)
@@ -885,15 +947,61 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   // Project-level talent handlers
   function openAddProjectTalent() {
     setProjectTalentForm({ talent_id: '' })
+    setProjectTalentMode('existing')
+    setNewTalentForm(EMPTY_NEW_TALENT)
+    setNtAgentMode(''); setNtSelectedAgentIds([]); setNtNewAgentName(''); setNtNewAgentType(''); setNtNewAgentEmail(''); setNtNewAgentPhone('')
+    setNtStylistMode(''); setNtSelectedStylistIds([]); setNtNewStylistName('')
+    setNtPersonMode(''); setNtSelectedPersonIds([]); setNtNewPersonName(''); setNtNewPersonType('')
     setProjectTalentModal(true)
   }
   async function handleProjectTalentSubmit(e: React.FormEvent) {
     e.preventDefault(); setSaving(true)
     const supabase = createClient()
-    await supabase.from('project_talents').insert({
-      project_id: project.id,
-      talent_id: projectTalentForm.talent_id || null,
-    })
+    let talentId = projectTalentForm.talent_id || null
+
+    if (projectTalentMode === 'new' && newTalentForm.name.trim()) {
+      const { data: created } = await supabase.from('talents').insert({
+        name: newTalentForm.name.trim(),
+        category: newTalentForm.category || null,
+        talent_level: newTalentForm.talent_level || null,
+        email: newTalentForm.email || null,
+        phone: newTalentForm.phone || null,
+        ig_link: newTalentForm.ig_link || null,
+        tiktok_link: newTalentForm.tiktok_link || null,
+        ig_followers: newTalentForm.ig_followers || null,
+        tiktok_followers: newTalentForm.tiktok_followers || null,
+        country: newTalentForm.country || null,
+        notes: newTalentForm.notes || null,
+      }).select('id').single()
+      talentId = created?.id ?? null
+
+      if (talentId) {
+        const jobs: PromiseLike<unknown>[] = []
+        if (ntAgentMode === 'existing' && ntSelectedAgentIds.length > 0)
+          jobs.push(supabase.from('talent_agents').insert(ntSelectedAgentIds.map(aid => ({ talent_id: talentId, agent_id: aid }))))
+        if (ntAgentMode === 'new' && ntNewAgentName.trim()) {
+          jobs.push(supabase.from('agents').insert({ name: ntNewAgentName.trim(), agent_type: ntNewAgentType || null, email: ntNewAgentEmail || null, phone: ntNewAgentPhone || null }).select('id').single()
+            .then(({ data: ag }) => ag ? supabase.from('talent_agents').insert({ talent_id: talentId, agent_id: ag.id }) : null))
+        }
+        if (ntStylistMode === 'existing' && ntSelectedStylistIds.length > 0)
+          jobs.push(supabase.from('talent_stylists').insert(ntSelectedStylistIds.map(sid => ({ talent_id: talentId, stylist_id: sid }))))
+        if (ntStylistMode === 'new' && ntNewStylistName.trim()) {
+          jobs.push(supabase.from('stylists').insert({ name: ntNewStylistName.trim() }).select('id').single()
+            .then(({ data: st }) => st ? supabase.from('talent_stylists').insert({ talent_id: talentId, stylist_id: st.id }) : null))
+        }
+        if (ntPersonMode === 'existing' && ntSelectedPersonIds.length > 0)
+          jobs.push(supabase.from('talent_people').insert(ntSelectedPersonIds.map(pid => ({ talent_id: talentId, person_id: pid }))))
+        if (ntPersonMode === 'new' && ntNewPersonName.trim()) {
+          jobs.push(supabase.from('people').insert({ name: ntNewPersonName.trim(), type: ntNewPersonType || null }).select('id').single()
+            .then(({ data: pe }) => pe ? supabase.from('talent_people').insert({ talent_id: talentId, person_id: pe.id }) : null))
+        }
+        await Promise.all(jobs)
+      }
+    }
+
+    if (talentId) {
+      await supabase.from('project_talents').insert({ project_id: project.id, talent_id: talentId })
+    }
     setSaving(false); setProjectTalentModal(false); router.refresh()
   }
   function removeProjectTalent(pt: ProjectTalent) {
@@ -935,7 +1043,9 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
 
   function poolTalentsForShow(show: BrandShow) {
     const linked = new Set(show.project_brand_talents.map(t => t.talent_id))
-    return projectTalents.filter(pt => pt.talent_id && !linked.has(pt.talent_id))
+    return projectTalents
+      .filter(pt => pt.talent_id && !linked.has(pt.talent_id))
+      .sort((a, b) => (a.talent?.name ?? '').localeCompare(b.talent?.name ?? ''))
   }
 
   const linkedProjectTalentIds = new Set(projectTalents.map(pt => pt.talent_id))
@@ -1053,11 +1163,11 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
 
         <div className="space-y-3">
           {/* Brand cards — sky blue accent */}
-          {brandShows.map(show => (
+          {[...brandShows].sort((a, b) => (a.brand?.name ?? '').localeCompare(b.brand?.name ?? '')).map(show => (
             <div
               key={show.id}
               className={cn(
-                'bg-white rounded-xl border overflow-hidden transition-all',
+                'bg-white rounded-xl border transition-all',
                 dragDuplicateShowId === show.id
                   ? 'border-amber-400 ring-2 ring-amber-100'
                   : dragOverShowId === show.id && draggingTalentId
@@ -1069,7 +1179,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
               onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverShowId(null) }}
               onDrop={e => { e.preventDefault(); handleDrop(show); setDragOverShowId(null) }}
             >
-              <div className="flex items-center justify-between px-5 py-3.5 border-b border-sky-600 bg-sky-500">
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-sky-600 bg-sky-500 rounded-t-xl">
                 <div className="flex items-center gap-3 min-w-0">
                   <Link href={`/brands/${show.brand?.id}`} className="text-sm font-semibold text-white hover:text-sky-100">
                     {show.brand?.name ?? '—'}
@@ -1121,6 +1231,15 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                               </button>
                             ))
                           )}
+                          <div className="border-t border-gray-100 mt-1 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => { setQuickAddShowId(null); openAddProjectTalent(); setProjectTalentMode('new') }}
+                              className="w-full text-left px-3 py-2 text-xs text-gray-400 hover:text-gray-700 hover:bg-gray-50 flex items-center gap-1.5"
+                            >
+                              <Plus className="w-3 h-3" /> New talent…
+                            </button>
+                          </div>
                         </div>
                       </>
                     )}
@@ -1166,7 +1285,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {show.project_brand_talents.map(entry => (
+                    {[...show.project_brand_talents].sort((a, b) => (a.talent?.name ?? '').localeCompare(b.talent?.name ?? '')).map(entry => (
                       <InlineShowTalentRow
                         key={entry.id}
                         entry={entry}
@@ -1201,7 +1320,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {projectTalents.map(pt => (
+                  {[...projectTalents].sort((a, b) => (a.talent?.name ?? '').localeCompare(b.talent?.name ?? '')).map(pt => (
                     <InlineProjectTalentRow
                       key={pt.id}
                       pt={pt}
@@ -1286,18 +1405,156 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
         title="Add Talent to Project"
       >
         <form onSubmit={handleProjectTalentSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Talent</label>
-            <Select
-              value={projectTalentForm.talent_id}
-              onChange={e => setProjectTalentForm({ talent_id: e.target.value })}
-              options={availableProjectTalents.map(t => ({ value: t.id, label: t.name }))}
-              placeholder="Select talent…"
-            />
+          <div className="flex items-center gap-2 mb-1">
+            <button
+              type="button"
+              onClick={() => setProjectTalentMode('existing')}
+              className={cn('px-3 py-1 rounded-full text-xs font-medium transition-colors', projectTalentMode === 'existing' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200')}
+            >
+              Existing talent
+            </button>
+            <button
+              type="button"
+              onClick={() => setProjectTalentMode('new')}
+              className={cn('px-3 py-1 rounded-full text-xs font-medium transition-colors', projectTalentMode === 'new' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200')}
+            >
+              New talent
+            </button>
           </div>
+
+          {projectTalentMode === 'existing' ? (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Talent</label>
+              <Select
+                value={projectTalentForm.talent_id}
+                onChange={e => setProjectTalentForm({ talent_id: e.target.value })}
+                options={availableProjectTalents.map(t => ({ value: t.id, label: t.name }))}
+                placeholder="Select talent…"
+              />
+            </div>
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-gray-700">Name *</label>
+                <Input value={newTalentForm.name} onChange={e => setNewTalentForm(f => ({ ...f, name: e.target.value }))} placeholder="Full name" autoFocus required />
+                {newTalentNameExists && <p className="text-xs text-red-500">A talent with this name already exists.</p>}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-gray-700">Category</label>
+                  <Select value={newTalentForm.category} onChange={e => setNewTalentForm(f => ({ ...f, category: e.target.value }))} options={talentCategories.map(c => ({ value: c.name, label: c.name }))} placeholder="Select…" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-gray-700">Talent Level</label>
+                  <Select value={newTalentForm.talent_level} onChange={e => setNewTalentForm(f => ({ ...f, talent_level: e.target.value }))} options={talentLevels.map(l => ({ value: l.name, label: l.name }))} placeholder="Select…" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-gray-700">Email</label>
+                  <Input type="email" value={newTalentForm.email} onChange={e => setNewTalentForm(f => ({ ...f, email: e.target.value }))} placeholder="email@example.com" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-gray-700">Phone</label>
+                  <Input value={newTalentForm.phone} onChange={e => setNewTalentForm(f => ({ ...f, phone: e.target.value }))} placeholder="+1 555 000 0000" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-gray-700">Instagram URL</label>
+                  <Input value={newTalentForm.ig_link} onChange={e => setNewTalentForm(f => ({ ...f, ig_link: e.target.value }))} placeholder="https://instagram.com/…" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-gray-700">TikTok URL</label>
+                  <Input value={newTalentForm.tiktok_link} onChange={e => setNewTalentForm(f => ({ ...f, tiktok_link: e.target.value }))} placeholder="https://tiktok.com/@…" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-gray-700">IG Followers</label>
+                  <Input value={newTalentForm.ig_followers} onChange={e => setNewTalentForm(f => ({ ...f, ig_followers: e.target.value }))} placeholder="e.g. 250K" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-gray-700">TikTok Followers</label>
+                  <Input value={newTalentForm.tiktok_followers} onChange={e => setNewTalentForm(f => ({ ...f, tiktok_followers: e.target.value }))} placeholder="e.g. 1.2M" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-gray-700">Country</label>
+                <Select value={newTalentForm.country} onChange={e => setNewTalentForm(f => ({ ...f, country: e.target.value }))} options={COUNTRIES} placeholder="Select…" />
+              </div>
+              {/* Agent */}
+              <div className="space-y-2 pt-1 border-t border-gray-100">
+                <label className="text-xs font-medium text-gray-700">Agent</label>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => { setNtAgentMode(ntAgentMode === 'existing' ? '' : 'existing'); setNtSelectedAgentIds([]); setNtNewAgentName('') }}
+                    className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${ntAgentMode === 'existing' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}>Select existing</button>
+                  <button type="button" onClick={() => { setNtAgentMode(ntAgentMode === 'new' ? '' : 'new'); setNtSelectedAgentIds([]); setNtNewAgentName('') }}
+                    className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${ntAgentMode === 'new' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}>Add new agent</button>
+                </div>
+                {ntAgentMode === 'existing' && (
+                  <MultiSelectList items={allAgents} selected={ntSelectedAgentIds} onToggle={id => setNtSelectedAgentIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id])} emptyMsg="No agents in directory yet." labelFn={a => a.name + (a.agent_type ? ` · ${a.agent_type}` : '')} />
+                )}
+                {ntAgentMode === 'new' && (
+                  <div className="space-y-2">
+                    <Input value={ntNewAgentName} onChange={e => setNtNewAgentName(e.target.value)} placeholder="Full name *" />
+                    <Select value={ntNewAgentType} onChange={e => setNtNewAgentType(e.target.value)} options={agentTypes.map(t => ({ value: t.name, label: t.name }))} placeholder="Agent type (optional)…" />
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input type="email" value={ntNewAgentEmail} onChange={e => setNtNewAgentEmail(e.target.value)} placeholder="Email (optional)" />
+                      <Input value={ntNewAgentPhone} onChange={e => setNtNewAgentPhone(e.target.value)} placeholder="Phone (optional)" />
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* Stylist */}
+              <div className="space-y-2 pt-1 border-t border-gray-100">
+                <label className="text-xs font-medium text-gray-700">Stylist</label>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => { setNtStylistMode(ntStylistMode === 'existing' ? '' : 'existing'); setNtSelectedStylistIds([]); setNtNewStylistName('') }}
+                    className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${ntStylistMode === 'existing' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}>Select existing</button>
+                  <button type="button" onClick={() => { setNtStylistMode(ntStylistMode === 'new' ? '' : 'new'); setNtSelectedStylistIds([]); setNtNewStylistName('') }}
+                    className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${ntStylistMode === 'new' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}>Add new stylist</button>
+                </div>
+                {ntStylistMode === 'existing' && (
+                  <MultiSelectList items={stylists} selected={ntSelectedStylistIds} onToggle={id => setNtSelectedStylistIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id])} emptyMsg="No stylists in directory yet." />
+                )}
+                {ntStylistMode === 'new' && (
+                  <Input value={ntNewStylistName} onChange={e => setNtNewStylistName(e.target.value)} placeholder="Full name *" />
+                )}
+              </div>
+              {/* People */}
+              <div className="space-y-2 pt-1 border-t border-gray-100">
+                <label className="text-xs font-medium text-gray-700">People</label>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => { setNtPersonMode(ntPersonMode === 'existing' ? '' : 'existing'); setNtSelectedPersonIds([]); setNtNewPersonName('') }}
+                    className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${ntPersonMode === 'existing' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}>Select existing</button>
+                  <button type="button" onClick={() => { setNtPersonMode(ntPersonMode === 'new' ? '' : 'new'); setNtSelectedPersonIds([]); setNtNewPersonName('') }}
+                    className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${ntPersonMode === 'new' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}>Add new person</button>
+                </div>
+                {ntPersonMode === 'existing' && (
+                  <MultiSelectList items={allPeople} selected={ntSelectedPersonIds} onToggle={id => setNtSelectedPersonIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id])} emptyMsg="No people in directory yet." labelFn={p => p.name + (p.type ? ` · ${p.type}` : '')} />
+                )}
+                {ntPersonMode === 'new' && (
+                  <div className="space-y-2">
+                    <Input value={ntNewPersonName} onChange={e => setNtNewPersonName(e.target.value)} placeholder="Full name *" />
+                    <Input value={ntNewPersonType} onChange={e => setNtNewPersonType(e.target.value)} placeholder="Type (optional, e.g. PR, Journalist…)" />
+                  </div>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-gray-700">Notes</label>
+                <Textarea value={newTalentForm.notes} onChange={e => setNewTalentForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Any notes…" />
+              </div>
+            </>
+          )}
+
           <div className="flex gap-3 pt-1">
             <Button type="button" variant="secondary" onClick={() => setProjectTalentModal(false)} className="flex-1">Cancel</Button>
-            <Button type="submit" disabled={saving || !projectTalentForm.talent_id} className="flex-1">
+            <Button
+              type="submit"
+              disabled={saving || (projectTalentMode === 'existing' ? !projectTalentForm.talent_id : !newTalentForm.name.trim() || newTalentNameExists)}
+              className="flex-1"
+            >
               {saving ? 'Adding…' : 'Add to Project'}
             </Button>
           </div>

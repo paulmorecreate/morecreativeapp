@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, KeyRound, X, ChevronDown } from 'lucide-react'
+import { Plus, Trash2, KeyRound, X, ChevronDown, LockKeyhole, LockKeyholeOpen } from 'lucide-react'
 import { ProjectCategory, Industry, AgentType, TalentCategory, BrandCategory, TalentLevel, InvoiceSettings, UserRole, ExpenseCategory, CurrencyRate } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Textarea } from '@/components/ui/input'
@@ -37,21 +37,22 @@ type AppUser = {
   email: string
   created_at: string
   last_sign_in_at?: string
+  banned_until?: string | null
 }
 
 type UserProfile = { id: string; email: string; color: string | null; first_name: string | null; surname: string | null; role: UserRole | null }
 
 const USER_COLORS = [
-  { label: 'Blue',   value: '#dbeafe' },
-  { label: 'Green',  value: '#dcfce7' },
-  { label: 'Purple', value: '#f3e8ff' },
-  { label: 'Pink',   value: '#fce7f3' },
-  { label: 'Amber',  value: '#fef3c7' },
-  { label: 'Teal',   value: '#ccfbf1' },
-  { label: 'Orange', value: '#ffedd5' },
-  { label: 'Indigo', value: '#e0e7ff' },
-  { label: 'Lime',   value: '#ecfccb' },
-  { label: 'Rose',   value: '#ffe4e6' },
+  { label: 'Blue',   value: '#93c5fd' },
+  { label: 'Green',  value: '#86efac' },
+  { label: 'Purple', value: '#d8b4fe' },
+  { label: 'Pink',   value: '#f9a8d4' },
+  { label: 'Amber',  value: '#fcd34d' },
+  { label: 'Teal',   value: '#5eead4' },
+  { label: 'Orange', value: '#fdba74' },
+  { label: 'Indigo', value: '#a5b4fc' },
+  { label: 'Lime',   value: '#bef264' },
+  { label: 'Rose',   value: '#fda4af' },
 ]
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -88,6 +89,8 @@ function UsersSection({ isAdmin }: { isAdmin: boolean }) {
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [passwordTarget, setPasswordTarget] = useState<AppUser | null>(null)
+  const [lockTarget, setLockTarget] = useState<AppUser | null>(null)
+  const [unlockTarget, setUnlockTarget] = useState<AppUser | null>(null)
   const [addForm, setAddForm] = useState({ email: '', password: '' })
   const [newPassword, setNewPassword] = useState('')
   const [saving, setSaving] = useState(false)
@@ -180,6 +183,46 @@ function UsersSection({ isAdmin }: { isAdmin: boolean }) {
     else loadUsers()
   }
 
+  function handleToggleLock(u: AppUser) {
+    const isLocked = !!u.banned_until && new Date(u.banned_until) > new Date()
+    if (isLocked) setUnlockTarget(u)
+    else setLockTarget(u)
+  }
+
+  async function handleConfirmUnlock() {
+    if (!unlockTarget) return
+    setSaving(true)
+    const res = await fetch('/api/admin/users', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: unlockTarget.id, action: 'unlock' }),
+    })
+    const data = await res.json()
+    setSaving(false)
+    if (!res.ok) alert(data.error ?? 'Failed to unlock user')
+    else {
+      setUsers(prev => prev.map(x => x.id === unlockTarget.id ? { ...x, banned_until: null } : x))
+      setUnlockTarget(null)
+    }
+  }
+
+  async function handleConfirmLock() {
+    if (!lockTarget) return
+    setSaving(true)
+    const res = await fetch('/api/admin/users', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: lockTarget.id, action: 'lock' }),
+    })
+    const data = await res.json()
+    setSaving(false)
+    if (!res.ok) alert(data.error ?? 'Failed to lock user')
+    else {
+      setUsers(prev => prev.map(x => x.id === lockTarget.id ? { ...x, banned_until: new Date(Date.now() + 876600 * 60 * 60 * 1000).toISOString() } : x))
+      setLockTarget(null)
+    }
+  }
+
   async function handleSetPassword(e: React.FormEvent) {
     e.preventDefault()
     if (!passwordTarget) return
@@ -228,12 +271,13 @@ function UsersSection({ isAdmin }: { isAdmin: boolean }) {
             const role = profile?.role ?? 'general'
             const displayName = [profile?.first_name, profile?.surname].filter(Boolean).join(' ')
             const isExpanded = expandedUserId === u.id
+            const isLocked = !!u.banned_until && new Date(u.banned_until) > new Date()
 
             return (
               <div key={u.id}>
                 {/* Compact row */}
                 <div
-                  className="flex items-center gap-3 px-5 py-3 cursor-pointer hover:bg-gray-50 group transition-colors"
+                  className={`flex items-center gap-3 px-5 py-3 cursor-pointer hover:bg-gray-50 group transition-colors ${isLocked ? 'opacity-60' : ''}`}
                   onClick={() => setExpandedUserId(isExpanded ? null : u.id)}
                 >
                   <div
@@ -244,11 +288,12 @@ function UsersSection({ isAdmin }: { isAdmin: boolean }) {
                     <p className="text-sm text-gray-900 truncate">{displayName || u.email}</p>
                     {displayName && <p className="text-xs text-gray-400 truncate">{u.email}</p>}
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${roleBadgeClass(role)}`}>
-                    {ROLE_LABELS[role]}
-                  </span>
+                  {isLocked
+                    ? <span className="text-xs px-2 py-0.5 rounded-full shrink-0 bg-red-50 text-red-600 border border-red-100">Locked</span>
+                    : <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${roleBadgeClass(role)}`}>{ROLE_LABELS[role]}</span>
+                  }
                   <div
-                    className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="flex items-center gap-2"
                     onClick={e => e.stopPropagation()}
                   >
                     <button
@@ -259,8 +304,15 @@ function UsersSection({ isAdmin }: { isAdmin: boolean }) {
                       <KeyRound className="w-3.5 h-3.5" />
                     </button>
                     <button
+                      onClick={() => handleToggleLock(u)}
+                      className={`transition-colors ${isLocked ? 'text-amber-500 hover:text-amber-700' : 'text-gray-400 hover:text-amber-500'}`}
+                      title={isLocked ? 'Unlock user' : 'Lock user out'}
+                    >
+                      {isLocked ? <LockKeyholeOpen className="w-3.5 h-3.5" /> : <LockKeyhole className="w-3.5 h-3.5" />}
+                    </button>
+                    <button
                       onClick={() => handleDelete(u)}
-                      className="text-gray-200 hover:text-red-500 transition-colors"
+                      className="text-gray-400 hover:text-red-500 transition-colors"
                       title="Delete user"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -357,6 +409,54 @@ function UsersSection({ isAdmin }: { isAdmin: boolean }) {
               <Button type="button" variant="secondary" onClick={() => setPasswordTarget(null)}>Cancel</Button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {unlockTarget && (
+        <Modal title="Unlock user account" onClose={() => setUnlockTarget(null)}>
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 p-3 bg-green-50 border border-green-100 rounded-lg">
+              <LockKeyholeOpen className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
+              <div className="text-xs text-green-800 leading-relaxed">
+                <p className="font-medium mb-0.5">{unlockTarget.email}</p>
+                <p>This user will be able to sign in again immediately.</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" variant="secondary" onClick={() => setUnlockTarget(null)} className="flex-1">Cancel</Button>
+              <button
+                onClick={handleConfirmUnlock}
+                disabled={saving}
+                className="flex-1 px-4 py-2 text-sm font-medium bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-60"
+              >
+                {saving ? 'Unlocking…' : 'Unlock account'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {lockTarget && (
+        <Modal title="Lock user account" onClose={() => setLockTarget(null)}>
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-100 rounded-lg">
+              <LockKeyhole className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-800 leading-relaxed">
+                <p className="font-medium mb-0.5">{lockTarget.email}</p>
+                <p>This user will be immediately locked out. They will not be able to sign in until you unlock their account.</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" variant="secondary" onClick={() => setLockTarget(null)} className="flex-1">Cancel</Button>
+              <button
+                onClick={handleConfirmLock}
+                disabled={saving}
+                className="flex-1 px-4 py-2 text-sm font-medium bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors disabled:opacity-60"
+              >
+                {saving ? 'Locking…' : 'Lock account'}
+              </button>
+            </div>
+          </div>
         </Modal>
       )}
     </div>

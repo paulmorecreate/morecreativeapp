@@ -67,6 +67,12 @@ export function AgenciesClient({ agencies, agents }: Props) {
 
   const agencyOpts = agencies.map(a => ({ value: a.id, label: a.name }))
 
+  const agencyNameExists = agencyForm.name.trim() !== '' &&
+    agencies.some(a => a.name.trim().toLowerCase() === agencyForm.name.trim().toLowerCase())
+
+  const agentNameExists = agentForm.name.trim() !== '' &&
+    agents.some(a => a.name.trim().toLowerCase() === agentForm.name.trim().toLowerCase())
+
   // ── Agency slot helpers (for Add Agency inline agents) ────────────
   const selectedExistingIds = new Set(
     agentSlots.flatMap(s => (s.mode === 'existing' && s.agentId ? [s.agentId] : []))
@@ -446,6 +452,7 @@ export function AgenciesClient({ agencies, agents }: Props) {
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Agency Name *</label>
             <Input value={agencyForm.name} onChange={e => setAgencyForm(f => ({ ...f, name: e.target.value }))} required placeholder="e.g. WME, CAA, Wilhelmina" />
+            {agencyNameExists && <p className="text-xs text-red-500 mt-1">An agency with this name already exists.</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -511,7 +518,7 @@ export function AgenciesClient({ agencies, agents }: Props) {
 
           <div className="flex gap-3 pt-1">
             <Button type="button" variant="secondary" onClick={() => { setAgencyOpen(false); resetAgencyModal() }} className="flex-1">Cancel</Button>
-            <Button type="submit" disabled={agencySaving} className="flex-1">{agencySaving ? 'Saving…' : 'Add Agency'}</Button>
+            <Button type="submit" disabled={agencySaving || agencyNameExists} className="flex-1">{agencySaving ? 'Saving…' : 'Add Agency'}</Button>
           </div>
         </form>
       </Modal>
@@ -574,6 +581,7 @@ export function AgenciesClient({ agencies, agents }: Props) {
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Agent Name *</label>
             <Input value={agentForm.name} onChange={e => setAgentForm(f => ({ ...f, name: e.target.value }))} required placeholder="Full name" />
+            {agentNameExists && <p className="text-xs text-red-500 mt-1">An agent with this name already exists.</p>}
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Country</label>
@@ -618,7 +626,7 @@ export function AgenciesClient({ agencies, agents }: Props) {
           </div>
           <div className="flex gap-3 pt-1">
             <Button type="button" variant="secondary" onClick={() => { setAgentOpen(false); resetAgentModal() }} className="flex-1">Cancel</Button>
-            <Button type="submit" disabled={agentSaving || (agencyMode === 'new' && !newAgencyName)} className="flex-1">
+            <Button type="submit" disabled={agentSaving || agentNameExists || (agencyMode === 'new' && !newAgencyName)} className="flex-1">
               {agentSaving ? 'Saving…' : 'Add Agent'}
             </Button>
           </div>
