@@ -689,6 +689,28 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
   const supabase = createClient()
   const [activeTab, setActiveTab] = useState<Tab>('users')
 
+  // Login audit
+  const [loginSearch, setLoginSearch] = useState('')
+  const [loginLimit, setLoginLimit] = useState(10)
+
+  // Record audit
+  const [recordSearch, setRecordSearch] = useState('')
+  const [recordType, setRecordType] = useState('')
+  const [recordLimit, setRecordLimit] = useState(10)
+
+  const filteredLogin = loginAudit.filter(r => {
+    const q = loginSearch.toLowerCase()
+    return !q || r.email.toLowerCase().includes(q) || (r.browser ?? '').toLowerCase().includes(q) || (r.os ?? '').toLowerCase().includes(q)
+  })
+
+  const recordTypes = Array.from(new Set(recordAudit.map(r => r.entity_type))).sort()
+  const filteredRecord = recordAudit.filter(r => {
+    const q = recordSearch.toLowerCase()
+    const matchType = !recordType || r.entity_type === recordType
+    const matchSearch = !q || r.record_name.toLowerCase().includes(q) || (r.created_by ?? '').toLowerCase().includes(q) || (r.updated_by ?? '').toLowerCase().includes(q)
+    return matchType && matchSearch
+  })
+
   async function addCategory(name: string) { await supabase.from('project_categories').insert({ name }); router.refresh() }
   async function deleteCategory(id: string) { await supabase.from('project_categories').delete().eq('id', id); router.refresh() }
   async function addIndustry(name: string) { await supabase.from('industries').insert({ name }); router.refresh() }
@@ -750,98 +772,160 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
       )}
 
       {activeTab === 'audit' && (
-        <div className="space-y-6">
-        <div className="bg-white rounded-xl border border-gray-200 max-w-4xl">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-900">Login Audit</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Most recent 200 sign-ins across all users</p>
-          </div>
-          {loginAudit.length === 0 ? (
-            <p className="px-5 py-6 text-sm text-gray-400">No logins recorded yet.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100">
-                    <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">User</th>
-                    <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">When</th>
-                    <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">Session</th>
-                    <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">Browser</th>
-                    <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">OS</th>
-                    <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">IP</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {loginAudit.map(row => (
-                    <tr key={row.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-3 text-gray-900">{row.email}</td>
-                      <td className="px-5 py-3 text-gray-500 whitespace-nowrap">
-                        {new Date(row.logged_in_at).toLocaleString('en-GB', {
-                          day: 'numeric', month: 'short', year: 'numeric',
-                          hour: '2-digit', minute: '2-digit',
-                        })}
-                      </td>
-                      <td className="px-5 py-3 text-gray-500 whitespace-nowrap">
-                        {formatSessionDuration(row.logged_in_at, row.last_seen_at)}
-                      </td>
-                      <td className="px-5 py-3 text-gray-500">{row.browser ?? '—'}</td>
-                      <td className="px-5 py-3 text-gray-500">{row.os ?? '—'}</td>
-                      <td className="px-5 py-3 text-gray-400 font-mono text-xs">{row.ip_address ?? '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        <div className="space-y-6 max-w-4xl">
 
-        {/* Record Activity */}
-        <div className="bg-white rounded-xl border border-gray-200 max-w-4xl">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-900">Record Activity</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Most recent 300 records created or edited, across all entity types</p>
-          </div>
-          {recordAudit.length === 0 ? (
-            <p className="px-5 py-6 text-sm text-gray-400">No activity recorded yet.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100">
-                    <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">Type</th>
-                    <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">Record</th>
-                    <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">Added by</th>
-                    <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">Added</th>
-                    <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">Last edited by</th>
-                    <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">Last edited</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {recordAudit.map(row => (
-                    <tr key={`${row.entity_type}-${row.id}`} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-3">
-                        <span className="inline-block text-[10px] font-semibold uppercase tracking-wide text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 capitalize">
-                          {row.entity_type}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-gray-900 font-medium">{row.record_name}</td>
-                      <td className="px-5 py-3 text-gray-500">{row.created_by ?? <span className="text-gray-300">—</span>}</td>
-                      <td className="px-5 py-3 text-gray-500 whitespace-nowrap">
-                        {new Date(row.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      </td>
-                      <td className="px-5 py-3 text-gray-500">{row.updated_by ?? <span className="text-gray-300">—</span>}</td>
-                      <td className="px-5 py-3 text-gray-500 whitespace-nowrap">
-                        {row.updated_by && row.updated_at
-                          ? new Date(row.updated_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                          : <span className="text-gray-300">—</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* Login Audit */}
+          <div className="bg-white rounded-xl border border-gray-200">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">Login Audit</h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {filteredLogin.length === loginAudit.length
+                    ? `${loginAudit.length} sign-ins`
+                    : `${filteredLogin.length} of ${loginAudit.length} sign-ins`}
+                </p>
+              </div>
+              <input
+                value={loginSearch}
+                onChange={e => { setLoginSearch(e.target.value); setLoginLimit(10) }}
+                placeholder="Search by user, browser, OS…"
+                className="w-56 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-gray-400 transition-all"
+              />
             </div>
-          )}
-        </div>
+            {loginAudit.length === 0 ? (
+              <p className="px-5 py-6 text-sm text-gray-400">No logins recorded yet.</p>
+            ) : filteredLogin.length === 0 ? (
+              <p className="px-5 py-6 text-sm text-gray-400">No results match your search.</p>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">User</th>
+                        <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">When</th>
+                        <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">Session</th>
+                        <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">Browser</th>
+                        <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">OS</th>
+                        <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">IP</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {filteredLogin.slice(0, loginLimit).map(row => (
+                        <tr key={row.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-5 py-3 text-gray-900">{row.email}</td>
+                          <td className="px-5 py-3 text-gray-500 whitespace-nowrap">
+                            {new Date(row.logged_in_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td className="px-5 py-3 text-gray-500 whitespace-nowrap">
+                            {formatSessionDuration(row.logged_in_at, row.last_seen_at)}
+                          </td>
+                          <td className="px-5 py-3 text-gray-500">{row.browser ?? '—'}</td>
+                          <td className="px-5 py-3 text-gray-500">{row.os ?? '—'}</td>
+                          <td className="px-5 py-3 text-gray-400 font-mono text-xs">{row.ip_address ?? '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {filteredLogin.length > loginLimit && (
+                  <div className="px-5 py-3 border-t border-gray-100">
+                    <button
+                      onClick={() => setLoginLimit(l => l + 10)}
+                      className="text-xs text-gray-500 hover:text-gray-800 transition-colors"
+                    >
+                      Show more ({filteredLogin.length - loginLimit} remaining)
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Record Activity */}
+          <div className="bg-white rounded-xl border border-gray-200">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">Record Activity</h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {filteredRecord.length === recordAudit.length
+                    ? `${recordAudit.length} records`
+                    : `${filteredRecord.length} of ${recordAudit.length} records`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={recordType}
+                  onChange={e => { setRecordType(e.target.value); setRecordLimit(10) }}
+                  className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-gray-400 transition-all bg-white"
+                >
+                  <option value="">All types</option>
+                  {recordTypes.map(t => <option key={t} value={t} className="capitalize">{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                </select>
+                <input
+                  value={recordSearch}
+                  onChange={e => { setRecordSearch(e.target.value); setRecordLimit(10) }}
+                  placeholder="Search records or users…"
+                  className="w-52 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-gray-400 transition-all"
+                />
+              </div>
+            </div>
+            {recordAudit.length === 0 ? (
+              <p className="px-5 py-6 text-sm text-gray-400">No activity recorded yet.</p>
+            ) : filteredRecord.length === 0 ? (
+              <p className="px-5 py-6 text-sm text-gray-400">No results match your search.</p>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">Type</th>
+                        <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">Record</th>
+                        <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">Added by</th>
+                        <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">Added</th>
+                        <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">Last edited by</th>
+                        <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">Last edited</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {filteredRecord.slice(0, recordLimit).map(row => (
+                        <tr key={`${row.entity_type}-${row.id}`} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-5 py-3">
+                            <span className="inline-block text-[10px] font-semibold uppercase tracking-wide text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
+                              {row.entity_type}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3 text-gray-900 font-medium">{row.record_name}</td>
+                          <td className="px-5 py-3 text-gray-500">{row.created_by ?? <span className="text-gray-300">—</span>}</td>
+                          <td className="px-5 py-3 text-gray-500 whitespace-nowrap">
+                            {new Date(row.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td className="px-5 py-3 text-gray-500">{row.updated_by ?? <span className="text-gray-300">—</span>}</td>
+                          <td className="px-5 py-3 text-gray-500 whitespace-nowrap">
+                            {row.updated_by && row.updated_at
+                              ? new Date(row.updated_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                              : <span className="text-gray-300">—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {filteredRecord.length > recordLimit && (
+                  <div className="px-5 py-3 border-t border-gray-100">
+                    <button
+                      onClick={() => setRecordLimit(l => l + 10)}
+                      className="text-xs text-gray-500 hover:text-gray-800 transition-colors"
+                    >
+                      Show more ({filteredRecord.length - recordLimit} remaining)
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
         </div>
       )}
     </div>
