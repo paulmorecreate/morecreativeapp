@@ -11,6 +11,7 @@ import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 import { formatDate, truncate } from '@/lib/utils'
+import { AuditStamp } from '@/components/audit-stamp'
 import { COUNTRIES } from '@/lib/constants/countries'
 
 const channelOpts = [
@@ -129,11 +130,14 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const by = user?.email ?? null
     await supabase.from('talents').update({
       name: form.name || null, ig_link: form.ig_link || null, tiktok_link: form.tiktok_link || null,
       ig_followers: form.ig_followers || null, tiktok_followers: form.tiktok_followers || null,
       category: form.category || null, talent_level: form.talent_level || null,
       country: form.country || null, email: form.email || null, phone: form.phone || null, notes: form.notes || null,
+      updated_by: by, updated_at: new Date().toISOString(),
     }).eq('id', talent.id)
     setSaving(false); setOpen(false); router.refresh()
   }
@@ -412,6 +416,8 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
           </div>
         </div>
       </div>
+
+      <AuditStamp createdBy={talent.created_by} createdAt={talent.created_at} updatedBy={talent.updated_by} updatedAt={talent.updated_at} />
 
       {/* Log Conversation */}
       <Modal open={logConvoOpen} onClose={() => setLogConvoOpen(false)} title="Log Conversation">

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
+import { AuditStamp } from '@/components/audit-stamp'
 
 type TalentLink = { id: string; talent_id: string; talent: { id: string; name: string } | null }
 type SimpleTalent = { id: string; name: string }
@@ -53,6 +54,7 @@ export function StylistDetailClient({ stylist, talentLinks, allTalents }: Props)
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
     await supabase.from('stylists').update({
       name: form.name || null,
       based: form.based || null,
@@ -60,6 +62,8 @@ export function StylistDetailClient({ stylist, talentLinks, allTalents }: Props)
       phone: form.phone || null,
       url: form.url || null,
       notes: form.notes || null,
+      updated_by: user?.email ?? null,
+      updated_at: new Date().toISOString(),
     }).eq('id', stylist.id)
     setSaving(false)
     setEditOpen(false)
@@ -186,6 +190,8 @@ export function StylistDetailClient({ stylist, talentLinks, allTalents }: Props)
           </div>
         </div>
       </div>
+
+      <AuditStamp createdBy={stylist.created_by} createdAt={stylist.created_at} updatedBy={stylist.updated_by} updatedAt={stylist.updated_at} />
 
       {/* Link Talent Modal */}
       <Modal open={linkTalentOpen} onClose={() => setLinkTalentOpen(false)} title="Link Talent">

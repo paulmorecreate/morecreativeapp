@@ -12,6 +12,8 @@ export interface Talent {
   email: string | null
   phone: string | null
   notes: string | null
+  created_by: string | null
+  updated_by: string | null
   created_at: string
   updated_at: string
 }
@@ -59,6 +61,8 @@ export interface Brand {
   industry: string | null
   country: string | null
   notes: string | null
+  created_by: string | null
+  updated_by: string | null
   created_at: string
   updated_at: string
 }
@@ -72,6 +76,8 @@ export interface Event {
   status: string
   category: string | null
   notes: string | null
+  created_by: string | null
+  updated_by: string | null
   created_at: string
   updated_at: string
 }
@@ -194,6 +200,8 @@ export interface Agency {
   website: string | null
   country: string | null
   notes: string | null
+  created_by: string | null
+  updated_by: string | null
   created_at: string
   updated_at: string
 }
@@ -208,6 +216,8 @@ export interface Agent {
   phone: string | null
   website: string | null
   notes: string | null
+  created_by: string | null
+  updated_by: string | null
   created_at: string
   updated_at: string
 }
@@ -233,6 +243,8 @@ export interface Stylist {
   phone: string | null
   url: string | null
   notes: string | null
+  created_by: string | null
+  updated_by: string | null
   created_at: string
   updated_at: string
 }
@@ -245,6 +257,8 @@ export interface Photographer {
   ig_link: string | null
   website: string | null
   notes: string | null
+  created_by: string | null
+  updated_by: string | null
   created_at: string
   updated_at: string
 }
@@ -258,6 +272,8 @@ export interface Person {
   phone: string | null
   url: string | null
   notes: string | null
+  created_by: string | null
+  updated_by: string | null
   created_at: string
   updated_at: string
 }
@@ -363,6 +379,7 @@ export interface ScheduleEvent {
   year: number
   category: 'global' | 'regional' | 'custom'
   region: string | null
+  importance: 'high' | 'medium' | 'low'
   project_id: string | null
   created_at: string
 }

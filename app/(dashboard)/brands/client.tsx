@@ -143,12 +143,14 @@ export function BrandsClient({ brands, industries, brandCategories, allProjects 
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
     const effectiveCategory = form.category === 'Other'
       ? (categoryOther.trim() || 'Other')
       : form.category
     const payload = Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v || null]))
     payload.name = form.name
     payload.category = effectiveCategory || null
+    payload.created_by = user?.email ?? null
     await supabase.from('brands').insert(payload)
     setSaving(false)
     setOpen(false)

@@ -64,6 +64,7 @@ export function PhotographersClient({ photographers }: { photographers: Photogra
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
     await supabase.from('photographers').insert({
       name: form.name,
       specialty: form.specialty || null,
@@ -71,6 +72,7 @@ export function PhotographersClient({ photographers }: { photographers: Photogra
       ig_link: form.ig_link || null,
       website: form.website || null,
       notes: form.notes || null,
+      created_by: user?.email ?? null,
     })
     setSaving(false)
     setOpen(false)

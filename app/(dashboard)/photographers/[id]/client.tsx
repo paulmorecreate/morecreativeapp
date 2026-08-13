@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
+import { AuditStamp } from '@/components/audit-stamp'
 
 const SPECIALTY_OPTS = [
   { value: 'Fashion', label: 'Fashion' },
@@ -60,6 +61,7 @@ export function PhotographerDetailClient({ photographer, contacts }: Props) {
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
     await supabase.from('photographers').update({
       name: form.name || null,
       specialty: form.specialty || null,
@@ -67,6 +69,8 @@ export function PhotographerDetailClient({ photographer, contacts }: Props) {
       ig_link: form.ig_link || null,
       website: form.website || null,
       notes: form.notes || null,
+      updated_by: user?.email ?? null,
+      updated_at: new Date().toISOString(),
     }).eq('id', photographer.id)
     setSaving(false)
     setEditOpen(false)
@@ -243,6 +247,8 @@ export function PhotographerDetailClient({ photographer, contacts }: Props) {
           </div>
         </div>
       </div>
+
+      <AuditStamp createdBy={photographer.created_by} createdAt={photographer.created_at} updatedBy={photographer.updated_by} updatedAt={photographer.updated_at} />
 
       <Modal open={contactOpen} onClose={() => { setContactOpen(false); setEditContact(null) }} title={editContact ? 'Edit Contact' : 'Add Contact'}>
         <form onSubmit={handleContactSubmit} className="space-y-4">

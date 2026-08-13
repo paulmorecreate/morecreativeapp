@@ -11,6 +11,7 @@ import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 import { COUNTRIES } from '@/lib/constants/countries'
+import { AuditStamp } from '@/components/audit-stamp'
 
 type AgentAtAgency = {
   id: string
@@ -75,11 +76,14 @@ export function AgencyDetailClient({ agency, agents, allAgents, agentTypes }: Pr
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
     await supabase.from('agencies').update({
       name: form.name || null,
       website: form.website || null,
       country: form.country || null,
       notes: form.notes || null,
+      updated_by: user?.email ?? null,
+      updated_at: new Date().toISOString(),
     }).eq('id', agency.id)
     setSaving(false)
     setEditOpen(false)
@@ -180,6 +184,8 @@ export function AgencyDetailClient({ agency, agents, allAgents, agentTypes }: Pr
           </div>
         </div>
       </div>
+
+      <AuditStamp createdBy={agency.created_by} createdAt={agency.created_at} updatedBy={agency.updated_by} updatedAt={agency.updated_at} />
 
       {/* Link / Add Agent Modal */}
       <Modal open={linkOpen} onClose={() => { setLinkOpen(false); resetLink() }} title="Add Agent to Agency">

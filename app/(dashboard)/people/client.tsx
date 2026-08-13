@@ -50,6 +50,7 @@ export function PeopleClient({ people }: { people: Person[] }) {
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
     await supabase.from('people').insert({
       name: form.name,
       type: form.type || null,
@@ -58,6 +59,7 @@ export function PeopleClient({ people }: { people: Person[] }) {
       phone: form.phone || null,
       url: form.url || null,
       notes: form.notes || null,
+      created_by: user?.email ?? null,
     })
     setSaving(false)
     setOpen(false)

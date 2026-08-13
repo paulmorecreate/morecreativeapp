@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
+import { AuditStamp } from '@/components/audit-stamp'
 import { COUNTRIES } from '@/lib/constants/countries'
 
 type TalentLink = {
@@ -66,6 +67,7 @@ export function AgentDetailClient({ agent, talentLinks, agentTypes, allTalents, 
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
     await supabase.from('agents').update({
       name: form.name || null,
       agent_type: form.agent_type || null,
@@ -75,6 +77,8 @@ export function AgentDetailClient({ agent, talentLinks, agentTypes, allTalents, 
       phone: form.phone || null,
       website: form.website || null,
       notes: form.notes || null,
+      updated_by: user?.email ?? null,
+      updated_at: new Date().toISOString(),
     }).eq('id', agent.id)
     setSaving(false)
     setEditOpen(false)
@@ -209,6 +213,8 @@ export function AgentDetailClient({ agent, talentLinks, agentTypes, allTalents, 
           </div>
         </div>
       </div>
+
+      <AuditStamp createdBy={agent.created_by} createdAt={agent.created_at} updatedBy={agent.updated_by} updatedAt={agent.updated_at} />
 
       {/* Link Talent Modal */}
       <Modal open={linkOpen} onClose={() => setLinkOpen(false)} title="Link Talent">

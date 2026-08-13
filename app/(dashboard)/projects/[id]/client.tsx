@@ -7,6 +7,7 @@ import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag, Trash2, X, CheckCircle2
 import { Event, ProjectCategory, Invoice, ProjectIncome, ProjectExpense, ExpenseCategory, CurrencyRate } from '@/lib/supabase/types'
 import { COUNTRIES } from '@/lib/constants/countries'
 import { createClient } from '@/lib/supabase/client'
+import { AuditStamp } from '@/components/audit-stamp'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
@@ -866,10 +867,12 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   async function handleSave(e: React.FormEvent) {
     e.preventDefault(); setSaving(true)
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
     await supabase.from('events').update({
       name: form.name || null, location: form.location || null,
       category: form.category || null, start_date: form.start_date || null,
       end_date: form.end_date || null, status: form.status, notes: form.notes || null,
+      updated_by: user?.email ?? null, updated_at: new Date().toISOString(),
     }).eq('id', project.id)
     setSaving(false); setOpen(false); router.refresh()
   }
@@ -1340,6 +1343,8 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
       </div>
         </>
       )}
+
+      <AuditStamp createdBy={project.created_by} createdAt={project.created_at} updatedBy={project.updated_by} updatedAt={project.updated_at} />
 
       {/* ── Modals ── */}
 

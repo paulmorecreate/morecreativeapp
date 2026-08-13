@@ -21,7 +21,19 @@ interface Props {
   categories: ProjectCategory[]
 }
 
-const emptyEventForm = { title: '', category: 'global' as 'global' | 'regional' | 'custom', region: '' }
+const IMPORTANCE_OPTS = [
+  { value: 'high', label: 'High' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'low', label: 'Low' },
+]
+
+const IMPORTANCE_BORDER: Record<string, string> = {
+  high: 'border-l-4 border-l-rose-500',
+  medium: 'border-l-4 border-l-amber-400',
+  low: 'border-l-4 border-l-slate-300',
+}
+
+const emptyEventForm = { title: '', category: 'global' as 'global' | 'regional' | 'custom', region: '', importance: 'medium' as 'high' | 'medium' | 'low' }
 const emptyProjectForm = { name: '', location: '', category: '', start_date: '', end_date: '', notes: '' }
 
 export function ScheduleClient({ events, categories }: Props) {
@@ -71,12 +83,15 @@ export function ScheduleClient({ events, categories }: Props) {
     if (!addMonth) return
     setSavingEvent(true)
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
     await supabase.from('schedule_events').insert({
       title: eventForm.title,
       month: addMonth,
       year,
       category: eventForm.category,
       region: eventForm.region || null,
+      importance: eventForm.importance,
+      created_by: user?.email ?? null,
     })
     setSavingEvent(false)
     setAddMonth(null)
@@ -86,7 +101,7 @@ export function ScheduleClient({ events, categories }: Props) {
 
   function openEdit(ev: ScheduleEvent) {
     setEditTarget(ev)
-    setEditForm({ title: ev.title, category: ev.category, region: ev.region ?? '' })
+    setEditForm({ title: ev.title, category: ev.category, region: ev.region ?? '', importance: ev.importance })
   }
 
   function editField(k: keyof typeof editForm) {
@@ -99,10 +114,14 @@ export function ScheduleClient({ events, categories }: Props) {
     if (!editTarget) return
     setSavingEdit(true)
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
     await supabase.from('schedule_events').update({
       title: editForm.title,
       category: editForm.category,
       region: editForm.region || null,
+      importance: editForm.importance,
+      updated_by: user?.email ?? null,
+      updated_at: new Date().toISOString(),
     }).eq('id', editTarget.id)
     setSavingEdit(false)
     setEditTarget(null)
@@ -296,6 +315,10 @@ export function ScheduleClient({ events, categories }: Props) {
               placeholder="e.g. ME, CN, UK, US"
             />
           </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Importance</label>
+            <Select value={eventForm.importance} onChange={eventField('importance')} options={IMPORTANCE_OPTS} />
+          </div>
           <div className="flex gap-2 justify-end pt-1">
             <Button type="button" variant="ghost" onClick={() => setAddMonth(null)}>Cancel</Button>
             <Button type="submit" disabled={savingEvent || !eventForm.title.trim()}>
@@ -348,6 +371,10 @@ export function ScheduleClient({ events, categories }: Props) {
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Region / Market (optional)</label>
             <Input value={editForm.region} onChange={editField('region')} placeholder="e.g. ME, CN, UK, US" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Importance</label>
+            <Select value={editForm.importance} onChange={editField('importance')} options={IMPORTANCE_OPTS} />
           </div>
           <div className="flex gap-2 justify-end pt-1">
             <Button type="button" variant="ghost" onClick={() => setEditTarget(null)}>Cancel</Button>
@@ -420,7 +447,7 @@ function EventRow({
   onDelete: (ev: ScheduleEvent) => void
 }) {
   return (
-    <div className="group flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-gray-50 transition-colors">
+    <div className={cn('group flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-gray-50 transition-colors pl-2', IMPORTANCE_BORDER[event.importance])}>
       <span className="flex-1 text-xs text-gray-700 leading-tight">{event.title}</span>
       {event.region && (
         <span className="shrink-0 text-[9px] font-semibold text-gray-400 bg-gray-100 rounded px-1 py-0.5 uppercase">

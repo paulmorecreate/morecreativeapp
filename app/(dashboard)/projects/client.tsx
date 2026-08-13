@@ -64,8 +64,10 @@ export function ProjectsClient({ projects, categories }: Props) {
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
     const payload = Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v || null]))
     payload.name = form.name
+    payload.created_by = user?.email ?? null
     await supabase.from('events').insert(payload)
     setSaving(false)
     setOpen(false)

@@ -11,6 +11,7 @@ import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 import { formatDate } from '@/lib/utils'
+import { AuditStamp } from '@/components/audit-stamp'
 import { COUNTRIES } from '@/lib/constants/countries'
 
 const channelOpts = [
@@ -195,6 +196,7 @@ export function BrandDetailClient({ brand, brandProjects, conversations, contact
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
     const effectiveCategory = form.category === 'Other'
       ? (categoryOther.trim() || 'Other')
       : form.category
@@ -205,6 +207,8 @@ export function BrandDetailClient({ brand, brandProjects, conversations, contact
       industry: form.industry || null,
       country: form.country || null,
       notes: form.notes || null,
+      updated_by: user?.email ?? null,
+      updated_at: new Date().toISOString(),
     }).eq('id', brand.id)
     setSaving(false)
     setOpen(false)
@@ -377,6 +381,8 @@ export function BrandDetailClient({ brand, brandProjects, conversations, contact
           </div>
         </div>
       </div>
+
+      <AuditStamp createdBy={brand.created_by} createdAt={brand.created_at} updatedBy={brand.updated_by} updatedAt={brand.updated_at} />
 
       {/* Add/Edit Contact Modal */}
       <Modal open={contactOpen} onClose={() => { setContactOpen(false); setEditContact(null) }} title={editContact ? 'Edit Contact' : 'Add Contact'}>

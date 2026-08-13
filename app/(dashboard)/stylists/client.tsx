@@ -105,6 +105,7 @@ export function StylistsClient({ stylists }: { stylists: Stylist[] }) {
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
     await supabase.from('stylists').insert({
       name: form.name,
       based: form.based || null,
@@ -112,6 +113,7 @@ export function StylistsClient({ stylists }: { stylists: Stylist[] }) {
       phone: form.phone || null,
       url: form.url || null,
       notes: form.notes || null,
+      created_by: user?.email ?? null,
     })
     setSaving(false)
     setOpen(false)

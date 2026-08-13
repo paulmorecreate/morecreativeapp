@@ -374,6 +374,8 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
     e.preventDefault()
     setSaving(true)
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const by = user?.email ?? null
     const { data: newTalent } = await supabase.from('talents').insert({
       name: form.name,
       ig_link: form.ig_link || null,
@@ -386,6 +388,7 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
       email: form.email || null,
       phone: form.phone || null,
       notes: form.notes || null,
+      created_by: by,
     }).select('id').single()
 
     if (newTalent) {

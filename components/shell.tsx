@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { Menu } from 'lucide-react'
 import { Sidebar } from './sidebar'
@@ -8,6 +8,13 @@ import { TodoFab } from './todo-fab'
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    const ping = () => fetch('/api/auth/heartbeat', { method: 'POST' }).catch(() => {})
+    ping()
+    const id = setInterval(ping, 5 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [])
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
