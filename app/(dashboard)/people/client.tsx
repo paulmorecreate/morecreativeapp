@@ -5,14 +5,20 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, Search, ChevronRight, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
 import { Person } from '@/lib/supabase/types'
+
+type UserProfile = { id: string; email: string; color: string | null; first_name: string | null; surname: string | null }
 import { Button } from '@/components/ui/button'
 import { Input, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 
-export function PeopleClient({ people }: { people: Person[] }) {
+export function PeopleClient({ people, userProfiles }: { people: Person[]; userProfiles: UserProfile[] }) {
   const router = useRouter()
   const [search, setSearch] = useState('')
+  const [userFilter, setUserFilter] = useState('')
+
+  const colorMap = new Map(userProfiles.map(p => [p.email, p.color]))
+  function profileName(p: UserProfile) { return p.first_name || p.email.split('@')[0] }
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
@@ -20,13 +26,17 @@ export function PeopleClient({ people }: { people: Person[] }) {
   const [form, setForm] = useState({ name: '', type: '', based: '', email: '', phone: '', url: '', notes: '' })
 
   const q = search.toLowerCase()
-  const filtered = people.filter(p =>
-    !search ||
-    p.name.toLowerCase().includes(q) ||
-    (p.type ?? '').toLowerCase().includes(q) ||
-    (p.based ?? '').toLowerCase().includes(q) ||
-    (p.email ?? '').toLowerCase().includes(q)
-  )
+  const usedEmails = new Set(people.map(p => p.updated_by ?? p.created_by).filter(Boolean) as string[])
+  const filterableProfiles = userProfiles.filter(p => usedEmails.has(p.email))
+  const filtered = people.filter(p => {
+    const matchSearch = !search ||
+      p.name.toLowerCase().includes(q) ||
+      (p.type ?? '').toLowerCase().includes(q) ||
+      (p.based ?? '').toLowerCase().includes(q) ||
+      (p.email ?? '').toLowerCase().includes(q)
+    const matchUser = !userFilter || (p.updated_by ?? p.created_by) === userFilter
+    return matchSearch && matchUser
+  })
 
   const nameExists = form.name.trim() !== '' &&
     people.some(p => p.name.trim().toLowerCase() === form.name.trim().toLowerCase())
@@ -99,14 +109,26 @@ export function PeopleClient({ people }: { people: Person[] }) {
         </Button>
       </div>
 
-      <div className="relative flex-1 max-w-xs mb-5">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search people…"
-          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/10 bg-white"
-        />
+      <div className="flex gap-3 mb-5">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search people…"
+            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/10 bg-white"
+          />
+        </div>
+        {filterableProfiles.length > 0 && (
+          <select
+            value={userFilter}
+            onChange={e => setUserFilter(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black/10 bg-white text-gray-700"
+          >
+            <option value="">All users</option>
+            {filterableProfiles.map(p => <option key={p.email} value={p.email}>{profileName(p)}</option>)}
+          </select>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -129,8 +151,15 @@ export function PeopleClient({ people }: { people: Person[] }) {
                 </td>
               </tr>
             )}
-            {sorted.map(p => (
-              <tr key={p.id} className="hover:bg-gray-50/50 transition-colors group">
+            {sorted.map(p => {
+              const effectiveUser = p.updated_by ?? p.created_by
+              const bgColor = effectiveUser ? (colorMap.get(effectiveUser) ?? null) : null
+              return (
+              <tr
+                key={p.id}
+                style={bgColor ? { backgroundColor: bgColor } : undefined}
+                className={`transition-colors group${!bgColor ? ' hover:bg-gray-50/50' : ''}`}
+              >
                 <td className="px-4 py-3">
                   <Link href={`/people/${p.id}`} className="font-medium text-gray-900 hover:text-black">{p.name}</Link>
                 </td>
@@ -151,7 +180,8 @@ export function PeopleClient({ people }: { people: Person[] }) {
                   </div>
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>

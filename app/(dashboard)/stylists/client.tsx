@@ -5,14 +5,20 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, Search, ChevronRight, Trash2, ChevronUp, ChevronDown, Check, Minus, FileDown } from 'lucide-react'
 import { Stylist } from '@/lib/supabase/types'
+
+type UserProfile = { id: string; email: string; color: string | null; first_name: string | null; surname: string | null }
 import { Button } from '@/components/ui/button'
 import { Input, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 
-export function StylistsClient({ stylists }: { stylists: Stylist[] }) {
+export function StylistsClient({ stylists, userProfiles }: { stylists: Stylist[]; userProfiles: UserProfile[] }) {
   const router = useRouter()
   const [search, setSearch] = useState('')
+  const [userFilter, setUserFilter] = useState('')
+
+  const colorMap = new Map(userProfiles.map(p => [p.email, p.color]))
+  function profileName(p: UserProfile) { return p.first_name || p.email.split('@')[0] }
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
@@ -23,12 +29,16 @@ export function StylistsClient({ stylists }: { stylists: Stylist[] }) {
   const [exportingList, setExportingList] = useState(false)
 
   const q = search.toLowerCase()
-  const filtered = stylists.filter(s =>
-    !search ||
-    s.name.toLowerCase().includes(q) ||
-    (s.based ?? '').toLowerCase().includes(q) ||
-    (s.email ?? '').toLowerCase().includes(q)
-  )
+  const usedEmails = new Set(stylists.map(s => s.updated_by ?? s.created_by).filter(Boolean) as string[])
+  const filterableProfiles = userProfiles.filter(p => usedEmails.has(p.email))
+  const filtered = stylists.filter(s => {
+    const matchSearch = !search ||
+      s.name.toLowerCase().includes(q) ||
+      (s.based ?? '').toLowerCase().includes(q) ||
+      (s.email ?? '').toLowerCase().includes(q)
+    const matchUser = !userFilter || (s.updated_by ?? s.created_by) === userFilter
+    return matchSearch && matchUser
+  })
 
   const [sortKey, setSortKey] = useState('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -134,14 +144,26 @@ export function StylistsClient({ stylists }: { stylists: Stylist[] }) {
         </Button>
       </div>
 
-      <div className="relative flex-1 max-w-xs mb-5">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search stylists…"
-          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/10 bg-white"
-        />
+      <div className="flex gap-3 mb-5">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search stylists…"
+            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/10 bg-white"
+          />
+        </div>
+        {filterableProfiles.length > 0 && (
+          <select
+            value={userFilter}
+            onChange={e => setUserFilter(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black/10 bg-white text-gray-700"
+          >
+            <option value="">All users</option>
+            {filterableProfiles.map(p => <option key={p.email} value={p.email}>{profileName(p)}</option>)}
+          </select>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -177,8 +199,14 @@ export function StylistsClient({ stylists }: { stylists: Stylist[] }) {
             )}
             {sorted.map(s => {
               const isSelected = selected.has(s.id)
+              const effectiveUser = s.updated_by ?? s.created_by
+              const bgColor = effectiveUser ? (colorMap.get(effectiveUser) ?? null) : null
               return (
-                <tr key={s.id} className={`hover:bg-gray-50/50 transition-colors group ${isSelected ? 'bg-blue-50/30' : ''}`}>
+                <tr
+                  key={s.id}
+                  style={!isSelected && bgColor ? { backgroundColor: bgColor } : undefined}
+                  className={`transition-colors group ${isSelected ? 'bg-blue-50/30' : !bgColor ? 'hover:bg-gray-50/50' : ''}`}
+                >
                   <td className="pl-4 pr-2 py-3">
                     <button
                       onClick={() => toggleSelect(s.id)}

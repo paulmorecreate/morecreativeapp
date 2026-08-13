@@ -21,6 +21,7 @@ type SimpleStylist = { id: string; name: string }
 type SimplePerson = { id: string; name: string; type: string | null }
 type SimpleProjectBrand = { id: string; brand: { id: string; name: string } | null }
 type SimpleProject = { id: string; name: string; project_brands: SimpleProjectBrand[] }
+type UserProfile = { id: string; email: string; color: string | null; first_name: string | null; surname: string | null }
 
 type Props = {
   talents: TalentRow[]
@@ -31,6 +32,7 @@ type Props = {
   allStylists: SimpleStylist[]
   allPeople: SimplePerson[]
   allProjects: SimpleProject[]
+  userProfiles: UserProfile[]
 }
 
 function SearchableProjectPicker({ projects, selected, onSelect }: {
@@ -116,10 +118,14 @@ function parseFollowers(s: string | null): number {
   return num
 }
 
-export function TalentsClient({ talents, talentCategories, allAgents, agentTypes, talentLevels, allStylists, allPeople, allProjects }: Props) {
+export function TalentsClient({ talents, talentCategories, allAgents, agentTypes, talentLevels, allStylists, allPeople, allProjects, userProfiles }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
+  const [userFilter, setUserFilter] = useState('')
+
+  const colorMap = new Map(userProfiles.map(p => [p.email, p.color]))
+  function profileName(p: UserProfile) { return p.first_name || p.email.split('@')[0] }
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
@@ -257,13 +263,16 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
   const agentTypeOpts = agentTypes.map(t => ({ value: t.name, label: t.name }))
 
   const q = search.toLowerCase()
+  const usedEmails = new Set(talents.map(t => t.updated_by ?? t.created_by).filter(Boolean) as string[])
+  const filterableProfiles = userProfiles.filter(p => usedEmails.has(p.email))
   const filtered = talents.filter(t => {
     const agentName = t.talent_agents?.[0]?.agent?.name ?? ''
     const matchSearch = !search ||
       t.name.toLowerCase().includes(q) ||
       agentName.toLowerCase().includes(q)
     const matchCat = !categoryFilter || t.category === categoryFilter
-    return matchSearch && matchCat
+    const matchUser = !userFilter || (t.updated_by ?? t.created_by) === userFilter
+    return matchSearch && matchCat && matchUser
   })
 
   const [sortKey, setSortKey] = useState('name')
@@ -464,6 +473,16 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
           <option value="">All categories</option>
           {categoryOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
+        {filterableProfiles.length > 0 && (
+          <select
+            value={userFilter}
+            onChange={e => setUserFilter(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black/10 bg-white text-gray-700"
+          >
+            <option value="">All users</option>
+            {filterableProfiles.map(p => <option key={p.email} value={p.email}>{profileName(p)}</option>)}
+          </select>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -504,8 +523,14 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
             {sorted.map(talent => {
               const agentNames = talent.talent_agents?.map(ta => ta.agent?.name).filter(Boolean).join(', ') ?? ''
               const isSelected = selected.has(talent.id)
+              const effectiveUser = talent.updated_by ?? talent.created_by
+              const bgColor = effectiveUser ? (colorMap.get(effectiveUser) ?? null) : null
               return (
-                <tr key={talent.id} className={`hover:bg-gray-50/50 transition-colors group ${isSelected ? 'bg-blue-50/30' : ''}`}>
+                <tr
+                  key={talent.id}
+                  style={!isSelected && bgColor ? { backgroundColor: bgColor } : undefined}
+                  className={`transition-colors group ${isSelected ? 'bg-blue-50/30' : !bgColor ? 'hover:bg-gray-50/50' : ''}`}
+                >
                   <td className="pl-4 pr-2 py-3">
                     <button
                       onClick={() => toggleSelect(talent.id)}

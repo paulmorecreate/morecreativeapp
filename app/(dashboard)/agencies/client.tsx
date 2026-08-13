@@ -14,6 +14,7 @@ import { COUNTRIES } from '@/lib/constants/countries'
 
 type AgencyRow = Agency & { agents: { id: string }[] }
 type AgentWithAgency = Agent & { agency: { id: string; name: string } | null }
+type UserProfile = { id: string; email: string; color: string | null; first_name: string | null; surname: string | null }
 
 // Slot used when adding agents inline during Add Agency
 type AgentSlot =
@@ -23,16 +24,21 @@ type AgentSlot =
 type Props = {
   agencies: AgencyRow[]
   agents: AgentWithAgency[]
+  userProfiles: UserProfile[]
 }
 
 const EMPTY_AGENT_FORM = { name: '', agency_id: '', country: '', email: '', phone: '', notes: '' }
 
-export function AgenciesClient({ agencies, agents }: Props) {
+export function AgenciesClient({ agencies, agents, userProfiles }: Props) {
   const router = useRouter()
   const allAgents = agents.map(a => ({ id: a.id, name: a.name }))
 
+  const colorMap = new Map(userProfiles.map(p => [p.email, p.color]))
+  function profileName(p: UserProfile) { return p.first_name || p.email.split('@')[0] }
+
   // ── Agency section state ──────────────────────────────────────────
   const [agencySearch, setAgencySearch] = useState('')
+  const [agencyUserFilter, setAgencyUserFilter] = useState('')
   const [agencyOpen, setAgencyOpen] = useState(false)
   const [agencySaving, setAgencySaving] = useState(false)
   const [agencyForm, setAgencyForm] = useState({ name: '', website: '', country: '', notes: '' })
@@ -43,6 +49,7 @@ export function AgenciesClient({ agencies, agents }: Props) {
 
   // ── Agent section state ───────────────────────────────────────────
   const [agentSearch, setAgentSearch] = useState('')
+  const [agentUserFilter, setAgentUserFilter] = useState('')
   const [agentOpen, setAgentOpen] = useState(false)
   const [agentSaving, setAgentSaving] = useState(false)
   const [agentForm, setAgentForm] = useState(EMPTY_AGENT_FORM)
@@ -53,17 +60,25 @@ export function AgenciesClient({ agencies, agents }: Props) {
   const [newAgencyCountry, setNewAgencyCountry] = useState('')
 
   // ── Filtering ─────────────────────────────────────────────────────
-  const filteredAgencies = agencies.filter(a =>
-    !agencySearch || a.name.toLowerCase().includes(agencySearch.toLowerCase())
-  )
+  const agencyUsedEmails = new Set(agencies.map(a => a.updated_by ?? a.created_by).filter(Boolean) as string[])
+  const agencyFilterableProfiles = userProfiles.filter(p => agencyUsedEmails.has(p.email))
+  const filteredAgencies = agencies.filter(a => {
+    const matchSearch = !agencySearch || a.name.toLowerCase().includes(agencySearch.toLowerCase())
+    const matchUser = !agencyUserFilter || (a.updated_by ?? a.created_by) === agencyUserFilter
+    return matchSearch && matchUser
+  })
 
   const q = agentSearch.toLowerCase()
-  const filteredAgents = agents.filter(a =>
-    !agentSearch ||
-    a.name.toLowerCase().includes(q) ||
-    (a.agency?.name ?? '').toLowerCase().includes(q) ||
-    (a.email ?? '').toLowerCase().includes(q)
-  )
+  const agentUsedEmails = new Set(agents.map(a => a.updated_by ?? a.created_by).filter(Boolean) as string[])
+  const agentFilterableProfiles = userProfiles.filter(p => agentUsedEmails.has(p.email))
+  const filteredAgents = agents.filter(a => {
+    const matchSearch = !agentSearch ||
+      a.name.toLowerCase().includes(q) ||
+      (a.agency?.name ?? '').toLowerCase().includes(q) ||
+      (a.email ?? '').toLowerCase().includes(q)
+    const matchUser = !agentUserFilter || (a.updated_by ?? a.created_by) === agentUserFilter
+    return matchSearch && matchUser
+  })
 
   const agencyOpts = agencies.map(a => ({ value: a.id, label: a.name }))
 
@@ -298,6 +313,16 @@ export function AgenciesClient({ agencies, agents }: Props) {
               className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/10 bg-white"
             />
           </div>
+          {agencyFilterableProfiles.length > 0 && (
+            <select
+              value={agencyUserFilter}
+              onChange={e => setAgencyUserFilter(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black/10 bg-white text-gray-700"
+            >
+              <option value="">All users</option>
+              {agencyFilterableProfiles.map(p => <option key={p.email} value={p.email}>{profileName(p)}</option>)}
+            </select>
+          )}
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -320,8 +345,15 @@ export function AgenciesClient({ agencies, agents }: Props) {
                   </td>
                 </tr>
               )}
-              {sortedAgencies.map(agency => (
-                <tr key={agency.id} className="hover:bg-gray-50/50 transition-colors group">
+              {sortedAgencies.map(agency => {
+                const agencyEffectiveUser = agency.updated_by ?? agency.created_by
+                const agencyBgColor = agencyEffectiveUser ? (colorMap.get(agencyEffectiveUser) ?? null) : null
+                return (
+                <tr
+                  key={agency.id}
+                  style={agencyBgColor ? { backgroundColor: agencyBgColor } : undefined}
+                  className={`transition-colors group${!agencyBgColor ? ' hover:bg-gray-50/50' : ''}`}
+                >
                   <td className="px-4 py-3">
                     <Link href={`/agencies/${agency.id}`} className="font-medium text-gray-900 hover:text-black">
                       {agency.name}
@@ -354,7 +386,8 @@ export function AgenciesClient({ agencies, agents }: Props) {
                     </div>
                   </td>
                 </tr>
-              ))}
+              )
+              })}
             </tbody>
           </table>
         </div>
@@ -386,6 +419,16 @@ export function AgenciesClient({ agencies, agents }: Props) {
               className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/10 bg-white"
             />
           </div>
+          {agentFilterableProfiles.length > 0 && (
+            <select
+              value={agentUserFilter}
+              onChange={e => setAgentUserFilter(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black/10 bg-white text-gray-700"
+            >
+              <option value="">All users</option>
+              {agentFilterableProfiles.map(p => <option key={p.email} value={p.email}>{profileName(p)}</option>)}
+            </select>
+          )}
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -408,8 +451,15 @@ export function AgenciesClient({ agencies, agents }: Props) {
                   </td>
                 </tr>
               )}
-              {sortedAgents.map(agent => (
-                <tr key={agent.id} className="hover:bg-gray-50/50 transition-colors group">
+              {sortedAgents.map(agent => {
+                const agentEffectiveUser = agent.updated_by ?? agent.created_by
+                const agentBgColor = agentEffectiveUser ? (colorMap.get(agentEffectiveUser) ?? null) : null
+                return (
+                <tr
+                  key={agent.id}
+                  style={agentBgColor ? { backgroundColor: agentBgColor } : undefined}
+                  className={`transition-colors group${!agentBgColor ? ' hover:bg-gray-50/50' : ''}`}
+                >
                   <td className="px-4 py-3">
                     <Link href={`/agents/${agent.id}`} className="font-medium text-gray-900 hover:text-black">
                       {agent.name}
@@ -442,7 +492,8 @@ export function AgenciesClient({ agencies, agents }: Props) {
                     </div>
                   </td>
                 </tr>
-              ))}
+              )
+              })}
             </tbody>
           </table>
         </div>

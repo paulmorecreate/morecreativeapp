@@ -3,10 +3,10 @@ import { PeopleClient } from './client'
 
 export default async function PeoplePage() {
   const supabase = await createClient()
-  const { data: people } = await supabase
-    .from('people')
-    .select('*')
-    .order('name')
+  const [{ data: people }, { data: userProfiles }] = await Promise.all([
+    supabase.from('people').select('*').order('name'),
+    supabase.from('user_profiles').select('id, email, color, first_name, surname').order('email'),
+  ])
 
-  return <PeopleClient people={people ?? []} />
+  return <PeopleClient people={people ?? []} userProfiles={userProfiles ?? []} />
 }
