@@ -6,10 +6,11 @@ import Link from 'next/link'
 import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, AlertTriangle } from 'lucide-react'
 import { Stylist } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
-import { Input, Select, Textarea } from '@/components/ui/input'
+import { Input, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 import { AuditStamp } from '@/components/audit-stamp'
+import { AddTalentForm, AddTalentFormProps } from '@/components/add-talent-form'
 
 type TalentLink = { id: string; talent_id: string; talent: { id: string; name: string } | null }
 type SimpleTalent = { id: string; name: string }
@@ -18,9 +19,9 @@ type Props = {
   stylist: Stylist
   talentLinks: TalentLink[]
   allTalents: SimpleTalent[]
-}
+} & Pick<AddTalentFormProps, 'talentCategories' | 'talentLevels' | 'allAgents' | 'agentTypes' | 'allStylists' | 'allPeople'>
 
-export function StylistDetailClient({ stylist, talentLinks, allTalents }: Props) {
+export function StylistDetailClient({ stylist, talentLinks, allTalents, talentCategories, talentLevels, allAgents, agentTypes, allStylists, allPeople }: Props) {
   const router = useRouter()
 
   const [editOpen, setEditOpen] = useState(false)
@@ -30,8 +31,9 @@ export function StylistDetailClient({ stylist, talentLinks, allTalents }: Props)
 
   // Talent linking
   const [linkTalentOpen, setLinkTalentOpen] = useState(false)
-  const [linkTalentId, setLinkTalentId] = useState('')
   const [linkTalentSaving, setLinkTalentSaving] = useState(false)
+  const [linkSearch, setLinkSearch] = useState('')
+  const [linkMode, setLinkMode] = useState<'search' | 'create'>('search')
 
   const [form, setForm] = useState({
     name: stylist.name ?? '',
@@ -44,6 +46,7 @@ export function StylistDetailClient({ stylist, talentLinks, allTalents }: Props)
 
   const linkedTalentIds = new Set(talentLinks.map(l => l.talent_id))
   const availableTalents = allTalents.filter(t => !linkedTalentIds.has(t.id))
+
 
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -78,14 +81,22 @@ export function StylistDetailClient({ stylist, talentLinks, allTalents }: Props)
     router.refresh()
   }
 
-  function openLinkTalent() { setLinkTalentId(''); setLinkTalentOpen(true) }
+  function openLinkTalent() {
+    setLinkSearch('')
+    setLinkMode('search')
+    setLinkTalentOpen(true)
+  }
 
-  async function handleLinkTalent(e: React.FormEvent) {
-    e.preventDefault()
-    if (!linkTalentId) return
+  async function handleLinkExisting(talentId: string) {
     setLinkTalentSaving(true)
-    await createClient().from('talent_stylists').insert({ talent_id: linkTalentId, stylist_id: stylist.id })
+    await createClient().from('talent_stylists').insert({ talent_id: talentId, stylist_id: stylist.id })
     setLinkTalentSaving(false)
+    setLinkTalentOpen(false)
+    router.refresh()
+  }
+
+  async function handleCreateAndLink(newTalentId: string) {
+    await createClient().from('talent_stylists').insert({ talent_id: newTalentId, stylist_id: stylist.id })
     setLinkTalentOpen(false)
     router.refresh()
   }
@@ -195,23 +206,57 @@ export function StylistDetailClient({ stylist, talentLinks, allTalents }: Props)
 
       {/* Link Talent Modal */}
       <Modal open={linkTalentOpen} onClose={() => setLinkTalentOpen(false)} title="Link Talent">
-        <form onSubmit={handleLinkTalent} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Talent</label>
-            <Select
-              value={linkTalentId}
-              onChange={e => setLinkTalentId(e.target.value)}
-              options={availableTalents.map(t => ({ value: t.id, label: t.name }))}
-              placeholder={availableTalents.length ? 'Select talent…' : 'All talents already linked'}
+        {linkMode === 'search' ? (
+          <div className="space-y-3">
+            <Input
+              placeholder="Search talents…"
+              value={linkSearch}
+              onChange={e => setLinkSearch(e.target.value)}
+              autoFocus
             />
+            <div className="max-h-56 overflow-y-auto rounded-lg border border-gray-100 divide-y divide-gray-50">
+              {(() => {
+                const filtered = availableTalents.filter(t =>
+                  t.name.toLowerCase().includes(linkSearch.toLowerCase())
+                )
+                if (filtered.length === 0) {
+                  return <p className="px-3 py-3 text-sm text-gray-400">{linkSearch ? 'No matching talents.' : 'All talents already linked.'}</p>
+                }
+                return filtered.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => handleLinkExisting(t.id)}
+                    disabled={linkTalentSaving}
+                    className="w-full text-left px-3 py-2.5 text-sm text-gray-900 hover:bg-gray-50 transition-colors first:rounded-t-lg last:rounded-b-lg"
+                  >
+                    {t.name}
+                  </button>
+                ))
+              })()}
+            </div>
+            <div className="border-t border-gray-100 pt-2 flex items-center justify-between">
+              <button
+                onClick={() => setLinkMode('create')}
+                className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700"
+              >
+                <Plus className="w-3.5 h-3.5" /> Create new talent
+              </button>
+              <Button type="button" variant="secondary" onClick={() => setLinkTalentOpen(false)}>Cancel</Button>
+            </div>
           </div>
-          <div className="flex gap-3 pt-1">
-            <Button type="button" variant="secondary" onClick={() => setLinkTalentOpen(false)} className="flex-1">Cancel</Button>
-            <Button type="submit" disabled={linkTalentSaving || !linkTalentId} className="flex-1">
-              {linkTalentSaving ? 'Saving…' : 'Link Talent'}
-            </Button>
-          </div>
-        </form>
+        ) : (
+          <AddTalentForm
+            talentCategories={talentCategories}
+            talentLevels={talentLevels}
+            allAgents={allAgents}
+            agentTypes={agentTypes}
+            allStylists={allStylists}
+            allPeople={allPeople}
+            existingNames={allTalents.map(t => t.name)}
+            onSuccess={handleCreateAndLink}
+            onCancel={() => setLinkMode('search')}
+          />
+        )}
       </Modal>
 
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Stylist">

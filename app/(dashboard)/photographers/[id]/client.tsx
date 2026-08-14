@@ -10,6 +10,7 @@ import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 import { AuditStamp } from '@/components/audit-stamp'
+import { AddTalentForm, AddTalentFormProps } from '@/components/add-talent-form'
 
 const SPECIALTY_OPTS = [
   { value: 'Fashion', label: 'Fashion' },
@@ -21,18 +22,30 @@ const SPECIALTY_OPTS = [
   { value: 'Red Carpet', label: 'Red Carpet' },
 ]
 
+type TalentLink = { id: string; talent_id: string; talent: { id: string; name: string } | null }
+type SimpleTalent = { id: string; name: string }
+
 type Props = {
   photographer: Photographer
   contacts: PhotographerContact[]
-}
+  talentLinks: TalentLink[]
+  allTalents: SimpleTalent[]
+} & Pick<AddTalentFormProps, 'talentCategories' | 'talentLevels' | 'allAgents' | 'agentTypes' | 'allStylists' | 'allPeople'>
 
-export function PhotographerDetailClient({ photographer, contacts }: Props) {
+export function PhotographerDetailClient({ photographer, contacts, talentLinks, allTalents, talentCategories, talentLevels, allAgents, agentTypes, allStylists, allPeople }: Props) {
   const router = useRouter()
 
   const [editOpen, setEditOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  // Talent linking
+  const [linkTalentOpen, setLinkTalentOpen] = useState(false)
+  const [linkTalentSaving, setLinkTalentSaving] = useState(false)
+  const [linkSearch, setLinkSearch] = useState('')
+  const [linkMode, setLinkMode] = useState<'search' | 'create'>('search')
+  const [newTalentName, setNewTalentName] = useState('')
   const [form, setForm] = useState({
     name: photographer.name ?? '',
     specialty: photographer.specialty ?? '',
@@ -133,6 +146,35 @@ export function PhotographerDetailClient({ photographer, contacts }: Props) {
     router.refresh()
   }
 
+  const linkedTalentIds = new Set(talentLinks.map(l => l.talent_id))
+  const availableTalents = allTalents.filter(t => !linkedTalentIds.has(t.id))
+
+  function openLinkTalent() {
+    setLinkSearch('')
+    setLinkMode('search')
+    setNewTalentName('')
+    setLinkTalentOpen(true)
+  }
+
+  async function handleLinkExisting(talentId: string) {
+    setLinkTalentSaving(true)
+    await createClient().from('talent_photographers').insert({ talent_id: talentId, photographer_id: photographer.id })
+    setLinkTalentSaving(false)
+    setLinkTalentOpen(false)
+    router.refresh()
+  }
+
+  async function handleCreateAndLink(newTalentId: string) {
+    await createClient().from('talent_photographers').insert({ talent_id: newTalentId, photographer_id: photographer.id })
+    setLinkTalentOpen(false)
+    router.refresh()
+  }
+
+  async function unlinkTalent(linkId: string) {
+    await createClient().from('talent_photographers').delete().eq('id', linkId)
+    router.refresh()
+  }
+
   return (
     <div>
       <div className="mb-6">
@@ -204,7 +246,36 @@ export function PhotographerDetailClient({ photographer, contacts }: Props) {
           )}
         </div>
 
-        <div className="col-span-2">
+        <div className="col-span-2 space-y-5">
+          {/* Talents */}
+          <div className="bg-white rounded-xl border border-gray-200">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h2 className="text-sm font-semibold text-gray-900">Talents</h2>
+              <button onClick={openLinkTalent} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700">
+                <Plus className="w-3 h-3" /> Link
+              </button>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {talentLinks.length === 0 && (
+                <p className="px-5 py-4 text-sm text-gray-400">No talents linked.</p>
+              )}
+              {talentLinks.map(link => (
+                <div key={link.id} className="group flex items-center justify-between px-5 py-3 hover:bg-gray-50/50 transition-colors">
+                  <Link href={`/talents/${link.talent?.id}`} className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-900">{link.talent?.name ?? '—'}</div>
+                  </Link>
+                  <button
+                    onClick={() => unlinkTalent(link.id)}
+                    className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity ml-3 shrink-0"
+                    title="Remove link"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="bg-white rounded-xl border border-gray-200">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Contacts</h2>
@@ -249,6 +320,61 @@ export function PhotographerDetailClient({ photographer, contacts }: Props) {
       </div>
 
       <AuditStamp createdBy={photographer.created_by} createdAt={photographer.created_at} updatedBy={photographer.updated_by} updatedAt={photographer.updated_at} />
+
+      {/* Link Talent Modal */}
+      <Modal open={linkTalentOpen} onClose={() => setLinkTalentOpen(false)} title="Link Talent">
+        {linkMode === 'search' ? (
+          <div className="space-y-3">
+            <Input
+              placeholder="Search talents…"
+              value={linkSearch}
+              onChange={e => setLinkSearch(e.target.value)}
+              autoFocus
+            />
+            <div className="max-h-56 overflow-y-auto rounded-lg border border-gray-100 divide-y divide-gray-50">
+              {(() => {
+                const filtered = availableTalents.filter(t =>
+                  t.name.toLowerCase().includes(linkSearch.toLowerCase())
+                )
+                if (filtered.length === 0) {
+                  return <p className="px-3 py-3 text-sm text-gray-400">{linkSearch ? 'No matching talents.' : 'All talents already linked.'}</p>
+                }
+                return filtered.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => handleLinkExisting(t.id)}
+                    disabled={linkTalentSaving}
+                    className="w-full text-left px-3 py-2.5 text-sm text-gray-900 hover:bg-gray-50 transition-colors first:rounded-t-lg last:rounded-b-lg"
+                  >
+                    {t.name}
+                  </button>
+                ))
+              })()}
+            </div>
+            <div className="border-t border-gray-100 pt-2 flex items-center justify-between">
+              <button
+                onClick={() => setLinkMode('create')}
+                className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700"
+              >
+                <Plus className="w-3.5 h-3.5" /> Create new talent
+              </button>
+              <Button type="button" variant="secondary" onClick={() => setLinkTalentOpen(false)}>Cancel</Button>
+            </div>
+          </div>
+        ) : (
+          <AddTalentForm
+            talentCategories={talentCategories}
+            talentLevels={talentLevels}
+            allAgents={allAgents}
+            agentTypes={agentTypes}
+            allStylists={allStylists}
+            allPeople={allPeople}
+            existingNames={allTalents.map(t => t.name)}
+            onSuccess={handleCreateAndLink}
+            onCancel={() => setLinkMode('search')}
+          />
+        )}
+      </Modal>
 
       <Modal open={contactOpen} onClose={() => { setContactOpen(false); setEditContact(null) }} title={editContact ? 'Edit Contact' : 'Add Contact'}>
         <form onSubmit={handleContactSubmit} className="space-y-4">
