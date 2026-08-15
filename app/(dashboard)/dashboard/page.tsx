@@ -9,6 +9,7 @@ export default async function DashboardPage() {
   const supabase = await createClient()
 
   const [
+    { data: { user } },
     { count: talentCount },
     { count: brandCount },
     { count: projectCount },
@@ -17,6 +18,7 @@ export default async function DashboardPage() {
     { data: todos },
     { data: userProfiles },
   ] = await Promise.all([
+    supabase.auth.getUser(),
     supabase.from('talents').select('*', { count: 'exact', head: true }),
     supabase.from('brands').select('*', { count: 'exact', head: true }),
     supabase.from('events').select('*', { count: 'exact', head: true }).neq('status', 'completed'),
@@ -41,6 +43,9 @@ export default async function DashboardPage() {
   // Filter out entries from completed projects
   const pending = (pendingRaw ?? []).filter((p: any) => p.project_brand?.project?.status !== 'completed')
 
+  const currentProfile = (userProfiles ?? []).find((p: any) => p.id === user?.id)
+  const firstName = currentProfile?.first_name ?? null
+
   const stats = [
     { label: 'Talents', value: talentCount ?? 0, icon: Users, href: '/talents', color: 'text-purple-600' },
     { label: 'Brands', value: brandCount ?? 0, icon: Briefcase, href: '/brands', color: 'text-blue-600' },
@@ -51,7 +56,7 @@ export default async function DashboardPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Welcome back.</p>
+        <p className="text-sm text-gray-500 mt-0.5">Welcome back{firstName ? `, ${firstName}` : ''}.</p>
       </div>
 
       {/* Stats */}

@@ -27,6 +27,7 @@ type UserProfile = {
 type SortField = 'title' | 'date' | 'assigned' | 'deadline' | 'priority' | null
 type SortDir = 'asc' | 'desc'
 
+const PAGE_SIZE = 5
 const PRIORITY_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 }
 const PRIORITY_STYLES = {
   high:   { label: 'High', bg: 'bg-red-50',   text: 'text-red-600' },
@@ -139,6 +140,7 @@ export function TodoWidget({ todos, userProfiles }: { todos: Todo[]; userProfile
   const [adding, setAdding] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterUsers, setFilterUsers] = useState<string[]>([])
+  const [showAll, setShowAll] = useState(false)
   const editTitleRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { setLocalTodos(todos) }, [todos])
@@ -378,7 +380,7 @@ export function TodoWidget({ todos, userProfiles }: { todos: Todo[]; userProfile
             </tr>
           )}
 
-          {sorted.map(todo => {
+          {(showAll ? sorted : sorted.slice(0, PAGE_SIZE)).map(todo => {
             const bgColor = rowColor(todo, userProfiles)
             const overdue = isOverdue(todo.deadline)
             const isEditing = editingId === todo.id
@@ -518,6 +520,21 @@ export function TodoWidget({ todos, userProfiles }: { todos: Todo[]; userProfile
               </tr>
             )
           })}
+          {sorted.length > PAGE_SIZE && (
+            <tr>
+              <td colSpan={7} className="px-5 py-2.5 border-t border-gray-100 bg-gray-50/40">
+                <button
+                  onClick={() => setShowAll(v => !v)}
+                  className="text-xs text-gray-500 hover:text-gray-900 font-medium transition-colors flex items-center gap-1"
+                >
+                  {showAll
+                    ? <><ChevronUp className="w-3.5 h-3.5" /> Show less</>
+                    : <><ChevronDown className="w-3.5 h-3.5" /> Show {sorted.length - PAGE_SIZE} more</>
+                  }
+                </button>
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
