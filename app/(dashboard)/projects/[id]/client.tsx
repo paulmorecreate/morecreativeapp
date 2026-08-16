@@ -187,9 +187,28 @@ function toAED(amount: number, currency: string, rates: CurrencyRate[]): number 
   return amount * rate
 }
 
-function PLSummary({ income, expenses, rates }: { income: ProjectIncome[]; expenses: ProjectExpense[]; rates: CurrencyRate[] }) {
-  const totalIncomeAED = income.reduce((s, i) => s + toAED(i.amount, i.currency, rates), 0)
-  const totalExpensesAED = expenses.reduce((s, e) => s + toAED(e.amount, e.currency, rates), 0)
+function invoiceLineTotal(inv: Invoice & { line_items?: { rate: number; qty: number }[] }): number {
+  const subtotal = (inv.line_items ?? []).reduce((s, l) => s + l.rate * l.qty, 0)
+  return subtotal + (inv.apply_vat ? subtotal * 0.05 : 0)
+}
+
+function PLSummary({
+  income, expenses, rates, invoices, purchaseInvoices,
+}: {
+  income: ProjectIncome[]
+  expenses: ProjectExpense[]
+  rates: CurrencyRate[]
+  invoices: (Invoice & { line_items?: { rate: number; qty: number }[] })[]
+  purchaseInvoices: PurchaseInvoice[]
+}) {
+  const incomeFromEntries = income.reduce((s, i) => s + toAED(i.amount, i.currency, rates), 0)
+  const incomeFromInvoices = invoices.reduce((s, inv) => s + toAED(invoiceLineTotal(inv), inv.currency, rates), 0)
+  const totalIncomeAED = incomeFromEntries + incomeFromInvoices
+
+  const expensesFromEntries = expenses.reduce((s, e) => s + toAED(e.amount, e.currency, rates), 0)
+  const expensesFromPurchases = purchaseInvoices.reduce((s, inv) => s + inv.gross_amount * inv.fx_rate, 0)
+  const totalExpensesAED = expensesFromEntries + expensesFromPurchases
+
   const grossProfit = totalIncomeAED - totalExpensesAED
   const commissionAED = income
     .filter(i => i.type === 'commission')
@@ -417,7 +436,13 @@ function ProjectFinanceTab({
 
   return (
     <div className="space-y-6">
-      <PLSummary income={initialIncome} expenses={initialExpenses} rates={currencyRates} />
+      <PLSummary
+        income={initialIncome}
+        expenses={initialExpenses}
+        rates={currencyRates}
+        invoices={initialInvoices}
+        purchaseInvoices={initialPurchaseInvoices}
+      />
 
       {/* Income */}
       <div className="bg-white rounded-xl border border-gray-200">

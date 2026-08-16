@@ -46,7 +46,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       .eq('project_id', id)
       .order('created_at', { ascending: true }),
     canViewFinance
-      ? supabase.from('invoices').select('*').eq('project_id', id).order('created_at', { ascending: false })
+      ? supabase.from('invoices').select('*, line_items:invoice_line_items(rate, qty)').eq('project_id', id).order('created_at', { ascending: false })
       : Promise.resolve({ data: [] }),
     canViewFinance
       ? supabase.from('purchase_invoices').select('*').eq('project_id', id).order('created_at', { ascending: false })
