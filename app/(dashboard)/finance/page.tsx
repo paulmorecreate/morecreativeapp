@@ -19,21 +19,23 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     redirect('/dashboard')
   }
 
-  const [{ data: invoices }, { data: purchaseInvoices }] = await Promise.all([
+  const [{ data: invoices }, { data: purchaseInvoices }, { data: currencyRates }] = await Promise.all([
     supabase
       .from('invoices')
       .select('*, project:events(id, name), line_items:invoice_line_items(rate, qty)')
-      .order('created_at', { ascending: false }),
+      .order('due_date', { ascending: true, nullsFirst: false }),
     supabase
       .from('purchase_invoices')
       .select('*, project:events(id, name)')
-      .order('created_at', { ascending: false }),
+      .order('due_date', { ascending: true, nullsFirst: false }),
+    supabase.from('currency_rates').select('*'),
   ])
 
   return (
     <FinanceClient
       invoices={invoices ?? []}
       purchaseInvoices={(purchaseInvoices ?? []) as any}
+      currencyRates={currencyRates ?? []}
       initialTab={tab === 'purchase' ? 'purchase' : 'sales'}
     />
   )

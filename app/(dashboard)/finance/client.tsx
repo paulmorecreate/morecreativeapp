@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Receipt, Trash2 } from 'lucide-react'
-import { Invoice, PurchaseInvoice } from '@/lib/supabase/types'
+import { Plus, Receipt, Trash2, X } from 'lucide-react'
+import { Invoice, PurchaseInvoice, CurrencyRate } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
@@ -24,6 +25,10 @@ const PO_STATUS_STYLES: Record<string, string> = {
   paid: 'bg-green-50 text-green-700',
 }
 
+function fmtAed(amount: number) {
+  return `AED ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
 function formatAmount(currency: string, amount: number) {
   const sym = CURRENCY_SYMBOL[currency] ?? ''
   return `${sym}${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -39,30 +44,95 @@ function invoiceTotal(inv: Invoice & { line_items?: { rate: number; qty: number 
   return subtotal + (inv.apply_vat ? subtotal * 0.05 : 0)
 }
 
+function rateToAed(currency: string, rates: CurrencyRate[]): number {
+  if (currency === 'AED') return 1
+  return rates.find(r => r.currency === currency)?.rate_to_aed ?? 1
+}
+
 type InvoiceRow = Invoice & { project: { id: string; name: string } | null; line_items?: { rate: number; qty: number }[] }
 type PurchaseInvoiceRow = PurchaseInvoice & { project: { id: string; name: string } | null }
 
 type Props = {
   invoices: InvoiceRow[]
   purchaseInvoices: PurchaseInvoiceRow[]
+  currencyRates: CurrencyRate[]
   initialTab: 'sales' | 'purchase'
 }
 
 const SALE_STATUS_FILTERS = ['all', 'draft', 'sent', 'paid'] as const
 const PO_STATUS_FILTERS = ['all', 'pending', 'partial', 'paid'] as const
 
-export function FinanceClient({ invoices, purchaseInvoices, initialTab }: Props) {
+function SummaryBar({ paid, pending }: { paid: number; pending: number }) {
+  return (
+    <div className="grid grid-cols-2 gap-3 mb-5">
+      <div className="bg-green-50 border border-green-100 rounded-xl px-5 py-3.5">
+        <p className="text-xs font-medium text-green-600 mb-0.5">Total Paid</p>
+        <p className="text-lg font-semibold text-green-800">{fmtAed(paid)}</p>
+      </div>
+      <div className="bg-amber-50 border border-amber-100 rounded-xl px-5 py-3.5">
+        <p className="text-xs font-medium text-amber-600 mb-0.5">Total Pending</p>
+        <p className="text-lg font-semibold text-amber-800">{fmtAed(pending)}</p>
+      </div>
+    </div>
+  )
+}
+
+export function FinanceClient({ invoices, purchaseInvoices, currencyRates, initialTab }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<'sales' | 'purchase'>(initialTab)
   const [saleFilter, setSaleFilter] = useState<'all' | 'draft' | 'sent' | 'paid'>('all')
   const [poFilter, setPoFilter] = useState<'all' | 'pending' | 'partial' | 'paid'>('all')
+  const [saleDueFrom, setSaleDueFrom] = useState('')
+  const [saleDueTo, setSaleDueTo] = useState('')
+  const [poDueFrom, setPoDueFrom] = useState('')
+  const [poDueTo, setPoDueTo] = useState('')
   const [creating, setCreating] = useState(false)
   const [deleteSaleTarget, setDeleteSaleTarget] = useState<InvoiceRow | null>(null)
   const [deletePoTarget, setDeletePoTarget] = useState<PurchaseInvoiceRow | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  const filteredSales = saleFilter === 'all' ? invoices : invoices.filter(i => i.status === saleFilter)
-  const filteredPo = poFilter === 'all' ? purchaseInvoices : purchaseInvoices.filter(i => i.status === poFilter)
+  // Sales summaries (all invoices, no date filter applied to summary)
+  const saleSummary = useMemo(() => {
+    let paid = 0, pending = 0
+    for (const inv of invoices) {
+      const fx = rateToAed(inv.currency, currencyRates)
+      const total = invoiceTotal(inv) * fx
+      if (inv.status === 'paid') paid += total
+      else pending += total
+    }
+    return { paid, pending }
+  }, [invoices, currencyRates])
+
+  // Purchase summaries (all invoices, no date filter applied to summary)
+  const poSummary = useMemo(() => {
+    let paid = 0, pending = 0
+    for (const inv of purchaseInvoices) {
+      const aed = inv.gross_amount * inv.fx_rate
+      if (inv.status === 'paid') paid += aed
+      else pending += aed
+    }
+    return { paid, pending }
+  }, [purchaseInvoices])
+
+  // Filtered sales invoices
+  const filteredSales = useMemo(() => {
+    return invoices.filter(inv => {
+      if (saleFilter !== 'all' && inv.status !== saleFilter) return false
+      if (saleDueFrom && (inv.due_date ?? '') < saleDueFrom) return false
+      if (saleDueTo && (inv.due_date ?? '') > saleDueTo) return false
+      return true
+    })
+  }, [invoices, saleFilter, saleDueFrom, saleDueTo])
+
+  // Filtered purchase invoices
+  const filteredPo = useMemo(() => {
+    return purchaseInvoices.filter(inv => {
+      if (poFilter !== 'all' && inv.status !== poFilter) return false
+      if (poDueFrom && (inv.due_date ?? '') < poDueFrom) return false
+      if (poDueTo && (inv.due_date ?? '') > poDueTo) return false
+      return true
+    })
+  }, [purchaseInvoices, poFilter, poDueFrom, poDueTo])
 
   async function handleNewSalesInvoice() {
     setCreating(true)
@@ -125,6 +195,9 @@ export function FinanceClient({ invoices, purchaseInvoices, initialTab }: Props)
     router.refresh()
   }
 
+  const saleDateFiltered = saleDueFrom || saleDueTo
+  const poDDateFiltered = poDueFrom || poDueTo
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -166,27 +239,59 @@ export function FinanceClient({ invoices, purchaseInvoices, initialTab }: Props)
       {/* Sales Invoices tab */}
       {tab === 'sales' && (
         <>
-          <div className="flex gap-2 mb-5">
-            {SALE_STATUS_FILTERS.map(s => (
-              <button
-                key={s}
-                onClick={() => setSaleFilter(s)}
-                className={cn(
-                  'px-3 py-1.5 rounded-full text-xs font-medium capitalize transition-all',
-                  saleFilter === s
-                    ? 'bg-gray-900 text-white'
-                    : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
-                )}
-              >
-                {s}
-              </button>
-            ))}
+          <SummaryBar paid={saleSummary.paid} pending={saleSummary.pending} />
+
+          {/* Filters row */}
+          <div className="flex flex-wrap items-center gap-3 mb-5">
+            <div className="flex gap-2">
+              {SALE_STATUS_FILTERS.map(s => (
+                <button
+                  key={s}
+                  onClick={() => setSaleFilter(s)}
+                  className={cn(
+                    'px-3 py-1.5 rounded-full text-xs font-medium capitalize transition-all',
+                    saleFilter === s
+                      ? 'bg-gray-900 text-white'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
+                  )}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 ml-auto">
+              <span className="text-xs text-gray-400 font-medium">Due date</span>
+              <Input
+                type="date"
+                value={saleDueFrom}
+                onChange={e => setSaleDueFrom(e.target.value)}
+                className="w-36 text-xs py-1.5"
+                placeholder="From"
+              />
+              <span className="text-xs text-gray-400">→</span>
+              <Input
+                type="date"
+                value={saleDueTo}
+                onChange={e => setSaleDueTo(e.target.value)}
+                className="w-36 text-xs py-1.5"
+                placeholder="To"
+              />
+              {saleDateFiltered && (
+                <button
+                  onClick={() => { setSaleDueFrom(''); setSaleDueTo('') }}
+                  className="text-gray-400 hover:text-gray-700 transition-colors"
+                  title="Clear date filter"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
           {filteredSales.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <Receipt className="w-10 h-10 text-gray-200 mb-3" />
-              <p className="text-sm text-gray-400">No sales invoices yet.</p>
+              <p className="text-sm text-gray-400">No sales invoices match these filters.</p>
             </div>
           ) : (
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -252,27 +357,59 @@ export function FinanceClient({ invoices, purchaseInvoices, initialTab }: Props)
       {/* Purchase Invoices tab */}
       {tab === 'purchase' && (
         <>
-          <div className="flex gap-2 mb-5">
-            {PO_STATUS_FILTERS.map(s => (
-              <button
-                key={s}
-                onClick={() => setPoFilter(s)}
-                className={cn(
-                  'px-3 py-1.5 rounded-full text-xs font-medium capitalize transition-all',
-                  poFilter === s
-                    ? 'bg-gray-900 text-white'
-                    : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
-                )}
-              >
-                {s}
-              </button>
-            ))}
+          <SummaryBar paid={poSummary.paid} pending={poSummary.pending} />
+
+          {/* Filters row */}
+          <div className="flex flex-wrap items-center gap-3 mb-5">
+            <div className="flex gap-2">
+              {PO_STATUS_FILTERS.map(s => (
+                <button
+                  key={s}
+                  onClick={() => setPoFilter(s)}
+                  className={cn(
+                    'px-3 py-1.5 rounded-full text-xs font-medium capitalize transition-all',
+                    poFilter === s
+                      ? 'bg-gray-900 text-white'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
+                  )}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 ml-auto">
+              <span className="text-xs text-gray-400 font-medium">Due date</span>
+              <Input
+                type="date"
+                value={poDueFrom}
+                onChange={e => setPoDueFrom(e.target.value)}
+                className="w-36 text-xs py-1.5"
+                placeholder="From"
+              />
+              <span className="text-xs text-gray-400">→</span>
+              <Input
+                type="date"
+                value={poDueTo}
+                onChange={e => setPoDueTo(e.target.value)}
+                className="w-36 text-xs py-1.5"
+                placeholder="To"
+              />
+              {poDDateFiltered && (
+                <button
+                  onClick={() => { setPoDueFrom(''); setPoDueTo('') }}
+                  className="text-gray-400 hover:text-gray-700 transition-colors"
+                  title="Clear date filter"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
           {filteredPo.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <Receipt className="w-10 h-10 text-gray-200 mb-3" />
-              <p className="text-sm text-gray-400">No purchase invoices yet.</p>
+              <p className="text-sm text-gray-400">No purchase invoices match these filters.</p>
             </div>
           ) : (
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
