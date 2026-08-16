@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag, Trash2, X, CheckCircle2, Circle, CheckCheck, AlertTriangle, Receipt, GripVertical, Loader2, Search, Check } from 'lucide-react'
-import { Event, ProjectCategory, Invoice, ProjectIncome, ProjectExpense, ExpenseCategory, CurrencyRate } from '@/lib/supabase/types'
+import { Event, ProjectCategory, Invoice, PurchaseInvoice, ProjectIncome, ProjectExpense, ExpenseCategory, CurrencyRate } from '@/lib/supabase/types'
 import { COUNTRIES } from '@/lib/constants/countries'
 import { createClient } from '@/lib/supabase/client'
 import { AuditStamp } from '@/components/audit-stamp'
@@ -92,6 +92,7 @@ type Props = {
   stylists: SimpleRecord[]
   projectTalents: ProjectTalent[]
   invoices: Invoice[]
+  purchaseInvoices: PurchaseInvoice[]
   income: ProjectIncome[]
   expenses: ProjectExpense[]
   expenseCategories: ExpenseCategory[]
@@ -160,6 +161,11 @@ const INVOICE_STATUS_BADGE: Record<string, string> = {
   sent: 'bg-blue-50 text-blue-700',
   paid: 'bg-green-50 text-green-700',
 }
+const PO_STATUS_BADGE: Record<string, string> = {
+  pending: 'bg-amber-50 text-amber-700',
+  partial: 'bg-blue-50 text-blue-700',
+  paid: 'bg-green-50 text-green-700',
+}
 const INCOME_STATUS_BADGE: Record<string, string> = {
   pending: 'bg-amber-50 text-amber-700',
   invoiced: 'bg-green-50 text-green-700',
@@ -213,6 +219,7 @@ function PLSummary({ income, expenses, rates }: { income: ProjectIncome[]; expen
 function ProjectFinanceTab({
   projectId,
   invoices: initialInvoices,
+  purchaseInvoices: initialPurchaseInvoices,
   income: initialIncome,
   expenses: initialExpenses,
   expenseCategories,
@@ -220,6 +227,7 @@ function ProjectFinanceTab({
 }: {
   projectId: string
   invoices: Invoice[]
+  purchaseInvoices: PurchaseInvoice[]
   income: ProjectIncome[]
   expenses: ProjectExpense[]
   expenseCategories: ExpenseCategory[]
@@ -250,7 +258,7 @@ function ProjectFinanceTab({
   const [editExpenseSaving, setEditExpenseSaving] = useState(false)
 
   // Delete confirmation
-  type DeleteTarget = { table: 'project_income' | 'project_expenses' | 'invoices'; id: string; label: string; amount: string }
+  type DeleteTarget = { table: 'project_income' | 'project_expenses' | 'invoices' | 'purchase_invoices'; id: string; label: string; amount: string }
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
   const [deleting, setDeleting] = useState(false)
 
@@ -287,6 +295,17 @@ function ProjectFinanceTab({
       .single()
     setCreating(false)
     if (!error && inv) router.push(`/finance/${inv.id}`)
+  }
+
+  async function handleNewPurchaseInvoice() {
+    setCreating(true)
+    const { data: inv, error } = await supabase
+      .from('purchase_invoices')
+      .insert({ supplier: '', invoice_number: '', project_id: projectId, status: 'pending', currency: 'AED', net_amount: 0, vat_rate: 0, vat_amount: 0, gross_amount: 0, fx_rate: 1 })
+      .select()
+      .single()
+    setCreating(false)
+    if (!error && inv) router.push(`/finance/purchase/${inv.id}`)
   }
 
   async function handleAddIncome(e: React.FormEvent) {
@@ -525,19 +544,18 @@ function ProjectFinanceTab({
         )}
       </div>
 
-      {/* Invoices */}
+      {/* Sales Invoices */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-gray-900">Invoices</h3>
+          <h3 className="text-sm font-semibold text-gray-900">Sales Invoices</h3>
           <Button variant="secondary" onClick={handleNewInvoice} disabled={creating}>
             <Plus className="w-3.5 h-3.5" />
-            {creating ? 'Creating…' : 'New Invoice'}
+            {creating ? 'Creating…' : 'New Sales Invoice'}
           </Button>
         </div>
         {initialInvoices.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 px-5 py-8 text-center">
-            <Receipt className="w-7 h-7 text-gray-200 mx-auto mb-2" />
-            <p className="text-sm text-gray-400">No invoices for this project yet.</p>
+          <div className="bg-white rounded-xl border border-gray-200 px-5 py-6 text-center">
+            <p className="text-sm text-gray-400">No sales invoices for this project yet.</p>
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -572,6 +590,66 @@ function ProjectFinanceTab({
                     <td className="px-3 py-3">
                       <button
                         onClick={e => { e.stopPropagation(); setDeleteTarget({ table: 'invoices', id: inv.id, label: inv.invoice_number, amount: inv.billed_to_name ?? '' }) }}
+                        className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Purchase Invoices */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-900">Purchase Invoices</h3>
+          <Button variant="secondary" onClick={handleNewPurchaseInvoice} disabled={creating}>
+            <Plus className="w-3.5 h-3.5" />
+            {creating ? 'Creating…' : 'New Purchase Invoice'}
+          </Button>
+        </div>
+        {initialPurchaseInvoices.length === 0 ? (
+          <div className="bg-white rounded-xl border border-gray-200 px-5 py-6 text-center">
+            <p className="text-sm text-gray-400">No purchase invoices for this project yet.</p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Invoice #</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Supplier</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Issue Date</th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Gross Amount</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
+                  <th className="px-3 py-3 w-10" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {initialPurchaseInvoices.map(inv => (
+                  <tr key={inv.id} onClick={() => router.push(`/finance/purchase/${inv.id}`)} className="hover:bg-gray-50 cursor-pointer transition-colors group">
+                    <td className="px-5 py-3 font-medium text-gray-900">
+                      {inv.invoice_number || <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-5 py-3 text-gray-700">{inv.supplier || <span className="text-gray-300">—</span>}</td>
+                    <td className="px-5 py-3 text-gray-500">
+                      {inv.issue_date ? new Date(inv.issue_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                    </td>
+                    <td className="px-5 py-3 text-right font-medium text-gray-900">
+                      {inv.currency} {inv.gross_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', PO_STATUS_BADGE[inv.status] ?? '')}>
+                        {inv.status}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <button
+                        onClick={e => { e.stopPropagation(); setDeleteTarget({ table: 'purchase_invoices', id: inv.id, label: inv.supplier || 'Purchase invoice', amount: `${inv.currency} ${inv.gross_amount.toFixed(2)}` }) }}
                         className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -747,7 +825,9 @@ function ProjectFinanceTab({
             </div>
             <p className="text-sm text-gray-600">
               {deleteTarget.table === 'invoices'
-                ? 'This will permanently delete the invoice and all its line items. This cannot be undone.'
+                ? 'This will permanently delete the sales invoice and all its line items. This cannot be undone.'
+                : deleteTarget.table === 'purchase_invoices'
+                ? 'This will permanently delete the purchase invoice. This cannot be undone.'
                 : `This will permanently remove this ${deleteTarget.table === 'project_income' ? 'income line' : 'expense'} and update the P&L totals. This cannot be undone.`}
             </p>
             <div className="flex gap-3 pt-1">
@@ -767,7 +847,7 @@ function ProjectFinanceTab({
   )
 }
 
-export function ProjectDetailClient({ project, talents, brands, categories, brandShows, stylists, projectTalents, invoices, income, expenses, expenseCategories, currencyRates, canViewFinance, initialTab = 'overview', talentCategories, talentLevels, agents: allAgents, agentTypes, people: allPeople }: Props) {
+export function ProjectDetailClient({ project, talents, brands, categories, brandShows, stylists, projectTalents, invoices, purchaseInvoices, income, expenses, expenseCategories, currencyRates, canViewFinance, initialTab = 'overview', talentCategories, talentLevels, agents: allAgents, agentTypes, people: allPeople }: Props) {
   const router = useRouter()
 
   // Tab
@@ -850,6 +930,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
       await supabase.from('invoice_line_items').delete().in('invoice_id', invRows.map(i => i.id))
       await supabase.from('invoices').delete().eq('project_id', project.id)
     }
+    await supabase.from('purchase_invoices').delete().eq('project_id', project.id)
     await supabase.from('project_income').delete().eq('project_id', project.id)
     await supabase.from('project_expenses').delete().eq('project_id', project.id)
     await supabase.from('events').delete().eq('id', project.id)
@@ -1127,6 +1208,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
         <ProjectFinanceTab
           projectId={project.id}
           invoices={invoices}
+          purchaseInvoices={purchaseInvoices}
           income={income}
           expenses={expenses}
           expenseCategories={expenseCategories}

@@ -370,6 +370,26 @@ export interface CurrencyRate {
   updated_at: string
 }
 
+export interface PurchaseInvoice {
+  id: string
+  invoice_number: string
+  supplier: string
+  project_id: string | null
+  currency: 'AED' | 'GBP' | 'USD' | 'EUR'
+  net_amount: number
+  vat_rate: number
+  vat_amount: number
+  gross_amount: number
+  fx_rate: number
+  issue_date: string | null
+  due_date: string | null
+  status: 'pending' | 'paid' | 'partial'
+  notes: string | null
+  created_at: string
+  updated_at: string
+  project?: { id: string; name: string } | null
+}
+
 export type UserRole = 'admin' | 'finance' | 'general'
 
 export interface ScheduleEvent {

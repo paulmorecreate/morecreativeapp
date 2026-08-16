@@ -21,6 +21,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     { data: stylists },
     { data: projectTalents },
     { data: invoices },
+    { data: purchaseInvoices },
     { data: income },
     { data: expenses },
     { data: expenseCategories },
@@ -46,6 +47,9 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       .order('created_at', { ascending: true }),
     canViewFinance
       ? supabase.from('invoices').select('*').eq('project_id', id).order('created_at', { ascending: false })
+      : Promise.resolve({ data: [] }),
+    canViewFinance
+      ? supabase.from('purchase_invoices').select('*').eq('project_id', id).order('created_at', { ascending: false })
       : Promise.resolve({ data: [] }),
     canViewFinance
       ? supabase.from('project_income').select('*').eq('project_id', id).order('created_at')
@@ -74,6 +78,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       stylists={stylists ?? []}
       projectTalents={(projectTalents ?? []) as any}
       invoices={(invoices ?? []) as any}
+      purchaseInvoices={(purchaseInvoices ?? []) as any}
       income={(income ?? []) as any}
       expenses={(expenses ?? []) as any}
       expenseCategories={expenseCategories ?? []}

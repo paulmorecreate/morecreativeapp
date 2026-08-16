@@ -2,7 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { FinanceClient } from './client'
 
-export default async function FinancePage() {
+export default async function FinancePage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  const { tab } = await searchParams
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -18,10 +19,22 @@ export default async function FinancePage() {
     redirect('/dashboard')
   }
 
-  const { data: invoices } = await supabase
-    .from('invoices')
-    .select('*, project:events(id, name), line_items:invoice_line_items(rate, qty)')
-    .order('created_at', { ascending: false })
+  const [{ data: invoices }, { data: purchaseInvoices }] = await Promise.all([
+    supabase
+      .from('invoices')
+      .select('*, project:events(id, name), line_items:invoice_line_items(rate, qty)')
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('purchase_invoices')
+      .select('*, project:events(id, name)')
+      .order('created_at', { ascending: false }),
+  ])
 
-  return <FinanceClient invoices={invoices ?? []} />
+  return (
+    <FinanceClient
+      invoices={invoices ?? []}
+      purchaseInvoices={(purchaseInvoices ?? []) as any}
+      initialTab={tab === 'purchase' ? 'purchase' : 'sales'}
+    />
+  )
 }
