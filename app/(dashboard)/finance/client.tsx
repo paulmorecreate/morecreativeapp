@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Receipt, Trash2, X, ExternalLink, Pencil } from 'lucide-react'
+import { Plus, Receipt, Trash2, X, ExternalLink, Pencil, ChevronUp, ChevronDown } from 'lucide-react'
 import { Invoice, PurchaseInvoice, CurrencyRate, AnnualExpense } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
@@ -119,6 +119,8 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
   const [annualSaving, setAnnualSaving] = useState(false)
   const [deleteAnnualTarget, setDeleteAnnualTarget] = useState<AnnualExpense | null>(null)
   const [annualDeleting, setAnnualDeleting] = useState(false)
+  const [annualSortCol, setAnnualSortCol] = useState<'item' | 'category' | 'due_date' | 'amount_aed'>('due_date')
+  const [annualSortDir, setAnnualSortDir] = useState<'asc' | 'desc'>('asc')
 
   // Sales summaries (all invoices, no date filter applied to summary)
   const saleSummary = useMemo(() => {
@@ -150,6 +152,29 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
     const dueSoon = annualExpenses.filter(e => { const d = daysUntil(e.due_date); return d !== null && d >= 0 && d <= 30 }).length
     return { total, overdue, dueSoon }
   }, [annualExpenses])
+
+  // Annual expenses sorted
+  const sortedAnnualExpenses = useMemo(() => {
+    return [...annualExpenses].sort((a, b) => {
+      let cmp = 0
+      if (annualSortCol === 'item') cmp = a.item.localeCompare(b.item)
+      else if (annualSortCol === 'category') cmp = a.category.localeCompare(b.category)
+      else if (annualSortCol === 'amount_aed') cmp = a.amount_aed - b.amount_aed
+      else {
+        // due_date: nulls last regardless of direction
+        if (!a.due_date && !b.due_date) cmp = 0
+        else if (!a.due_date) return 1
+        else if (!b.due_date) return -1
+        else cmp = a.due_date.localeCompare(b.due_date)
+      }
+      return annualSortDir === 'asc' ? cmp : -cmp
+    })
+  }, [annualExpenses, annualSortCol, annualSortDir])
+
+  function toggleAnnualSort(col: typeof annualSortCol) {
+    if (annualSortCol === col) setAnnualSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setAnnualSortCol(col); setAnnualSortDir('asc') }
+  }
 
   // Filtered sales invoices
   const filteredSales = useMemo(() => {
@@ -596,19 +621,40 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Item</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Category</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Due Date</th>
-                    <th className="px-5 py-3 text-center text-xs font-semibold text-gray-500">Days</th>
-                    <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Amount (AED)</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Document</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Notes</th>
+                    {([
+                      { col: 'item', label: 'Item', align: 'left' },
+                      { col: 'category', label: 'Category', align: 'left' },
+                      { col: 'due_date', label: 'Due Date', align: 'left' },
+                      { col: null, label: 'Days', align: 'center' },
+                      { col: 'amount_aed', label: 'Amount (AED)', align: 'right' },
+                      { col: null, label: 'Status', align: 'left' },
+                      { col: null, label: 'Document', align: 'left' },
+                      { col: null, label: 'Notes', align: 'left' },
+                    ] as { col: typeof annualSortCol | null; label: string; align: string }[]).map(({ col, label, align }) => (
+                      <th
+                        key={label}
+                        className={cn(
+                          'px-5 py-3 text-xs font-semibold text-gray-500',
+                          align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left',
+                          col ? 'cursor-pointer select-none hover:text-gray-800 transition-colors' : ''
+                        )}
+                        onClick={col ? () => toggleAnnualSort(col) : undefined}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          {label}
+                          {col && annualSortCol === col && (
+                            annualSortDir === 'asc'
+                              ? <ChevronUp className="w-3 h-3" />
+                              : <ChevronDown className="w-3 h-3" />
+                          )}
+                        </span>
+                      </th>
+                    ))}
                     <th className="px-3 py-3 w-16" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {annualExpenses.map(exp => {
+                  {sortedAnnualExpenses.map(exp => {
                     const days = daysUntil(exp.due_date)
                     return (
                       <tr key={exp.id} className="hover:bg-gray-50 transition-colors group">
