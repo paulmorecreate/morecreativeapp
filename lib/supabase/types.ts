@@ -390,6 +390,18 @@ export interface PurchaseInvoice {
   project?: { id: string; name: string } | null
 }
 
+export interface AnnualExpense {
+  id: string
+  item: string
+  category: string
+  amount_aed: number
+  due_date: string | null
+  notes: string | null
+  document_url: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type UserRole = 'admin' | 'finance' | 'general'
 
 export interface ScheduleEvent {

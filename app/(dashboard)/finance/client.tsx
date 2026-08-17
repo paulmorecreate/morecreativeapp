@@ -3,10 +3,10 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Receipt, Trash2, X } from 'lucide-react'
-import { Invoice, PurchaseInvoice, CurrencyRate } from '@/lib/supabase/types'
+import { Plus, Receipt, Trash2, X, ExternalLink, Pencil } from 'lucide-react'
+import { Invoice, PurchaseInvoice, CurrencyRate, AnnualExpense } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
@@ -56,7 +56,25 @@ type Props = {
   invoices: InvoiceRow[]
   purchaseInvoices: PurchaseInvoiceRow[]
   currencyRates: CurrencyRate[]
-  initialTab: 'sales' | 'purchase'
+  annualExpenses: AnnualExpense[]
+  initialTab: 'sales' | 'purchase' | 'annual'
+}
+
+const ANNUAL_CATEGORIES = ['Licence', 'Office', 'Insurance', 'Visa', 'Other']
+
+function daysUntil(dateStr: string | null): number | null {
+  if (!dateStr) return null
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const due = new Date(dateStr)
+  return Math.round((due.getTime() - today.getTime()) / 86400000)
+}
+
+function AnnualStatusBadge({ dueDate }: { dueDate: string | null }) {
+  const days = daysUntil(dueDate)
+  if (days === null) return <span className="text-gray-300 text-xs">—</span>
+  if (days < 0) return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700">Overdue</span>
+  if (days <= 30) return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">Due Soon</span>
+  return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">OK</span>
 }
 
 const SALE_STATUS_FILTERS = ['all', 'draft', 'sent', 'paid'] as const
@@ -77,9 +95,11 @@ function SummaryBar({ paid, pending }: { paid: number; pending: number }) {
   )
 }
 
-export function FinanceClient({ invoices, purchaseInvoices, currencyRates, initialTab }: Props) {
+const EMPTY_ANNUAL_FORM = { item: '', category: 'Licence', amount_aed: '', due_date: '', notes: '', document_url: '' }
+
+export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annualExpenses: initialAnnualExpenses, initialTab }: Props) {
   const router = useRouter()
-  const [tab, setTab] = useState<'sales' | 'purchase'>(initialTab)
+  const [tab, setTab] = useState<'sales' | 'purchase' | 'annual'>(initialTab)
   const [saleFilter, setSaleFilter] = useState<'all' | 'draft' | 'sent' | 'paid'>('all')
   const [poFilter, setPoFilter] = useState<'all' | 'pending' | 'partial' | 'paid'>('all')
   const [saleDueFrom, setSaleDueFrom] = useState('')
@@ -90,6 +110,15 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, initi
   const [deleteSaleTarget, setDeleteSaleTarget] = useState<InvoiceRow | null>(null)
   const [deletePoTarget, setDeletePoTarget] = useState<PurchaseInvoiceRow | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  // Annual expenses state
+  const [annualExpenses, setAnnualExpenses] = useState<AnnualExpense[]>(initialAnnualExpenses)
+  const [annualForm, setAnnualForm] = useState(EMPTY_ANNUAL_FORM)
+  const [annualModalOpen, setAnnualModalOpen] = useState(false)
+  const [editingAnnual, setEditingAnnual] = useState<AnnualExpense | null>(null)
+  const [annualSaving, setAnnualSaving] = useState(false)
+  const [deleteAnnualTarget, setDeleteAnnualTarget] = useState<AnnualExpense | null>(null)
+  const [annualDeleting, setAnnualDeleting] = useState(false)
 
   // Sales summaries (all invoices, no date filter applied to summary)
   const saleSummary = useMemo(() => {
@@ -113,6 +142,14 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, initi
     }
     return { paid, pending }
   }, [purchaseInvoices])
+
+  // Annual expenses summary
+  const annualSummary = useMemo(() => {
+    const total = annualExpenses.reduce((s, e) => s + e.amount_aed, 0)
+    const overdue = annualExpenses.filter(e => (daysUntil(e.due_date) ?? 1) < 0).length
+    const dueSoon = annualExpenses.filter(e => { const d = daysUntil(e.due_date); return d !== null && d >= 0 && d <= 30 }).length
+    return { total, overdue, dueSoon }
+  }, [annualExpenses])
 
   // Filtered sales invoices
   const filteredSales = useMemo(() => {
@@ -175,6 +212,60 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, initi
     if (!error && inv) router.push(`/finance/purchase/${inv.id}`)
   }
 
+  function openNewAnnual() {
+    setEditingAnnual(null)
+    setAnnualForm(EMPTY_ANNUAL_FORM)
+    setAnnualModalOpen(true)
+  }
+
+  function openEditAnnual(exp: AnnualExpense) {
+    setEditingAnnual(exp)
+    setAnnualForm({
+      item: exp.item,
+      category: exp.category,
+      amount_aed: String(exp.amount_aed),
+      due_date: exp.due_date ?? '',
+      notes: exp.notes ?? '',
+      document_url: exp.document_url ?? '',
+    })
+    setAnnualModalOpen(true)
+  }
+
+  async function handleSaveAnnual(e: React.FormEvent) {
+    e.preventDefault()
+    if (!annualForm.item.trim()) return
+    setAnnualSaving(true)
+    const supabase = createClient()
+    const payload = {
+      item: annualForm.item.trim(),
+      category: annualForm.category,
+      amount_aed: parseFloat(annualForm.amount_aed) || 0,
+      due_date: annualForm.due_date || null,
+      notes: annualForm.notes.trim() || null,
+      document_url: annualForm.document_url.trim() || null,
+      updated_at: new Date().toISOString(),
+    }
+    if (editingAnnual) {
+      const { data } = await supabase.from('annual_expenses').update(payload).eq('id', editingAnnual.id).select().single()
+      if (data) setAnnualExpenses(prev => prev.map(e => e.id === editingAnnual.id ? data as AnnualExpense : e))
+    } else {
+      const { data } = await supabase.from('annual_expenses').insert(payload).select().single()
+      if (data) setAnnualExpenses(prev => [...prev, data as AnnualExpense].sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? '')))
+    }
+    setAnnualSaving(false)
+    setAnnualModalOpen(false)
+  }
+
+  async function handleDeleteAnnual() {
+    if (!deleteAnnualTarget) return
+    setAnnualDeleting(true)
+    const supabase = createClient()
+    await supabase.from('annual_expenses').delete().eq('id', deleteAnnualTarget.id)
+    setAnnualExpenses(prev => prev.filter(e => e.id !== deleteAnnualTarget.id))
+    setAnnualDeleting(false)
+    setDeleteAnnualTarget(null)
+  }
+
   async function handleConfirmDeleteSale() {
     if (!deleteSaleTarget) return
     setDeleting(true)
@@ -210,28 +301,33 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, initi
             <Plus className="w-3.5 h-3.5" />
             {creating ? 'Creating…' : 'New Sales Invoice'}
           </Button>
-        ) : (
+        ) : tab === 'purchase' ? (
           <Button onClick={handleNewPurchaseInvoice} disabled={creating}>
             <Plus className="w-3.5 h-3.5" />
             {creating ? 'Creating…' : 'New Purchase Invoice'}
+          </Button>
+        ) : (
+          <Button onClick={openNewAnnual}>
+            <Plus className="w-3.5 h-3.5" />
+            Add Expense
           </Button>
         )}
       </div>
 
       {/* Tab switcher */}
       <div className="flex gap-1 mb-5 border-b border-gray-200">
-        {(['sales', 'purchase'] as const).map(t => (
+        {(['sales', 'purchase', 'annual'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={cn(
-              'px-4 py-2 text-sm font-medium capitalize transition-colors border-b-2 -mb-px',
+              'px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px',
               tab === t
                 ? 'border-gray-900 text-gray-900'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             )}
           >
-            {t === 'sales' ? 'Sales Invoices' : 'Purchase Invoices'}
+            {t === 'sales' ? 'Sales Invoices' : t === 'purchase' ? 'Purchase Invoices' : 'Annual Expenses'}
           </button>
         ))}
       </div>
@@ -470,6 +566,207 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, initi
           )}
         </>
       )}
+
+      {/* Annual Expenses tab */}
+      {tab === 'annual' && (
+        <>
+          {/* Summary */}
+          <div className="grid grid-cols-3 gap-3 mb-5">
+            <div className="col-span-1 bg-white border border-gray-200 rounded-xl px-5 py-3.5">
+              <p className="text-xs font-medium text-gray-400 mb-0.5">Total Annual</p>
+              <p className="text-lg font-semibold text-gray-900">{fmtAed(annualSummary.total)}</p>
+            </div>
+            <div className={cn('rounded-xl px-5 py-3.5', annualSummary.overdue > 0 ? 'bg-red-50 border border-red-100' : 'bg-white border border-gray-200')}>
+              <p className={cn('text-xs font-medium mb-0.5', annualSummary.overdue > 0 ? 'text-red-600' : 'text-gray-400')}>Overdue</p>
+              <p className={cn('text-lg font-semibold', annualSummary.overdue > 0 ? 'text-red-800' : 'text-gray-400')}>{annualSummary.overdue}</p>
+            </div>
+            <div className={cn('rounded-xl px-5 py-3.5', annualSummary.dueSoon > 0 ? 'bg-amber-50 border border-amber-100' : 'bg-white border border-gray-200')}>
+              <p className={cn('text-xs font-medium mb-0.5', annualSummary.dueSoon > 0 ? 'text-amber-600' : 'text-gray-400')}>Due Within 30 Days</p>
+              <p className={cn('text-lg font-semibold', annualSummary.dueSoon > 0 ? 'text-amber-800' : 'text-gray-400')}>{annualSummary.dueSoon}</p>
+            </div>
+          </div>
+
+          {annualExpenses.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <Receipt className="w-10 h-10 text-gray-200 mb-3" />
+              <p className="text-sm text-gray-400">No annual expenses yet.</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Item</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Category</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Due Date</th>
+                    <th className="px-5 py-3 text-center text-xs font-semibold text-gray-500">Days</th>
+                    <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Amount (AED)</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Document</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Notes</th>
+                    <th className="px-3 py-3 w-16" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {annualExpenses.map(exp => {
+                    const days = daysUntil(exp.due_date)
+                    return (
+                      <tr key={exp.id} className="hover:bg-gray-50 transition-colors group">
+                        <td className="px-5 py-3 font-medium text-gray-900">{exp.item}</td>
+                        <td className="px-5 py-3 text-gray-500">{exp.category}</td>
+                        <td className="px-5 py-3 text-gray-500">{formatDate(exp.due_date)}</td>
+                        <td className="px-5 py-3 text-center text-gray-500">
+                          {days !== null ? (
+                            <span className={cn('text-xs font-medium', days < 0 ? 'text-red-600' : days <= 30 ? 'text-amber-600' : 'text-gray-400')}>
+                              {days < 0 ? `${Math.abs(days)}d ago` : `${days}d`}
+                            </span>
+                          ) : '—'}
+                        </td>
+                        <td className="px-5 py-3 text-right font-medium text-gray-900">
+                          {exp.amount_aed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-5 py-3"><AnnualStatusBadge dueDate={exp.due_date} /></td>
+                        <td className="px-5 py-3">
+                          {exp.document_url ? (
+                            <a
+                              href={exp.document_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition-colors"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              Open
+                            </a>
+                          ) : (
+                            <span className="text-gray-300 text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3 text-gray-400 text-xs max-w-[160px] truncate">{exp.notes || '—'}</td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                            <button onClick={() => openEditAnnual(exp)} className="text-gray-300 hover:text-gray-700 transition-colors">
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => setDeleteAnnualTarget(exp)} className="text-gray-300 hover:text-red-500 transition-colors">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-gray-200 bg-gray-50">
+                    <td colSpan={4} className="px-5 py-3 text-xs font-semibold text-gray-500">Total</td>
+                    <td className="px-5 py-3 text-right text-sm font-semibold text-gray-900">
+                      {annualSummary.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td colSpan={4} />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Add / Edit Annual Expense modal */}
+      <Modal
+        open={annualModalOpen}
+        onClose={() => setAnnualModalOpen(false)}
+        title={editingAnnual ? 'Edit Expense' : 'Add Annual Expense'}
+      >
+        <form onSubmit={handleSaveAnnual} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Item *</label>
+            <Input
+              value={annualForm.item}
+              onChange={e => setAnnualForm(f => ({ ...f, item: e.target.value }))}
+              placeholder="e.g. Licence Renewal"
+              required
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Category</label>
+              <Select
+                value={annualForm.category}
+                onChange={e => setAnnualForm(f => ({ ...f, category: e.target.value }))}
+                options={ANNUAL_CATEGORIES.map(c => ({ value: c, label: c }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Amount (AED)</label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={annualForm.amount_aed}
+                onChange={e => setAnnualForm(f => ({ ...f, amount_aed: e.target.value }))}
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Due Date</label>
+            <Input
+              type="date"
+              value={annualForm.due_date}
+              onChange={e => setAnnualForm(f => ({ ...f, due_date: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Document Link</label>
+            <Input
+              value={annualForm.document_url}
+              onChange={e => setAnnualForm(f => ({ ...f, document_url: e.target.value }))}
+              placeholder="https://drive.google.com/…"
+              type="url"
+            />
+            <p className="text-xs text-gray-400">Paste the Google Drive link for the related document (e.g. licence certificate).</p>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Notes</label>
+            <Textarea
+              value={annualForm.notes}
+              onChange={e => setAnnualForm(f => ({ ...f, notes: e.target.value }))}
+              placeholder="Any additional notes…"
+              rows={2}
+            />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setAnnualModalOpen(false)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={annualSaving} className="flex-1">
+              {annualSaving ? 'Saving…' : editingAnnual ? 'Save Changes' : 'Add Expense'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Delete annual expense modal */}
+      <Modal open={!!deleteAnnualTarget} onClose={() => setDeleteAnnualTarget(null)} title="Delete expense?">
+        {deleteAnnualTarget && (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-red-50 border border-red-100 px-4 py-3">
+              <p className="text-sm font-medium text-red-800">{deleteAnnualTarget.item}</p>
+              <p className="text-sm text-red-600 mt-0.5">AED {deleteAnnualTarget.amount_aed.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+            </div>
+            <p className="text-sm text-gray-600">This will permanently delete this expense. This cannot be undone.</p>
+            <div className="flex gap-3 pt-1">
+              <Button type="button" variant="secondary" onClick={() => setDeleteAnnualTarget(null)} className="flex-1">Cancel</Button>
+              <button
+                onClick={handleDeleteAnnual}
+                disabled={annualDeleting}
+                className="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {annualDeleting ? 'Deleting…' : 'Yes, delete it'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Delete sales invoice modal */}
       <Modal open={!!deleteSaleTarget} onClose={() => setDeleteSaleTarget(null)} title="Delete sales invoice?">
