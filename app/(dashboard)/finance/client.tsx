@@ -145,6 +145,10 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
   const [annualDeleting, setAnnualDeleting] = useState(false)
   const [annualSortCol, setAnnualSortCol] = useState<'item' | 'category' | 'due_date' | 'amount_aed'>('due_date')
   const [annualSortDir, setAnnualSortDir] = useState<'asc' | 'desc'>('asc')
+  const [saleSortCol, setSaleSortCol] = useState<'invoice_number' | 'billed_to_name' | 'project' | 'issue_date' | 'due_date' | 'amount' | 'status'>('due_date')
+  const [saleSortDir, setSaleSortDir] = useState<'asc' | 'desc'>('desc')
+  const [poSortCol, setPoSortCol] = useState<'invoice_number' | 'supplier' | 'project' | 'issue_date' | 'due_date' | 'gross_amount' | 'status'>('due_date')
+  const [poSortDir, setPoSortDir] = useState<'asc' | 'desc'>('desc')
 
   // Salaries state
   const [salaries, setSalaries] = useState<Salary[]>(initialSalaries)
@@ -217,6 +221,14 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
     if (annualSortCol === col) setAnnualSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setAnnualSortCol(col); setAnnualSortDir('asc') }
   }
+  function toggleSaleSort(col: typeof saleSortCol) {
+    if (saleSortCol === col) setSaleSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSaleSortCol(col); setSaleSortDir('desc') }
+  }
+  function togglePoSort(col: typeof poSortCol) {
+    if (poSortCol === col) setPoSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setPoSortCol(col); setPoSortDir('desc') }
+  }
 
   // Running costs summary
   const runningSummary = useMemo(() => {
@@ -226,25 +238,59 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
     return { salaryMonthly, opsMonthly, totalMonthly, totalAnnual: totalMonthly * 12 }
   }, [salaries, operatingCosts])
 
-  // Filtered sales invoices
+  // Filtered + sorted sales invoices
   const filteredSales = useMemo(() => {
-    return invoices.filter(inv => {
+    const list = invoices.filter(inv => {
       if (saleFilter !== 'all' && inv.status !== saleFilter) return false
       if (saleDueFrom && (inv.due_date ?? '') < saleDueFrom) return false
       if (saleDueTo && (inv.due_date ?? '') > saleDueTo) return false
       return true
     })
-  }, [invoices, saleFilter, saleDueFrom, saleDueTo])
+    return list.sort((a, b) => {
+      let cmp = 0
+      if (saleSortCol === 'invoice_number') cmp = a.invoice_number.localeCompare(b.invoice_number)
+      else if (saleSortCol === 'billed_to_name') cmp = (a.billed_to_name ?? '').localeCompare(b.billed_to_name ?? '')
+      else if (saleSortCol === 'project') cmp = (a.project?.name ?? '').localeCompare(b.project?.name ?? '')
+      else if (saleSortCol === 'amount') cmp = invoiceTotal(a) - invoiceTotal(b)
+      else if (saleSortCol === 'status') cmp = a.status.localeCompare(b.status)
+      else {
+        const dateA = saleSortCol === 'issue_date' ? a.issue_date : a.due_date
+        const dateB = saleSortCol === 'issue_date' ? b.issue_date : b.due_date
+        if (!dateA && !dateB) cmp = 0
+        else if (!dateA) return 1
+        else if (!dateB) return -1
+        else cmp = dateA.localeCompare(dateB)
+      }
+      return saleSortDir === 'asc' ? cmp : -cmp
+    })
+  }, [invoices, saleFilter, saleDueFrom, saleDueTo, saleSortCol, saleSortDir])
 
-  // Filtered purchase invoices
+  // Filtered + sorted purchase invoices
   const filteredPo = useMemo(() => {
-    return purchaseInvoices.filter(inv => {
+    const list = purchaseInvoices.filter(inv => {
       if (poFilter !== 'all' && inv.status !== poFilter) return false
       if (poDueFrom && (inv.due_date ?? '') < poDueFrom) return false
       if (poDueTo && (inv.due_date ?? '') > poDueTo) return false
       return true
     })
-  }, [purchaseInvoices, poFilter, poDueFrom, poDueTo])
+    return list.sort((a, b) => {
+      let cmp = 0
+      if (poSortCol === 'invoice_number') cmp = (a.invoice_number ?? '').localeCompare(b.invoice_number ?? '')
+      else if (poSortCol === 'supplier') cmp = (a.supplier ?? '').localeCompare(b.supplier ?? '')
+      else if (poSortCol === 'project') cmp = (a.project?.name ?? '').localeCompare(b.project?.name ?? '')
+      else if (poSortCol === 'gross_amount') cmp = a.gross_amount - b.gross_amount
+      else if (poSortCol === 'status') cmp = a.status.localeCompare(b.status)
+      else {
+        const dateA = poSortCol === 'issue_date' ? a.issue_date : a.due_date
+        const dateB = poSortCol === 'issue_date' ? b.issue_date : b.due_date
+        if (!dateA && !dateB) cmp = 0
+        else if (!dateA) return 1
+        else if (!dateB) return -1
+        else cmp = dateA.localeCompare(dateB)
+      }
+      return poSortDir === 'asc' ? cmp : -cmp
+    })
+  }, [purchaseInvoices, poFilter, poDueFrom, poDueTo, poSortCol, poSortDir])
 
   async function handleNewSalesInvoice() {
     setCreating(true)
@@ -554,13 +600,29 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Invoice #</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Billed To</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Project</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Issue Date</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Due Date</th>
-                    <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Amount</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
+                    {([
+                      { col: 'invoice_number', label: 'Invoice #', align: 'left' },
+                      { col: 'billed_to_name', label: 'Billed To', align: 'left' },
+                      { col: 'project', label: 'Project', align: 'left' },
+                      { col: 'issue_date', label: 'Issue Date', align: 'left' },
+                      { col: 'due_date', label: 'Due Date', align: 'left' },
+                      { col: 'amount', label: 'Amount', align: 'right' },
+                      { col: 'status', label: 'Status', align: 'left' },
+                    ] as { col: typeof saleSortCol; label: string; align: string }[]).map(({ col, label, align }) => (
+                      <th
+                        key={col}
+                        onClick={() => toggleSaleSort(col)}
+                        className={cn(
+                          'px-5 py-3 text-xs font-semibold text-gray-500 cursor-pointer select-none hover:text-gray-800 transition-colors',
+                          align === 'right' ? 'text-right' : 'text-left'
+                        )}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          {label}
+                          {saleSortCol === col && (saleSortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                        </span>
+                      </th>
+                    ))}
                     <th className="px-3 py-3 w-10" />
                   </tr>
                 </thead>
@@ -672,13 +734,29 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Invoice #</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Supplier</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Project</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Issue Date</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Due Date</th>
-                    <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Gross Amount</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
+                    {([
+                      { col: 'invoice_number', label: 'Invoice #', align: 'left' },
+                      { col: 'supplier', label: 'Supplier', align: 'left' },
+                      { col: 'project', label: 'Project', align: 'left' },
+                      { col: 'issue_date', label: 'Issue Date', align: 'left' },
+                      { col: 'due_date', label: 'Due Date', align: 'left' },
+                      { col: 'gross_amount', label: 'Gross Amount', align: 'right' },
+                      { col: 'status', label: 'Status', align: 'left' },
+                    ] as { col: typeof poSortCol; label: string; align: string }[]).map(({ col, label, align }) => (
+                      <th
+                        key={col}
+                        onClick={() => togglePoSort(col)}
+                        className={cn(
+                          'px-5 py-3 text-xs font-semibold text-gray-500 cursor-pointer select-none hover:text-gray-800 transition-colors',
+                          align === 'right' ? 'text-right' : 'text-left'
+                        )}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          {label}
+                          {poSortCol === col && (poSortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                        </span>
+                      </th>
+                    ))}
                     <th className="px-3 py-3 w-10" />
                   </tr>
                 </thead>
