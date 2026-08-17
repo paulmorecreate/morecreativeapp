@@ -37,7 +37,7 @@ export default async function AdminPage() {
       ? supabase.from('login_audit').select('*').order('logged_in_at', { ascending: false }).limit(200)
       : Promise.resolve({ data: [] }),
     isAdmin
-      ? supabase.from('audit_activity').select('*').order('updated_at', { ascending: false }).limit(300)
+      ? supabase.from('audit_activity').select('*').order('updated_at', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false }).limit(300)
       : Promise.resolve({ data: [] }),
   ])
 

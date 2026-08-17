@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Plus, Trash2, KeyRound, X, ChevronDown, LockKeyhole, LockKeyholeOpen } from 'lucide-react'
 import { ProjectCategory, Industry, AgentType, TalentCategory, BrandCategory, TalentLevel, InvoiceSettings, UserRole, ExpenseCategory, CurrencyRate } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
@@ -24,6 +25,22 @@ type RecordAuditRow = {
   created_at: string
   updated_by: string | null
   updated_at: string | null
+}
+
+const ENTITY_ROUTES: Record<string, string> = {
+  talent: '/talents',
+  brand: '/brands',
+  project: '/projects',
+  agency: '/agencies',
+  agent: '/agents',
+  stylist: '/stylists',
+  photographer: '/photographers',
+  person: '/people',
+}
+
+function entityRoute(type: string, id: string): string | null {
+  const base = ENTITY_ROUTES[type]
+  return base ? `${base}/${id}` : null
 }
 
 type Props = {
@@ -896,7 +913,14 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
                               {row.entity_type}
                             </span>
                           </td>
-                          <td className="px-5 py-3 text-gray-900 font-medium">{row.record_name}</td>
+                          <td className="px-5 py-3 font-medium">
+                            {(() => {
+                              const href = entityRoute(row.entity_type, row.id)
+                              return href
+                                ? <Link href={href} className="text-gray-900 hover:text-black hover:underline underline-offset-2">{row.record_name}</Link>
+                                : <span className="text-gray-900">{row.record_name}</span>
+                            })()}
+                          </td>
                           <td className="px-5 py-3 text-gray-500">{row.created_by ?? <span className="text-gray-300">—</span>}</td>
                           <td className="px-5 py-3 text-gray-500 whitespace-nowrap">
                             {new Date(row.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
