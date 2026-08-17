@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Plus, Receipt, Trash2, X, ExternalLink, Pencil, ChevronUp, ChevronDown } from 'lucide-react'
-import { Invoice, PurchaseInvoice, CurrencyRate, AnnualExpense } from '@/lib/supabase/types'
+import { Invoice, PurchaseInvoice, CurrencyRate, AnnualExpense, Salary, OperatingCost } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
@@ -57,7 +57,29 @@ type Props = {
   purchaseInvoices: PurchaseInvoiceRow[]
   currencyRates: CurrencyRate[]
   annualExpenses: AnnualExpense[]
-  initialTab: 'sales' | 'purchase' | 'annual'
+  salaries: Salary[]
+  operatingCosts: OperatingCost[]
+  initialTab: 'sales' | 'purchase' | 'annual' | 'running'
+}
+
+const FREQ_OPTIONS = [
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'quarterly', label: 'Quarterly' },
+  { value: 'annual', label: 'Annual' },
+]
+
+const OP_CATEGORIES = ['Software', 'Utilities', 'Office', 'Marketing', 'Professional Services', 'Travel', 'Other']
+
+function monthlyEquiv(cost: number, frequency: string): number {
+  if (frequency === 'quarterly') return cost / 3
+  if (frequency === 'annual') return cost / 12
+  return cost
+}
+
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return n + (s[(v - 20) % 10] || s[v] || s[0])
 }
 
 const ANNUAL_CATEGORIES = ['Licence', 'Office', 'Insurance', 'Visa', 'Other']
@@ -96,10 +118,12 @@ function SummaryBar({ paid, pending }: { paid: number; pending: number }) {
 }
 
 const EMPTY_ANNUAL_FORM = { item: '', category: 'Licence', amount_aed: '', due_date: '', notes: '', document_url: '' }
+const EMPTY_SALARY_FORM = { employee: '', role: '', monthly_salary_aed: '', payment_due_day: '', notes: '' }
+const EMPTY_OP_FORM = { expense_item: '', category: 'Software', frequency: 'monthly' as OperatingCost['frequency'], cost_aed: '', notes: '' }
 
-export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annualExpenses: initialAnnualExpenses, initialTab }: Props) {
+export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annualExpenses: initialAnnualExpenses, salaries: initialSalaries, operatingCosts: initialOperatingCosts, initialTab }: Props) {
   const router = useRouter()
-  const [tab, setTab] = useState<'sales' | 'purchase' | 'annual'>(initialTab)
+  const [tab, setTab] = useState<'sales' | 'purchase' | 'annual' | 'running'>(initialTab)
   const [saleFilter, setSaleFilter] = useState<'all' | 'draft' | 'sent' | 'paid'>('all')
   const [poFilter, setPoFilter] = useState<'all' | 'pending' | 'partial' | 'paid'>('all')
   const [saleDueFrom, setSaleDueFrom] = useState('')
@@ -121,6 +145,24 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
   const [annualDeleting, setAnnualDeleting] = useState(false)
   const [annualSortCol, setAnnualSortCol] = useState<'item' | 'category' | 'due_date' | 'amount_aed'>('due_date')
   const [annualSortDir, setAnnualSortDir] = useState<'asc' | 'desc'>('asc')
+
+  // Salaries state
+  const [salaries, setSalaries] = useState<Salary[]>(initialSalaries)
+  const [salaryForm, setSalaryForm] = useState(EMPTY_SALARY_FORM)
+  const [salaryModalOpen, setSalaryModalOpen] = useState(false)
+  const [editingSalary, setEditingSalary] = useState<Salary | null>(null)
+  const [salarySaving, setSalarySaving] = useState(false)
+  const [deleteSalaryTarget, setDeleteSalaryTarget] = useState<Salary | null>(null)
+  const [salaryDeleting, setSalaryDeleting] = useState(false)
+
+  // Operating costs state
+  const [operatingCosts, setOperatingCosts] = useState<OperatingCost[]>(initialOperatingCosts)
+  const [opForm, setOpForm] = useState(EMPTY_OP_FORM)
+  const [opModalOpen, setOpModalOpen] = useState(false)
+  const [editingOp, setEditingOp] = useState<OperatingCost | null>(null)
+  const [opSaving, setOpSaving] = useState(false)
+  const [deleteOpTarget, setDeleteOpTarget] = useState<OperatingCost | null>(null)
+  const [opDeleting, setOpDeleting] = useState(false)
 
   // Sales summaries (all invoices, no date filter applied to summary)
   const saleSummary = useMemo(() => {
@@ -175,6 +217,14 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
     if (annualSortCol === col) setAnnualSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setAnnualSortCol(col); setAnnualSortDir('asc') }
   }
+
+  // Running costs summary
+  const runningSummary = useMemo(() => {
+    const salaryMonthly = salaries.reduce((s, r) => s + r.monthly_salary_aed, 0)
+    const opsMonthly = operatingCosts.reduce((s, r) => s + monthlyEquiv(r.cost_aed, r.frequency), 0)
+    const totalMonthly = salaryMonthly + opsMonthly
+    return { salaryMonthly, opsMonthly, totalMonthly, totalAnnual: totalMonthly * 12 }
+  }, [salaries, operatingCosts])
 
   // Filtered sales invoices
   const filteredSales = useMemo(() => {
@@ -291,6 +341,86 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
     setDeleteAnnualTarget(null)
   }
 
+  // ── Salary handlers ──
+  function openNewSalary() {
+    setEditingSalary(null); setSalaryForm(EMPTY_SALARY_FORM); setSalaryModalOpen(true)
+  }
+  function openEditSalary(s: Salary) {
+    setEditingSalary(s)
+    setSalaryForm({ employee: s.employee, role: s.role, monthly_salary_aed: String(s.monthly_salary_aed), payment_due_day: s.payment_due_day ? String(s.payment_due_day) : '', notes: s.notes ?? '' })
+    setSalaryModalOpen(true)
+  }
+  async function handleSaveSalary(e: React.FormEvent) {
+    e.preventDefault()
+    if (!salaryForm.employee.trim()) return
+    setSalarySaving(true)
+    const supabase = createClient()
+    const payload = {
+      employee: salaryForm.employee.trim(),
+      role: salaryForm.role.trim(),
+      monthly_salary_aed: parseFloat(salaryForm.monthly_salary_aed) || 0,
+      payment_due_day: salaryForm.payment_due_day ? parseInt(salaryForm.payment_due_day) : null,
+      notes: salaryForm.notes.trim() || null,
+      updated_at: new Date().toISOString(),
+    }
+    if (editingSalary) {
+      const { data } = await supabase.from('salaries').update(payload).eq('id', editingSalary.id).select().single()
+      if (data) setSalaries(prev => prev.map(r => r.id === editingSalary.id ? data as Salary : r))
+    } else {
+      const { data } = await supabase.from('salaries').insert(payload).select().single()
+      if (data) setSalaries(prev => [...prev, data as Salary])
+    }
+    setSalarySaving(false); setSalaryModalOpen(false)
+  }
+  async function handleDeleteSalary() {
+    if (!deleteSalaryTarget) return
+    setSalaryDeleting(true)
+    const supabase = createClient()
+    await supabase.from('salaries').delete().eq('id', deleteSalaryTarget.id)
+    setSalaries(prev => prev.filter(r => r.id !== deleteSalaryTarget.id))
+    setSalaryDeleting(false); setDeleteSalaryTarget(null)
+  }
+
+  // ── Operating cost handlers ──
+  function openNewOp() {
+    setEditingOp(null); setOpForm(EMPTY_OP_FORM); setOpModalOpen(true)
+  }
+  function openEditOp(op: OperatingCost) {
+    setEditingOp(op)
+    setOpForm({ expense_item: op.expense_item, category: op.category, frequency: op.frequency, cost_aed: String(op.cost_aed), notes: op.notes ?? '' })
+    setOpModalOpen(true)
+  }
+  async function handleSaveOp(e: React.FormEvent) {
+    e.preventDefault()
+    if (!opForm.expense_item.trim()) return
+    setOpSaving(true)
+    const supabase = createClient()
+    const payload = {
+      expense_item: opForm.expense_item.trim(),
+      category: opForm.category,
+      frequency: opForm.frequency,
+      cost_aed: parseFloat(opForm.cost_aed) || 0,
+      notes: opForm.notes.trim() || null,
+      updated_at: new Date().toISOString(),
+    }
+    if (editingOp) {
+      const { data } = await supabase.from('operating_costs').update(payload).eq('id', editingOp.id).select().single()
+      if (data) setOperatingCosts(prev => prev.map(r => r.id === editingOp.id ? data as OperatingCost : r))
+    } else {
+      const { data } = await supabase.from('operating_costs').insert(payload).select().single()
+      if (data) setOperatingCosts(prev => [...prev, data as OperatingCost])
+    }
+    setOpSaving(false); setOpModalOpen(false)
+  }
+  async function handleDeleteOp() {
+    if (!deleteOpTarget) return
+    setOpDeleting(true)
+    const supabase = createClient()
+    await supabase.from('operating_costs').delete().eq('id', deleteOpTarget.id)
+    setOperatingCosts(prev => prev.filter(r => r.id !== deleteOpTarget.id))
+    setOpDeleting(false); setDeleteOpTarget(null)
+  }
+
   async function handleConfirmDeleteSale() {
     if (!deleteSaleTarget) return
     setDeleting(true)
@@ -331,28 +461,33 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
             <Plus className="w-3.5 h-3.5" />
             {creating ? 'Creating…' : 'New Purchase Invoice'}
           </Button>
-        ) : (
+        ) : tab === 'annual' ? (
           <Button onClick={openNewAnnual}>
             <Plus className="w-3.5 h-3.5" />
             Add Expense
           </Button>
-        )}
+        ) : null}
       </div>
 
       {/* Tab switcher */}
       <div className="flex gap-1 mb-5 border-b border-gray-200">
-        {(['sales', 'purchase', 'annual'] as const).map(t => (
+        {([
+          { key: 'sales', label: 'Sales Invoices' },
+          { key: 'purchase', label: 'Purchase Invoices' },
+          { key: 'annual', label: 'Annual Expenses' },
+          { key: 'running', label: 'Running Costs' },
+        ] as { key: typeof tab; label: string }[]).map(({ key, label }) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={key}
+            onClick={() => setTab(key)}
             className={cn(
-              'px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px',
-              tab === t
+              'px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap',
+              tab === key
                 ? 'border-gray-900 text-gray-900'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             )}
           >
-            {t === 'sales' ? 'Sales Invoices' : t === 'purchase' ? 'Purchase Invoices' : 'Annual Expenses'}
+            {label}
           </button>
         ))}
       </div>
@@ -808,6 +943,275 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                 className="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors disabled:opacity-50"
               >
                 {annualDeleting ? 'Deleting…' : 'Yes, delete it'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Running Costs tab */}
+      {tab === 'running' && (
+        <>
+          {/* Summary bar */}
+          <div className="grid grid-cols-4 gap-3 mb-6">
+            <div className="bg-white border border-gray-200 rounded-xl px-5 py-3.5">
+              <p className="text-xs font-medium text-gray-400 mb-0.5">Salary (Monthly)</p>
+              <p className="text-lg font-semibold text-gray-900">{fmtAed(runningSummary.salaryMonthly)}</p>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-xl px-5 py-3.5">
+              <p className="text-xs font-medium text-gray-400 mb-0.5">Operating (Monthly)</p>
+              <p className="text-lg font-semibold text-gray-900">{fmtAed(runningSummary.opsMonthly)}</p>
+            </div>
+            <div className="bg-blue-50 border border-blue-100 rounded-xl px-5 py-3.5">
+              <p className="text-xs font-medium text-blue-600 mb-0.5">Total Monthly</p>
+              <p className="text-lg font-semibold text-blue-900">{fmtAed(runningSummary.totalMonthly)}</p>
+            </div>
+            <div className="bg-gray-50 border border-gray-200 rounded-xl px-5 py-3.5">
+              <p className="text-xs font-medium text-gray-500 mb-0.5">Total Annual</p>
+              <p className="text-lg font-semibold text-gray-900">{fmtAed(runningSummary.totalAnnual)}</p>
+            </div>
+          </div>
+
+          {/* Salaries section */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-gray-900">Salaries</h2>
+              <Button variant="secondary" onClick={openNewSalary}>
+                <Plus className="w-3.5 h-3.5" />
+                Add Employee
+              </Button>
+            </div>
+            {salaries.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 px-5 py-8 text-center">
+                <p className="text-sm text-gray-400">No salaries recorded yet.</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Employee</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Role</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Payment Day</th>
+                      <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Monthly (AED)</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Notes</th>
+                      <th className="px-3 py-3 w-16" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {salaries.map(s => (
+                      <tr key={s.id} className="hover:bg-gray-50 transition-colors group">
+                        <td className="px-5 py-3 font-medium text-gray-900">{s.employee}</td>
+                        <td className="px-5 py-3 text-gray-500">{s.role || '—'}</td>
+                        <td className="px-5 py-3 text-gray-500">
+                          {s.payment_due_day ? `${ordinal(s.payment_due_day)} of month` : '—'}
+                        </td>
+                        <td className="px-5 py-3 text-right font-medium text-gray-900">
+                          {s.monthly_salary_aed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-5 py-3 text-gray-400 text-xs">{s.notes || '—'}</td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                            <button onClick={() => openEditSalary(s)} className="text-gray-300 hover:text-gray-700 transition-colors">
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => setDeleteSalaryTarget(s)} className="text-gray-300 hover:text-red-500 transition-colors">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-gray-200 bg-gray-50">
+                      <td colSpan={3} className="px-5 py-3 text-xs font-semibold text-gray-500">Total Monthly Salaries</td>
+                      <td className="px-5 py-3 text-right text-sm font-semibold text-gray-900">
+                        {runningSummary.salaryMonthly.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td colSpan={2} />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Operating Costs section */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-gray-900">Operating Costs</h2>
+              <Button variant="secondary" onClick={openNewOp}>
+                <Plus className="w-3.5 h-3.5" />
+                Add Cost
+              </Button>
+            </div>
+            {operatingCosts.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 px-5 py-8 text-center">
+                <p className="text-sm text-gray-400">No operating costs recorded yet.</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Item</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Category</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Frequency</th>
+                      <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Cost (AED)</th>
+                      <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Monthly Equiv</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Notes</th>
+                      <th className="px-3 py-3 w-16" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {operatingCosts.map(op => {
+                      const monthly = monthlyEquiv(op.cost_aed, op.frequency)
+                      return (
+                        <tr key={op.id} className="hover:bg-gray-50 transition-colors group">
+                          <td className="px-5 py-3 font-medium text-gray-900">{op.expense_item}</td>
+                          <td className="px-5 py-3 text-gray-500">{op.category}</td>
+                          <td className="px-5 py-3 text-gray-500 capitalize">{op.frequency}</td>
+                          <td className="px-5 py-3 text-right font-medium text-gray-900">
+                            {op.cost_aed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-5 py-3 text-right text-gray-500">
+                            {monthly.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-5 py-3 text-gray-400 text-xs">{op.notes || '—'}</td>
+                          <td className="px-3 py-3">
+                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                              <button onClick={() => openEditOp(op)} className="text-gray-300 hover:text-gray-700 transition-colors">
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => setDeleteOpTarget(op)} className="text-gray-300 hover:text-red-500 transition-colors">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-gray-200 bg-gray-50">
+                      <td colSpan={4} className="px-5 py-3 text-xs font-semibold text-gray-500">Total Monthly Operating</td>
+                      <td className="px-5 py-3 text-right text-sm font-semibold text-gray-900">
+                        {runningSummary.opsMonthly.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td colSpan={2} />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Add/Edit Salary modal */}
+      <Modal open={salaryModalOpen} onClose={() => setSalaryModalOpen(false)} title={editingSalary ? 'Edit Salary' : 'Add Employee'}>
+        <form onSubmit={handleSaveSalary} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Employee Name *</label>
+              <Input value={salaryForm.employee} onChange={e => setSalaryForm(f => ({ ...f, employee: e.target.value }))} placeholder="Full name" required />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Role / Title</label>
+              <Input value={salaryForm.role} onChange={e => setSalaryForm(f => ({ ...f, role: e.target.value }))} placeholder="e.g. CEO" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Monthly Salary (AED)</label>
+              <Input type="number" step="0.01" min="0" value={salaryForm.monthly_salary_aed} onChange={e => setSalaryForm(f => ({ ...f, monthly_salary_aed: e.target.value }))} placeholder="0.00" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Payment Day of Month</label>
+              <Input type="number" min="1" max="31" value={salaryForm.payment_due_day} onChange={e => setSalaryForm(f => ({ ...f, payment_due_day: e.target.value }))} placeholder="e.g. 1 or 15" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Notes</label>
+            <Textarea value={salaryForm.notes} onChange={e => setSalaryForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Any notes…" />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setSalaryModalOpen(false)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={salarySaving} className="flex-1">{salarySaving ? 'Saving…' : editingSalary ? 'Save Changes' : 'Add Employee'}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Delete Salary modal */}
+      <Modal open={!!deleteSalaryTarget} onClose={() => setDeleteSalaryTarget(null)} title="Remove employee?">
+        {deleteSalaryTarget && (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-red-50 border border-red-100 px-4 py-3">
+              <p className="text-sm font-medium text-red-800">{deleteSalaryTarget.employee}</p>
+              <p className="text-sm text-red-600 mt-0.5">{deleteSalaryTarget.role} — AED {deleteSalaryTarget.monthly_salary_aed.toLocaleString('en-US', { minimumFractionDigits: 2 })}/mo</p>
+            </div>
+            <p className="text-sm text-gray-600">This will permanently remove this salary record. This cannot be undone.</p>
+            <div className="flex gap-3 pt-1">
+              <Button type="button" variant="secondary" onClick={() => setDeleteSalaryTarget(null)} className="flex-1">Cancel</Button>
+              <button onClick={handleDeleteSalary} disabled={salaryDeleting} className="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors disabled:opacity-50">
+                {salaryDeleting ? 'Removing…' : 'Yes, remove it'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Add/Edit Operating Cost modal */}
+      <Modal open={opModalOpen} onClose={() => setOpModalOpen(false)} title={editingOp ? 'Edit Operating Cost' : 'Add Operating Cost'}>
+        <form onSubmit={handleSaveOp} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Item *</label>
+            <Input value={opForm.expense_item} onChange={e => setOpForm(f => ({ ...f, expense_item: e.target.value }))} placeholder="e.g. Office 365 Subscription" required />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Category</label>
+              <Select value={opForm.category} onChange={e => setOpForm(f => ({ ...f, category: e.target.value }))} options={OP_CATEGORIES.map(c => ({ value: c, label: c }))} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Frequency</label>
+              <Select value={opForm.frequency} onChange={e => setOpForm(f => ({ ...f, frequency: e.target.value as OperatingCost['frequency'] }))} options={FREQ_OPTIONS} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Cost (AED)</label>
+            <Input type="number" step="0.01" min="0" value={opForm.cost_aed} onChange={e => setOpForm(f => ({ ...f, cost_aed: e.target.value }))} placeholder="0.00" />
+            {opForm.frequency !== 'monthly' && opForm.cost_aed && (
+              <p className="text-xs text-gray-400">
+                Monthly equivalent: AED {monthlyEquiv(parseFloat(opForm.cost_aed) || 0, opForm.frequency).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Notes</label>
+            <Textarea value={opForm.notes} onChange={e => setOpForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Any notes…" />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setOpModalOpen(false)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={opSaving} className="flex-1">{opSaving ? 'Saving…' : editingOp ? 'Save Changes' : 'Add Cost'}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Delete Operating Cost modal */}
+      <Modal open={!!deleteOpTarget} onClose={() => setDeleteOpTarget(null)} title="Delete operating cost?">
+        {deleteOpTarget && (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-red-50 border border-red-100 px-4 py-3">
+              <p className="text-sm font-medium text-red-800">{deleteOpTarget.expense_item}</p>
+              <p className="text-sm text-red-600 mt-0.5 capitalize">{deleteOpTarget.frequency} — AED {deleteOpTarget.cost_aed.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+            </div>
+            <p className="text-sm text-gray-600">This will permanently delete this cost. This cannot be undone.</p>
+            <div className="flex gap-3 pt-1">
+              <Button type="button" variant="secondary" onClick={() => setDeleteOpTarget(null)} className="flex-1">Cancel</Button>
+              <button onClick={handleDeleteOp} disabled={opDeleting} className="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors disabled:opacity-50">
+                {opDeleting ? 'Deleting…' : 'Yes, delete it'}
               </button>
             </div>
           </div>

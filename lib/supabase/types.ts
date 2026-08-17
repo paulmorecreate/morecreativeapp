@@ -402,6 +402,28 @@ export interface AnnualExpense {
   updated_at: string
 }
 
+export interface Salary {
+  id: string
+  employee: string
+  role: string
+  monthly_salary_aed: number
+  payment_due_day: number | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface OperatingCost {
+  id: string
+  expense_item: string
+  category: string
+  frequency: 'monthly' | 'quarterly' | 'annual'
+  cost_aed: number
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type UserRole = 'admin' | 'finance' | 'general'
 
 export interface ScheduleEvent {
