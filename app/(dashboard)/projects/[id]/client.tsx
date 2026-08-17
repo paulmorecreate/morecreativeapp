@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag, Trash2, X, CheckCircle2, Circle, CheckCheck, AlertTriangle, Receipt, GripVertical, Loader2, Search, Check } from 'lucide-react'
+import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag, Trash2, X, CheckCircle2, Circle, CheckCheck, AlertTriangle, Receipt, GripVertical, Loader2, Search, Check, ChevronDown, FileDown } from 'lucide-react'
 import { Event, ProjectCategory, Invoice, PurchaseInvoice, ProjectIncome, ProjectExpense, ExpenseCategory, CurrencyRate } from '@/lib/supabase/types'
 import { COUNTRIES } from '@/lib/constants/countries'
 import { createClient } from '@/lib/supabase/client'
@@ -50,7 +50,7 @@ type ShowTalent = {
   creative: string | null
   stylist_id: string | null
   notes: string | null
-  talent: { id: string; name: string; category: string | null } | null
+  talent: { id: string; name: string; category: string | null; ig_link: string | null } | null
   stylist: { id: string; name: string } | null
   project_brand_talent_notes?: TalentNote[]
 }
@@ -897,8 +897,9 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   const [showForm, setShowForm] = useState({ brand_id: '', show_type: '', show_date: '', show_time: '', notes: '' })
   const [showTypeOther, setShowTypeOther] = useState('')
 
-  // Quick-add talent from pool to show
+  // Quick-add talent to show
   const [quickAddShowId, setQuickAddShowId] = useState<string | null>(null)
+  const [quickAddSearchQ, setQuickAddSearchQ] = useState('')
   const [assigningShowId, setAssigningShowId] = useState<string | null>(null)
 
   // Clear assigning state once the server refresh delivers updated brandShows
@@ -929,6 +930,17 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   const [draggingTalentId, setDraggingTalentId] = useState<string | null>(null)
   const [dragOverShowId, setDragOverShowId] = useState<string | null>(null)
   const [dragDuplicateShowId, setDragDuplicateShowId] = useState<string | null>(null)
+
+  // Collapse state for brand show cards
+  const [collapsedShows, setCollapsedShows] = useState<Set<string>>(new Set())
+  function toggleShowCollapse(showId: string) {
+    setCollapsedShows(prev => {
+      const next = new Set(prev)
+      if (next.has(showId)) next.delete(showId)
+      else next.add(showId)
+      return next
+    })
+  }
 
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
@@ -1157,8 +1169,48 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
       .sort((a, b) => (a.talent?.name ?? '').localeCompare(b.talent?.name ?? ''))
   }
 
+  function allTalentsForShow(show: BrandShow, q: string) {
+    const linked = new Set(show.project_brand_talents.map(t => t.talent_id))
+    return talents
+      .filter(t => !linked.has(t.id) && (q === '' || t.name.toLowerCase().includes(q.toLowerCase())))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }
+
   const linkedProjectTalentIds = new Set(projectTalents.map(pt => pt.talent_id))
   const availableProjectTalents = talents.filter(t => !linkedProjectTalentIds.has(t.id))
+
+  function exportShowToExcel(show: BrandShow) {
+    const XLSX = require('xlsx') as typeof import('xlsx')
+
+    const rows = show.project_brand_talents
+      .slice()
+      .sort((a, b) => (a.talent?.name ?? '').localeCompare(b.talent?.name ?? ''))
+      .map(entry => ({
+        'Talent': entry.talent?.name ?? '',
+        'Category': entry.talent?.category ?? '',
+        'Instagram': entry.talent?.ig_link ?? '',
+        'Status': entry.status ?? '',
+        'Deal Type': entry.deal_type ?? '',
+        'Creative': entry.creative ?? '',
+        'Stylist': entry.stylist?.name ?? '',
+        'Accepted': entry.accepted ? 'Yes' : 'No',
+        'Notes': entry.notes ?? '',
+        'Comments': (entry.project_brand_talent_notes ?? [])
+          .slice()
+          .sort((a, b) => a.created_at.localeCompare(b.created_at))
+          .map(n => n.content)
+          .join(' | '),
+      }))
+
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Talents')
+
+    const brandName = show.brand?.name ?? 'Show'
+    const showDate = show.show_date ? ` ${show.show_date}` : ''
+    const fileName = `${project.name} — ${brandName}${showDate}.xlsx`
+    XLSX.writeFile(wb, fileName)
+  }
 
   return (
     <div>
@@ -1273,7 +1325,9 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
 
         <div className="space-y-3">
           {/* Brand cards — sky blue accent */}
-          {[...brandShows].sort((a, b) => (a.brand?.name ?? '').localeCompare(b.brand?.name ?? '')).map(show => (
+          {[...brandShows].sort((a, b) => (a.brand?.name ?? '').localeCompare(b.brand?.name ?? '')).map(show => {
+            const isCollapsed = collapsedShows.has(show.id)
+            return (
             <div
               key={show.id}
               className={cn(
@@ -1281,7 +1335,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                 dragDuplicateShowId === show.id
                   ? 'border-amber-400 ring-2 ring-amber-100'
                   : dragOverShowId === show.id && draggingTalentId
-                  ? 'border-sky-400 ring-2 ring-sky-100'
+                  ? 'border-[#FF0031] ring-2 ring-red-100'
                   : 'border-gray-200'
               )}
               onDragOver={e => { e.preventDefault(); if (draggingTalentId) setDragOverShowId(show.id) }}
@@ -1289,62 +1343,83 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
               onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverShowId(null) }}
               onDrop={e => { e.preventDefault(); handleDrop(show); setDragOverShowId(null) }}
             >
-              <div className="flex items-center justify-between px-5 py-3.5 border-b border-sky-600 bg-sky-500 rounded-t-xl">
-                <div className="flex items-center gap-3 min-w-0">
-                  <Link href={`/brands/${show.brand?.id}`} className="text-sm font-semibold text-white hover:text-sky-100">
+              {/* Thinner coloured bar */}
+              <div className="flex items-center justify-between px-3 py-1.5 bg-gradient-to-r from-[#b80024] via-[#ff3355] to-[#b80024] rounded-t-xl">
+                <div className="flex items-center gap-2 min-w-0">
+                  <button
+                    onClick={() => toggleShowCollapse(show.id)}
+                    className="text-white/60 hover:text-white shrink-0"
+                  >
+                    <ChevronDown className={cn('w-3.5 h-3.5 transition-transform duration-150', isCollapsed && '-rotate-90')} />
+                  </button>
+                  <Link href={`/brands/${show.brand?.id}`} className="text-sm font-semibold text-white hover:text-white/80">
                     {show.brand?.name ?? '—'}
                   </Link>
                   {show.show_type && (
-                    <span className="text-xs font-medium text-sky-100 bg-sky-600/60 px-2 py-0.5 rounded-full">
+                    <span className="text-xs font-medium text-white/90 bg-black/20 px-2 py-0.5 rounded-full">
                       {show.show_type}
                     </span>
                   )}
                   {show.show_date && (
-                    <span className="text-xs text-sky-100 flex items-center gap-1">
+                    <span className="text-xs text-white/80 flex items-center gap-1">
                       <Calendar className="w-3 h-3" />
                       {formatDate(show.show_date)}
-                      {show.show_time && <span className="ml-1 text-sky-200">· {show.show_time}</span>}
+                      {show.show_time && <span className="ml-1 text-white/60">· {show.show_time}</span>}
                     </span>
                   )}
-                  {show.notes && (
-                    <span className="text-xs text-sky-200 truncate max-w-xs">{show.notes}</span>
-                  )}
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={() => exportShowToExcel(show)}
+                    className="inline-flex items-center gap-1 text-xs text-white font-medium px-2 py-0.5 rounded bg-black/20 hover:bg-black/35 transition-colors"
+                  >
+                    <FileDown className="w-3 h-3" /> Export
+                  </button>
                   <div className="relative">
                     <button
-                      onClick={() => setQuickAddShowId(quickAddShowId === show.id ? null : show.id)}
-                      className="inline-flex items-center gap-1 text-xs text-sky-100 hover:text-white px-2 py-1 rounded hover:bg-sky-600/50 transition-colors"
+                      onClick={() => { setQuickAddShowId(quickAddShowId === show.id ? null : show.id); setQuickAddSearchQ('') }}
+                      className="inline-flex items-center gap-1 text-xs text-white font-medium px-2 py-0.5 rounded bg-black/20 hover:bg-black/35 transition-colors"
                     >
                       <Plus className="w-3 h-3" /> Add Talent
                     </button>
                     {quickAddShowId === show.id && (
                       <>
                         <div className="fixed inset-0 z-10" onClick={() => setQuickAddShowId(null)} />
-                        <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-xl shadow-lg min-w-[200px] py-1 max-h-64 overflow-y-auto">
-                          {poolTalentsForShow(show).length === 0 ? (
-                            <p className="text-xs text-gray-400 px-3 py-2">
-                              {projectTalents.length === 0 ? 'No talents in pool yet' : 'All pool talents already added'}
-                            </p>
-                          ) : (
-                            poolTalentsForShow(show).map(pt => (
-                              <button
-                                key={pt.id}
-                                type="button"
-                                onClick={() => assignTalentToShow(show, pt.talent_id)}
-                                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                              >
-                                <span className="font-medium">{pt.talent?.name}</span>
-                                {pt.talent?.category && (
-                                  <span className="text-xs text-gray-400">{pt.talent.category}</span>
-                                )}
-                              </button>
-                            ))
-                          )}
-                          <div className="border-t border-gray-100 mt-1 pt-1">
+                        <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg w-56 flex flex-col">
+                          <div className="p-2 border-b border-gray-100">
+                            <div className="relative">
+                              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+                              <input
+                                autoFocus
+                                value={quickAddSearchQ}
+                                onChange={e => setQuickAddSearchQ(e.target.value)}
+                                placeholder="Search talents…"
+                                className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-black/10"
+                              />
+                            </div>
+                          </div>
+                          <div className="overflow-y-auto max-h-52 py-1">
+                            {allTalentsForShow(show, quickAddSearchQ).length === 0 ? (
+                              <p className="text-xs text-gray-400 px-3 py-2">
+                                {quickAddSearchQ ? 'No matches' : 'All talents already added'}
+                              </p>
+                            ) : (
+                              allTalentsForShow(show, quickAddSearchQ).map(t => (
+                                <button
+                                  key={t.id}
+                                  type="button"
+                                  onClick={() => { setQuickAddSearchQ(''); assignTalentToShow(show, t.id) }}
+                                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                >
+                                  {t.name}
+                                </button>
+                              ))
+                            )}
+                          </div>
+                          <div className="border-t border-gray-100 py-1">
                             <button
                               type="button"
-                              onClick={() => { setQuickAddShowId(null); openAddProjectTalent(); setProjectTalentMode('new') }}
+                              onClick={() => { setQuickAddShowId(null); setQuickAddSearchQ(''); openAddProjectTalent(); setProjectTalentMode('new') }}
                               className="w-full text-left px-3 py-2 text-xs text-gray-400 hover:text-gray-700 hover:bg-gray-50 flex items-center gap-1.5"
                             >
                               <Plus className="w-3 h-3" /> New talent…
@@ -1354,68 +1429,81 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                       </>
                     )}
                   </div>
-                  <button onClick={() => openEditShow(show)} className="text-sky-200 hover:text-white p-1">
+                  <button onClick={() => openEditShow(show)} className="text-white hover:bg-black/20 rounded p-1 transition-colors">
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={() => deleteShow(show)} className="text-sky-200 hover:text-red-200 p-1">
+                  <button onClick={() => deleteShow(show)} className="text-white hover:bg-black/20 hover:text-red-200 rounded p-1 transition-colors">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
 
-              {assigningShowId === show.id && (
-                <div className="px-5 py-3 flex items-center justify-center gap-2 bg-sky-500 text-white text-sm font-medium">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Adding to show…
+              {/* Notes — always visible below the bar */}
+              {show.notes && (
+                <div className="px-4 py-2 bg-red-50 border-b border-red-100">
+                  <p className="text-xs text-red-800">{show.notes}</p>
                 </div>
               )}
-              {dragOverShowId === show.id && draggingTalentId && assigningShowId !== show.id && (
-                <div className={cn(
-                  'px-5 py-2 text-xs font-medium text-center',
-                  dragDuplicateShowId === show.id ? 'text-amber-600 bg-amber-50' : 'text-sky-600 bg-sky-50'
-                )}>
-                  {dragDuplicateShowId === show.id
-                    ? 'Already in this show'
-                    : `Drop to add ${projectTalents.find(pt => pt.talent_id === draggingTalentId)?.talent?.name ?? 'talent'}`}
-                </div>
-              )}
-              {show.project_brand_talents.length === 0 ? (
-                <p className="px-5 py-3 text-xs text-gray-400">No talents added yet. Drag a talent here or use + Add Talent.</p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-50">
-                      <th className="text-left px-5 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Talent</th>
-                      <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Status</th>
-                      <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Deal</th>
-                      <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Creative</th>
-                      <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Stylist</th>
-                      <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Notes</th>
-                      <th className="px-4 py-2 w-8" />
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {[...show.project_brand_talents].sort((a, b) => (a.talent?.name ?? '').localeCompare(b.talent?.name ?? '')).map(entry => (
-                      <InlineShowTalentRow
-                        key={entry.id}
-                        entry={entry}
-                        stylists={stylists}
-                        onRemove={() => removeTalentFromShow(entry, show.brand?.name ?? '')}
-                      />
-                    ))}
-                  </tbody>
-                </table>
+
+              {/* Collapsible talents section */}
+              {!isCollapsed && (
+                <>
+                  {assigningShowId === show.id && (
+                    <div className="px-5 py-3 flex items-center justify-center gap-2 bg-gradient-to-r from-[#b80024] via-[#ff3355] to-[#b80024] text-white text-sm font-medium">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Adding to show…
+                    </div>
+                  )}
+                  {dragOverShowId === show.id && draggingTalentId && assigningShowId !== show.id && (
+                    <div className={cn(
+                      'px-5 py-2 text-xs font-medium text-center',
+                      dragDuplicateShowId === show.id ? 'text-amber-600 bg-amber-50' : 'text-[#FF0031] bg-red-50'
+                    )}>
+                      {dragDuplicateShowId === show.id
+                        ? 'Already in this show'
+                        : `Drop to add ${projectTalents.find(pt => pt.talent_id === draggingTalentId)?.talent?.name ?? 'talent'}`}
+                    </div>
+                  )}
+                  {show.project_brand_talents.length === 0 ? (
+                    <p className="px-5 py-3 text-xs text-gray-400">No talents added yet. Drag a talent here or use + Add Talent.</p>
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-50">
+                          <th className="text-left px-5 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Talent</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Status</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Deal</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Creative</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Stylist</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Notes</th>
+                          <th className="px-4 py-2 w-8" />
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {[...show.project_brand_talents].sort((a, b) => (a.talent?.name ?? '').localeCompare(b.talent?.name ?? '')).map(entry => (
+                          <InlineShowTalentRow
+                            key={entry.id}
+                            entry={entry}
+                            stylists={stylists}
+                            onRemove={() => removeTalentFromShow(entry, show.brand?.name ?? '')}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </>
               )}
             </div>
-          ))}
+            )
+          })}
 
           {/* Talent pool — table with drag handles */}
           {projectTalents.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-3 border-b border-violet-600 bg-violet-500">
-                <span className="text-sm font-semibold text-white">Talent Pool</span>
+              <div className="flex items-center justify-between px-5 py-3 border-b border-slate-300 bg-gradient-to-r from-slate-300 via-slate-100 to-slate-300">
+                <span className="text-sm font-semibold text-slate-700">Talent Pool</span>
                 {brandShows.length > 0 && (
-                  <span className="text-xs text-violet-200 flex items-center gap-1">
+                  <span className="text-xs text-slate-500 flex items-center gap-1">
                     <GripVertical className="w-3 h-3" /> Drag onto a show to assign
                   </span>
                 )}

@@ -37,7 +37,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     supabase.from('brands').select('id, name').order('name'),
     supabase.from('project_categories').select('*').order('name'),
     supabase.from('project_brands')
-      .select('*, brand:brands(id, name), project_brand_talents(*, talent:talents(id, name, category), stylist:stylists(id, name), project_brand_talent_notes(id, content, created_at))')
+      .select('*, brand:brands(id, name), project_brand_talents(*, talent:talents(id, name, category, ig_link), stylist:stylists(id, name), project_brand_talent_notes(id, content, created_at))')
       .eq('project_id', id)
       .order('show_date', { ascending: true }),
     supabase.from('stylists').select('id, name').order('name'),
