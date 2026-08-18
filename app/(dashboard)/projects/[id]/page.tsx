@@ -31,6 +31,8 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     { data: agents },
     { data: agentTypes },
     { data: people },
+    { data: industries },
+    { data: brandCategories },
   ] = await Promise.all([
     supabase.from('events').select('*').eq('id', id).single(),
     supabase.from('talents').select('id, name').order('name'),
@@ -64,6 +66,8 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     supabase.from('agents').select('id, name, agent_type').order('name'),
     supabase.from('agent_types').select('id, name').order('name'),
     supabase.from('people').select('id, name, type').order('name'),
+    supabase.from('industries').select('id, name').order('name'),
+    supabase.from('brand_categories').select('id, name').order('name'),
   ])
 
   if (!project) notFound()
@@ -90,6 +94,8 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       agents={agents ?? []}
       agentTypes={agentTypes ?? []}
       people={people ?? []}
+      industries={industries ?? []}
+      brandCategories={brandCategories ?? []}
     />
   )
 }

@@ -104,6 +104,8 @@ type Props = {
   agents: { id: string; name: string; agent_type: string | null }[]
   agentTypes: SimpleRecord[]
   people: { id: string; name: string; type: string | null }[]
+  industries: SimpleRecord[]
+  brandCategories: SimpleRecord[]
 }
 
 const EMPTY_NEW_TALENT = {
@@ -872,7 +874,7 @@ function ProjectFinanceTab({
   )
 }
 
-export function ProjectDetailClient({ project, talents, brands, categories, brandShows, stylists, projectTalents, invoices, purchaseInvoices, income, expenses, expenseCategories, currencyRates, canViewFinance, initialTab = 'overview', talentCategories, talentLevels, agents: allAgents, agentTypes, people: allPeople }: Props) {
+export function ProjectDetailClient({ project, talents, brands, categories, brandShows, stylists, projectTalents, invoices, purchaseInvoices, income, expenses, expenseCategories, currencyRates, canViewFinance, initialTab = 'overview', talentCategories, talentLevels, agents: allAgents, agentTypes, people: allPeople, industries, brandCategories }: Props) {
   const router = useRouter()
 
   // Tab
@@ -896,6 +898,14 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   const [showModal, setShowModal] = useState<null | 'add' | BrandShow>(null)
   const [showForm, setShowForm] = useState({ brand_id: '', show_type: '', show_date: '', show_time: '', notes: '' })
   const [showTypeOther, setShowTypeOther] = useState('')
+
+  // New brand inline creation
+  const [showBrandMode, setShowBrandMode] = useState<'existing' | 'new'>('existing')
+  const EMPTY_NEW_BRAND = { name: '', link: '', category: '', industry: '', country: '', notes: '' }
+  const [newBrandForm, setNewBrandForm] = useState(EMPTY_NEW_BRAND)
+  const [newBrandCategoryOther, setNewBrandCategoryOther] = useState('')
+  const newBrandNameExists = newBrandForm.name.trim() !== '' &&
+    brands.some(b => b.name.trim().toLowerCase() === newBrandForm.name.trim().toLowerCase())
 
   // Quick-add talent to show
   const [quickAddShowId, setQuickAddShowId] = useState<string | null>(null)
@@ -999,6 +1009,9 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   function openAddShow() {
     setShowForm({ brand_id: '', show_type: '', show_date: '', show_time: '', notes: '' })
     setShowTypeOther('')
+    setShowBrandMode('existing')
+    setNewBrandForm(EMPTY_NEW_BRAND)
+    setNewBrandCategoryOther('')
     setShowModal('add')
   }
   function openEditShow(show: BrandShow) {
@@ -1019,9 +1032,29 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
     const effectiveShowType = showForm.show_type === 'Other'
       ? (showTypeOther.trim() || 'Other')
       : showForm.show_type
+
+    let brandId = showForm.brand_id || null
+
+    if (showModal === 'add' && showBrandMode === 'new' && newBrandForm.name.trim()) {
+      const { data: { user } } = await supabase.auth.getUser()
+      const effectiveBrandCategory = newBrandForm.category === 'Other'
+        ? (newBrandCategoryOther.trim() || 'Other')
+        : newBrandForm.category
+      const { data: created } = await supabase.from('brands').insert({
+        name: newBrandForm.name.trim(),
+        link: newBrandForm.link || null,
+        category: effectiveBrandCategory || null,
+        industry: newBrandForm.industry || null,
+        country: newBrandForm.country || null,
+        notes: newBrandForm.notes || null,
+        created_by: user?.email ?? null,
+      }).select('id').single()
+      brandId = created?.id ?? null
+    }
+
     const payload = {
       project_id: project.id,
-      brand_id: showForm.brand_id || null,
+      brand_id: brandId,
       show_type: effectiveShowType || null,
       show_date: showForm.show_date || null,
       show_time: showForm.show_time || null,
@@ -1550,16 +1583,117 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
         title={isEditingShow ? 'Edit Brand' : 'Add Brand'}
       >
         <form onSubmit={handleShowSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+
+          {/* Brand selector — only shown when adding (not editing) */}
+          {!isEditingShow && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowBrandMode('existing'); setNewBrandForm(EMPTY_NEW_BRAND); setNewBrandCategoryOther('') }}
+                  className={cn('px-3 py-1 rounded-full text-xs font-medium transition-colors', showBrandMode === 'existing' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200')}
+                >
+                  Existing brand
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowBrandMode('new'); setShowForm(f => ({ ...f, brand_id: '' })) }}
+                  className={cn('px-3 py-1 rounded-full text-xs font-medium transition-colors', showBrandMode === 'new' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200')}
+                >
+                  New brand
+                </button>
+              </div>
+
+              {showBrandMode === 'existing' ? (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-gray-700">Brand</label>
+                  <Select
+                    value={showForm.brand_id}
+                    onChange={showField('brand_id')}
+                    options={brands.map(b => ({ value: b.id, label: b.name }))}
+                    placeholder="Select brand…"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-3 border border-gray-100 rounded-xl p-4 bg-gray-50/50">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-gray-700">Brand Name *</label>
+                    <Input
+                      value={newBrandForm.name}
+                      onChange={e => setNewBrandForm(f => ({ ...f, name: e.target.value }))}
+                      placeholder="Brand name"
+                      autoFocus
+                    />
+                    {newBrandNameExists && <p className="text-xs text-red-500">A brand with this name already exists.</p>}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-gray-700">Category</label>
+                      <Select
+                        value={newBrandForm.category}
+                        onChange={e => setNewBrandForm(f => ({ ...f, category: e.target.value }))}
+                        options={brandCategories.map(c => ({ value: c.name, label: c.name }))}
+                        placeholder="Select…"
+                      />
+                      {newBrandForm.category === 'Other' && (
+                        <Input
+                          value={newBrandCategoryOther}
+                          onChange={e => setNewBrandCategoryOther(e.target.value)}
+                          placeholder="Please specify…"
+                        />
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-gray-700">Industry</label>
+                      <Select
+                        value={newBrandForm.industry}
+                        onChange={e => setNewBrandForm(f => ({ ...f, industry: e.target.value }))}
+                        options={industries.map(i => ({ value: i.name, label: i.name }))}
+                        placeholder="Select…"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-gray-700">Instagram / Website</label>
+                    <Input
+                      value={newBrandForm.link}
+                      onChange={e => setNewBrandForm(f => ({ ...f, link: e.target.value }))}
+                      placeholder="https://…"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-gray-700">Country</label>
+                    <Select
+                      value={newBrandForm.country}
+                      onChange={e => setNewBrandForm(f => ({ ...f, country: e.target.value }))}
+                      options={COUNTRIES}
+                      placeholder="Select…"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-gray-700">Notes</label>
+                    <Textarea
+                      value={newBrandForm.notes}
+                      onChange={e => setNewBrandForm(f => ({ ...f, notes: e.target.value }))}
+                      rows={2}
+                      placeholder="Status update, situation…"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* When editing, show brand name read-only */}
+          {isEditingShow && typeof showModal === 'object' && (
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">Brand</label>
-              <Select
-                value={showForm.brand_id}
-                onChange={showField('brand_id')}
-                options={brands.map(b => ({ value: b.id, label: b.name }))}
-                placeholder="Select brand…"
-              />
+              <p className="text-sm font-medium text-gray-900">{showModal.brand?.name ?? '—'}</p>
             </div>
+          )}
+
+          {/* Show type / date / time / notes — always shown */}
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">Type</label>
               <Select
@@ -1576,24 +1710,29 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                 />
               )}
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">Show Date</label>
               <Input type="date" value={showForm.show_date} onChange={showField('show_date')} />
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Show Time</label>
-              <Input value={showForm.show_time} onChange={showField('show_time')} placeholder="e.g. 2:30 PM" />
-            </div>
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Notes</label>
+            <label className="text-xs font-medium text-gray-700">Show Time</label>
+            <Input value={showForm.show_time} onChange={showField('show_time')} placeholder="e.g. 2:30 PM" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Show Notes</label>
             <Textarea value={showForm.notes} onChange={showField('notes')} rows={2} placeholder="Any context…" />
           </div>
+
           <div className="flex gap-3 pt-1">
             <Button type="button" variant="secondary" onClick={() => setShowModal(null)} className="flex-1">Cancel</Button>
-            <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : isEditingShow ? 'Save Changes' : 'Add Brand'}</Button>
+            <Button
+              type="submit"
+              disabled={saving || (showModal === 'add' && showBrandMode === 'new' && (!newBrandForm.name.trim() || newBrandNameExists))}
+              className="flex-1"
+            >
+              {saving ? 'Saving…' : isEditingShow ? 'Save Changes' : 'Add Brand'}
+            </Button>
           </div>
         </form>
       </Modal>
