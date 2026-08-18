@@ -941,8 +941,8 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   const [dragOverShowId, setDragOverShowId] = useState<string | null>(null)
   const [dragDuplicateShowId, setDragDuplicateShowId] = useState<string | null>(null)
 
-  // Collapse state for brand show cards
-  const [collapsedShows, setCollapsedShows] = useState<Set<string>>(new Set())
+  // Collapse state for brand show cards — all collapsed by default
+  const [collapsedShows, setCollapsedShows] = useState<Set<string>>(() => new Set(brandShows.map(s => s.id)))
   function toggleShowCollapse(showId: string) {
     setCollapsedShows(prev => {
       const next = new Set(prev)
@@ -1339,7 +1339,16 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
       {/* ── Lineup ── */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-gray-900">Lineup</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-sm font-semibold text-gray-900">Lineup</h2>
+            {brandShows.length > 0 && (
+              <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                <button onClick={() => setCollapsedShows(new Set(brandShows.map(s => s.id)))} className="hover:text-gray-600 transition-colors">collapse all</button>
+                <span>·</span>
+                <button onClick={() => setCollapsedShows(new Set())} className="hover:text-gray-600 transition-colors">expand all</button>
+              </div>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <Button variant="secondary" onClick={openAddProjectTalent}>
               <Plus className="w-3.5 h-3.5" /> Add Talent
