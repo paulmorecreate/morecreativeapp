@@ -126,7 +126,8 @@ export function BrandsClient({ brands, industries, brandCategories, allProjects,
     const q = search.toLowerCase()
     const matchSearch = !search ||
       b.name.toLowerCase().includes(q) ||
-      primaryContact.toLowerCase().includes(q)
+      primaryContact.toLowerCase().includes(q) ||
+      (b.notes ?? '').toLowerCase().includes(q)
     const matchCat = !categoryFilter || b.category === categoryFilter
     const matchUser = !userFilter || (b.updated_by ?? b.created_by) === userFilter
     return matchSearch && matchCat && matchUser
@@ -202,6 +203,17 @@ export function BrandsClient({ brands, industries, brandCategories, allProjects,
     }
     return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
   })
+
+  function linkLabel(url: string) {
+    try {
+      const u = new URL(url)
+      if (u.hostname.includes('instagram.com')) {
+        const handle = u.pathname.replace(/\/+$/, '').split('/').filter(Boolean).pop()
+        return handle ? `@${handle}` : 'Instagram'
+      }
+      return u.hostname.replace(/^www\./, '')
+    } catch { return 'Link' }
+  }
 
   const allSelected = sorted.length > 0 && sorted.every(b => selected.has(b.id))
   const someSelected = sorted.some(b => selected.has(b.id))
@@ -329,8 +341,9 @@ export function BrandsClient({ brands, industries, brandCategories, allProjects,
                   </td>
                   <td className="px-4 py-3">
                     {brand.link ? (
-                      <a href={brand.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700">
-                        <ExternalLink className="w-3 h-3" /> Website
+                      <a href={brand.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-sky-600 hover:text-sky-800 font-medium">
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                        <span className="truncate max-w-[140px]">{linkLabel(brand.link)}</span>
                       </a>
                     ) : <span className="text-xs text-gray-200">—</span>}
                   </td>
