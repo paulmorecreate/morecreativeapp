@@ -53,7 +53,19 @@ export function BrandsClient({ brands, industries, brandCategories, allProjects,
   const [userFilter, setUserFilter] = useState('')
 
   const colorMap = new Map(userProfiles.map(p => [p.email, p.color]))
+  const profileNameMap = new Map(userProfiles.map(p => [p.email, p.first_name || p.email.split('@')[0]]))
   function profileName(p: UserProfile) { return p.first_name || p.email.split('@')[0] }
+
+  function formatLastUpdated(brand: BrandWithContacts): { date: string; person: string | null; color: string | null } {
+    const hasExplicitUpdate = !!brand.updated_by
+    const dateStr = hasExplicitUpdate ? brand.updated_at : brand.created_at
+    const email = brand.updated_by ?? brand.created_by
+    const d = new Date(dateStr)
+    const date = `${d.getDate()}-${d.toLocaleString('en', { month: 'short' })}-${d.getFullYear()}`
+    const person = email ? (profileNameMap.get(email) ?? email.split('@')[0]) : null
+    const color = email ? (colorMap.get(email) ?? null) : null
+    return { date, person, color }
+  }
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
@@ -194,6 +206,11 @@ export function BrandsClient({ brands, industries, brandCategories, allProjects,
     return sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />
   }
   const sorted = [...filtered].sort((a, b) => {
+    if (sortKey === 'last_updated') {
+      const ad = new Date(a.updated_by ? a.updated_at : a.created_at).getTime()
+      const bd = new Date(b.updated_by ? b.updated_at : b.created_at).getTime()
+      return sortDir === 'asc' ? ad - bd : bd - ad
+    }
     let av = '', bv = ''
     if (sortKey === 'name') { av = a.name; bv = b.name }
     else if (sortKey === 'category') { av = a.category ?? ''; bv = b.category ?? '' }
@@ -296,13 +313,16 @@ export function BrandsClient({ brands, industries, brandCategories, allProjects,
                 </th>
               ))}
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Link</th>
+              <th onClick={() => toggleSort('last_updated')} className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide cursor-pointer select-none hover:text-gray-700 whitespace-nowrap">
+                Last Updated<SortIcon col="last_updated" />
+              </th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
+                <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">
                   {search || categoryFilter ? 'No results match your filters.' : 'No brands yet.'}
                 </td>
               </tr>
@@ -310,13 +330,11 @@ export function BrandsClient({ brands, industries, brandCategories, allProjects,
             {sorted.map(brand => {
               const primaryContact = brand.contacts?.find(c => c.is_primary)
               const isSelected = selected.has(brand.id)
-              const effectiveUser = brand.updated_by ?? brand.created_by
-              const bgColor = effectiveUser ? (colorMap.get(effectiveUser) ?? null) : null
+              const { date: lastUpdatedDate, person: lastUpdatedPerson, color: lastUpdatedColor } = formatLastUpdated(brand)
               return (
                 <tr
                   key={brand.id}
-                  style={!isSelected && bgColor ? { backgroundColor: bgColor } : undefined}
-                  className={`transition-colors group ${isSelected ? 'bg-blue-50/30' : !bgColor ? 'hover:bg-gray-50/50' : ''}`}
+                  className={`transition-colors group ${isSelected ? 'bg-blue-50/30' : 'hover:bg-gray-50/50'}`}
                 >
                   <td className="pl-4 pr-2 py-3">
                     <button
@@ -346,6 +364,15 @@ export function BrandsClient({ brands, industries, brandCategories, allProjects,
                         <span className="truncate max-w-[140px]">{linkLabel(brand.link)}</span>
                       </a>
                     ) : <span className="text-xs text-gray-200">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-xs whitespace-nowrap">
+                    <span
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-gray-800"
+                      style={lastUpdatedColor ? { backgroundColor: lastUpdatedColor } : undefined}
+                    >
+                      {lastUpdatedDate}
+                      {lastUpdatedPerson && <span className="opacity-70"> ({lastUpdatedPerson})</span>}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">

@@ -18,7 +18,20 @@ export function StylistsClient({ stylists, userProfiles }: { stylists: Stylist[]
   const [userFilter, setUserFilter] = useState('')
 
   const colorMap = new Map(userProfiles.map(p => [p.email, p.color]))
+  const profileNameMap = new Map(userProfiles.map(p => [p.email, p.first_name || p.email.split('@')[0]]))
   function profileName(p: UserProfile) { return p.first_name || p.email.split('@')[0] }
+
+  function formatLastUpdated(row: { updated_by: string | null; updated_at: string; created_by: string | null; created_at: string }) {
+    const hasExplicitUpdate = !!row.updated_by
+    const dateStr = hasExplicitUpdate ? row.updated_at : row.created_at
+    const email = row.updated_by ?? row.created_by
+    const d = new Date(dateStr)
+    const date = `${d.getDate()}-${d.toLocaleString('en', { month: 'short' })}-${d.getFullYear()}`
+    const person = email ? (profileNameMap.get(email) ?? email.split('@')[0]) : null
+    const color = email ? (colorMap.get(email) ?? null) : null
+    return { date, person, color }
+  }
+
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
@@ -51,6 +64,11 @@ export function StylistsClient({ stylists, userProfiles }: { stylists: Stylist[]
     return sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />
   }
   const sorted = [...filtered].sort((a, b) => {
+    if (sortKey === 'last_updated') {
+      const ad = new Date(a.updated_by ? a.updated_at : a.created_at).getTime()
+      const bd = new Date(b.updated_by ? b.updated_at : b.created_at).getTime()
+      return sortDir === 'asc' ? ad - bd : bd - ad
+    }
     let av = '', bv = ''
     if (sortKey === 'name') { av = a.name; bv = b.name }
     else if (sortKey === 'based') { av = a.based ?? ''; bv = b.based ?? '' }
@@ -186,26 +204,27 @@ export function StylistsClient({ stylists, userProfiles }: { stylists: Stylist[]
                   {label}<SortIcon col={col} />
                 </th>
               ))}
+              <th onClick={() => toggleSort('last_updated')} className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide cursor-pointer select-none hover:text-gray-700 whitespace-nowrap">
+                Last Updated<SortIcon col="last_updated" />
+              </th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-400">
+                <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
                   {search ? 'No results.' : 'No stylists yet.'}
                 </td>
               </tr>
             )}
             {sorted.map(s => {
               const isSelected = selected.has(s.id)
-              const effectiveUser = s.updated_by ?? s.created_by
-              const bgColor = effectiveUser ? (colorMap.get(effectiveUser) ?? null) : null
+              const { date: lastUpdatedDate, person: lastUpdatedPerson, color: lastUpdatedColor } = formatLastUpdated(s)
               return (
                 <tr
                   key={s.id}
-                  style={!isSelected && bgColor ? { backgroundColor: bgColor } : undefined}
-                  className={`transition-colors group ${isSelected ? 'bg-blue-50/30' : !bgColor ? 'hover:bg-gray-50/50' : ''}`}
+                  className={`transition-colors group ${isSelected ? 'bg-blue-50/30' : 'hover:bg-gray-50/50'}`}
                 >
                   <td className="pl-4 pr-2 py-3">
                     <button
@@ -222,6 +241,15 @@ export function StylistsClient({ stylists, userProfiles }: { stylists: Stylist[]
                   </td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{s.based ?? <span className="text-gray-300">—</span>}</td>
                   <td className="px-4 py-3 text-gray-600 text-xs">{s.email ?? <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-3 text-xs whitespace-nowrap">
+                    <span
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-gray-800"
+                      style={lastUpdatedColor ? { backgroundColor: lastUpdatedColor } : undefined}
+                    >
+                      {lastUpdatedDate}
+                      {lastUpdatedPerson && <span className="opacity-70"> ({lastUpdatedPerson})</span>}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button

@@ -34,7 +34,19 @@ export function AgenciesClient({ agencies, agents, userProfiles }: Props) {
   const allAgents = agents.map(a => ({ id: a.id, name: a.name }))
 
   const colorMap = new Map(userProfiles.map(p => [p.email, p.color]))
+  const profileNameMap = new Map(userProfiles.map(p => [p.email, p.first_name || p.email.split('@')[0]]))
   function profileName(p: UserProfile) { return p.first_name || p.email.split('@')[0] }
+
+  function formatLastUpdated(row: { updated_by: string | null; updated_at: string; created_by: string | null; created_at: string }) {
+    const hasExplicitUpdate = !!row.updated_by
+    const dateStr = hasExplicitUpdate ? row.updated_at : row.created_at
+    const email = row.updated_by ?? row.created_by
+    const d = new Date(dateStr)
+    const date = `${d.getDate()}-${d.toLocaleString('en', { month: 'short' })}-${d.getFullYear()}`
+    const person = email ? (profileNameMap.get(email) ?? email.split('@')[0]) : null
+    const color = email ? (colorMap.get(email) ?? null) : null
+    return { date, person, color }
+  }
 
   // ── Agency section state ──────────────────────────────────────────
   const [agencySearch, setAgencySearch] = useState('')
@@ -151,6 +163,11 @@ export function AgenciesClient({ agencies, agents, userProfiles }: Props) {
     return agencySortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />
   }
   const sortedAgencies = [...filteredAgencies].sort((a, b) => {
+    if (agencySortKey === 'last_updated') {
+      const ad = new Date(a.updated_by ? a.updated_at : a.created_at).getTime()
+      const bd = new Date(b.updated_by ? b.updated_at : b.created_at).getTime()
+      return agencySortDir === 'asc' ? ad - bd : bd - ad
+    }
     if (agencySortKey === 'agents') {
       const diff = (a.agents?.length ?? 0) - (b.agents?.length ?? 0)
       return agencySortDir === 'asc' ? diff : -diff
@@ -174,6 +191,11 @@ export function AgenciesClient({ agencies, agents, userProfiles }: Props) {
     return agentSortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />
   }
   const sortedAgents = [...filteredAgents].sort((a, b) => {
+    if (agentSortKey === 'last_updated') {
+      const ad = new Date(a.updated_by ? a.updated_at : a.created_at).getTime()
+      const bd = new Date(b.updated_by ? b.updated_at : b.created_at).getTime()
+      return agentSortDir === 'asc' ? ad - bd : bd - ad
+    }
     let av = '', bv = ''
     if (agentSortKey === 'name') { av = a.name; bv = b.name }
     else if (agentSortKey === 'agency') { av = a.agency?.name ?? ''; bv = b.agency?.name ?? '' }
@@ -334,25 +356,26 @@ export function AgenciesClient({ agencies, agents, userProfiles }: Props) {
                     {label}<AgencySortIcon col={col} />
                   </th>
                 ))}
+                <th onClick={() => toggleAgencySort('last_updated')} className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide cursor-pointer select-none hover:text-gray-700 whitespace-nowrap">
+                  Last Updated<AgencySortIcon col="last_updated" />
+                </th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {sortedAgencies.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-400">
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
                     {agencySearch ? 'No results.' : 'No agencies yet.'}
                   </td>
                 </tr>
               )}
               {sortedAgencies.map(agency => {
-                const agencyEffectiveUser = agency.updated_by ?? agency.created_by
-                const agencyBgColor = agencyEffectiveUser ? (colorMap.get(agencyEffectiveUser) ?? null) : null
+                const { date: lastUpdatedDate, person: lastUpdatedPerson, color: lastUpdatedColor } = formatLastUpdated(agency)
                 return (
                 <tr
                   key={agency.id}
-                  style={agencyBgColor ? { backgroundColor: agencyBgColor } : undefined}
-                  className={`transition-colors group${!agencyBgColor ? ' hover:bg-gray-50/50' : ''}`}
+                  className="transition-colors group hover:bg-gray-50/50"
                 >
                   <td className="px-4 py-3">
                     <Link href={`/agencies/${agency.id}`} className="font-medium text-gray-900 hover:text-black">
@@ -371,6 +394,15 @@ export function AgenciesClient({ agencies, agents, userProfiles }: Props) {
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">
                     {agency.agents?.length ?? 0}
+                  </td>
+                  <td className="px-4 py-3 text-xs whitespace-nowrap">
+                    <span
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-gray-800"
+                      style={lastUpdatedColor ? { backgroundColor: lastUpdatedColor } : undefined}
+                    >
+                      {lastUpdatedDate}
+                      {lastUpdatedPerson && <span className="opacity-70"> ({lastUpdatedPerson})</span>}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
@@ -440,25 +472,26 @@ export function AgenciesClient({ agencies, agents, userProfiles }: Props) {
                     {label}<AgentSortIcon col={col} />
                   </th>
                 ))}
+                <th onClick={() => toggleAgentSort('last_updated')} className="text-left px-4 py-3 font-medium text-indigo-400 text-xs uppercase tracking-wide cursor-pointer select-none hover:text-indigo-600 whitespace-nowrap">
+                  Last Updated<AgentSortIcon col="last_updated" />
+                </th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {sortedAgents.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-400">
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
                     {agentSearch ? 'No results.' : 'No agents yet.'}
                   </td>
                 </tr>
               )}
               {sortedAgents.map(agent => {
-                const agentEffectiveUser = agent.updated_by ?? agent.created_by
-                const agentBgColor = agentEffectiveUser ? (colorMap.get(agentEffectiveUser) ?? null) : null
+                const { date: lastUpdatedDate, person: lastUpdatedPerson, color: lastUpdatedColor } = formatLastUpdated(agent)
                 return (
                 <tr
                   key={agent.id}
-                  style={agentBgColor ? { backgroundColor: agentBgColor } : undefined}
-                  className={`transition-colors group${!agentBgColor ? ' hover:bg-gray-50/50' : ''}`}
+                  className="transition-colors group hover:bg-gray-50/50"
                 >
                   <td className="px-4 py-3">
                     <Link href={`/agents/${agent.id}`} className="font-medium text-gray-900 hover:text-black">
@@ -477,6 +510,15 @@ export function AgenciesClient({ agencies, agents, userProfiles }: Props) {
                     {agent.email
                       ? <a href={`mailto:${agent.email}`} className="hover:text-black">{agent.email}</a>
                       : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-xs whitespace-nowrap">
+                    <span
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-gray-800"
+                      style={lastUpdatedColor ? { backgroundColor: lastUpdatedColor } : undefined}
+                    >
+                      {lastUpdatedDate}
+                      {lastUpdatedPerson && <span className="opacity-70"> ({lastUpdatedPerson})</span>}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
