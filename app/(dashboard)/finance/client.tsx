@@ -152,9 +152,9 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
   const [annualDeleting, setAnnualDeleting] = useState(false)
   const [annualSortCol, setAnnualSortCol] = useState<'item' | 'category' | 'due_date' | 'amount_aed'>('due_date')
   const [annualSortDir, setAnnualSortDir] = useState<'asc' | 'desc'>('asc')
-  const [saleSortCol, setSaleSortCol] = useState<'invoice_number' | 'billed_to_name' | 'project' | 'issue_date' | 'due_date' | 'amount' | 'status'>('due_date')
+  const [saleSortCol, setSaleSortCol] = useState<'invoice_number' | 'billed_to_name' | 'project' | 'issue_date' | 'due_date' | 'amount' | 'aed' | 'status'>('due_date')
   const [saleSortDir, setSaleSortDir] = useState<'asc' | 'desc'>('desc')
-  const [poSortCol, setPoSortCol] = useState<'invoice_number' | 'supplier' | 'project' | 'issue_date' | 'due_date' | 'gross_amount' | 'status'>('issue_date')
+  const [poSortCol, setPoSortCol] = useState<'invoice_number' | 'supplier' | 'project' | 'issue_date' | 'due_date' | 'gross_amount' | 'aed' | 'status'>('issue_date')
   const [poSortDir, setPoSortDir] = useState<'asc' | 'desc'>('desc')
 
   // Salaries state
@@ -291,6 +291,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
       else if (saleSortCol === 'billed_to_name') cmp = (a.billed_to_name ?? '').localeCompare(b.billed_to_name ?? '')
       else if (saleSortCol === 'project') cmp = (a.project?.name ?? '').localeCompare(b.project?.name ?? '')
       else if (saleSortCol === 'amount') cmp = invoiceTotal(a) - invoiceTotal(b)
+      else if (saleSortCol === 'aed') cmp = invoiceTotal(a) * rateToAed(a.currency, currencyRates) - invoiceTotal(b) * rateToAed(b.currency, currencyRates)
       else if (saleSortCol === 'status') cmp = a.status.localeCompare(b.status)
       else {
         const dateA = saleSortCol === 'issue_date' ? a.issue_date : a.due_date
@@ -318,6 +319,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
       else if (poSortCol === 'supplier') cmp = (a.supplier ?? '').localeCompare(b.supplier ?? '')
       else if (poSortCol === 'project') cmp = (a.project?.name ?? '').localeCompare(b.project?.name ?? '')
       else if (poSortCol === 'gross_amount') cmp = a.gross_amount - b.gross_amount
+      else if (poSortCol === 'aed') cmp = a.gross_amount * a.fx_rate - b.gross_amount * b.fx_rate
       else if (poSortCol === 'status') cmp = a.status.localeCompare(b.status)
       else {
         const dateA = poSortCol === 'issue_date' ? a.issue_date : a.due_date
@@ -780,6 +782,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                       { col: 'issue_date', label: 'Issue Date', align: 'left' },
                       { col: 'due_date', label: 'Due Date', align: 'left' },
                       { col: 'amount', label: 'Amount', align: 'right' },
+                      { col: 'aed', label: 'AED', align: 'right' },
                       { col: 'status', label: 'Status', align: 'left' },
                     ] as { col: typeof saleSortCol; label: string; align: string }[]).map(({ col, label, align }) => (
                       <th
@@ -829,6 +832,12 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                             <span className="text-amber-600">{formatAmount(inv.currency, invoiceTotal(inv) - inv.amount_paid)} due</span>
                           </div>
                         )}
+                      </td>
+                      <td className="px-5 py-3 text-right text-gray-500 whitespace-nowrap">
+                        {inv.currency === 'AED'
+                          ? <span className="text-gray-300">—</span>
+                          : fmtAed(invoiceTotal(inv) * rateToAed(inv.currency, currencyRates))
+                        }
                       </td>
                       <td className="px-5 py-3">
                         <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', SALE_STATUS_STYLES[inv.status] ?? '')}>
@@ -921,6 +930,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                       { col: 'issue_date', label: 'Issue Date', align: 'left' },
                       { col: 'due_date', label: 'Due Date', align: 'left' },
                       { col: 'gross_amount', label: 'Gross Amount', align: 'right' },
+                      { col: 'aed', label: 'AED', align: 'right' },
                       { col: 'status', label: 'Status', align: 'left' },
                     ] as { col: typeof poSortCol; label: string; align: string }[]).map(({ col, label, align }) => (
                       <th
@@ -969,6 +979,12 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                             <span className="text-amber-600">{formatAmount(inv.currency, inv.gross_amount - inv.amount_paid)} due</span>
                           </div>
                         )}
+                      </td>
+                      <td className="px-5 py-3 text-right text-gray-500 whitespace-nowrap">
+                        {inv.currency === 'AED'
+                          ? <span className="text-gray-300">—</span>
+                          : fmtAed(inv.gross_amount * inv.fx_rate)
+                        }
                       </td>
                       <td className="px-5 py-3">
                         <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', PO_STATUS_STYLES[inv.status] ?? '')}>
