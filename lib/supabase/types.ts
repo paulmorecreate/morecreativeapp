@@ -384,6 +384,7 @@ export interface PurchaseInvoice {
   issue_date: string | null
   due_date: string | null
   status: 'pending' | 'paid' | 'partial'
+  amount_paid: number
   notes: string | null
   created_at: string
   updated_at: string

@@ -43,6 +43,7 @@ export function PurchaseInvoiceDetailClient({ invoice, projects }: Props) {
     issue_date: invoice.issue_date ?? '',
     due_date: invoice.due_date ?? '',
     status: invoice.status,
+    amount_paid: invoice.amount_paid,
     notes: invoice.notes ?? '',
   })
 
@@ -54,6 +55,7 @@ export function PurchaseInvoiceDetailClient({ invoice, projects }: Props) {
   const vatAmount = form.net_amount * (form.vat_rate / 100)
   const grossAmount = form.net_amount + vatAmount
   const grossAed = grossAmount * form.fx_rate
+  const amountRemaining = grossAmount - form.amount_paid
 
   function backTarget() {
     return form.project_id ? `/projects/${form.project_id}?tab=finance` : '/finance?tab=purchase'
@@ -74,6 +76,7 @@ export function PurchaseInvoiceDetailClient({ invoice, projects }: Props) {
       issue_date: form.issue_date || null,
       due_date: form.due_date || null,
       status: form.status,
+      amount_paid: form.status === 'partial' ? Number(form.amount_paid) : form.status === 'paid' ? grossAmount : 0,
       notes: form.notes || null,
       updated_at: new Date().toISOString(),
     }).eq('id', invoice.id)
@@ -159,6 +162,20 @@ export function PurchaseInvoiceDetailClient({ invoice, projects }: Props) {
                 <option value="paid">Paid</option>
               </Select>
             </div>
+            {form.status === 'partial' && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Amount Paid ({form.currency})</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={grossAmount}
+                  value={form.amount_paid}
+                  onChange={e => setForm(f => ({ ...f, amount_paid: parseFloat(e.target.value) || 0 }))}
+                  placeholder="0.00"
+                />
+              </div>
+            )}
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-600">Issue Date</label>
               <Input type="date" value={form.issue_date} onChange={e => setForm(f => ({ ...f, issue_date: e.target.value }))} />
@@ -238,6 +255,18 @@ export function PurchaseInvoiceDetailClient({ invoice, projects }: Props) {
                   <span>≈ AED equivalent</span>
                   <span>{fmt('AED', grossAed)}</span>
                 </div>
+              )}
+              {form.status === 'partial' && form.amount_paid > 0 && (
+                <>
+                  <div className="flex justify-between text-green-600 text-sm pt-2 border-t border-gray-100 mt-1">
+                    <span>Paid</span>
+                    <span>{fmt(form.currency, form.amount_paid)}</span>
+                  </div>
+                  <div className="flex justify-between text-amber-600 text-sm font-semibold">
+                    <span>Remaining</span>
+                    <span>{fmt(form.currency, amountRemaining)}</span>
+                  </div>
+                </>
               )}
             </div>
           </div>

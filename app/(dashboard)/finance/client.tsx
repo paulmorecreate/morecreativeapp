@@ -154,7 +154,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
   const [annualSortDir, setAnnualSortDir] = useState<'asc' | 'desc'>('asc')
   const [saleSortCol, setSaleSortCol] = useState<'invoice_number' | 'billed_to_name' | 'project' | 'issue_date' | 'due_date' | 'amount' | 'status'>('due_date')
   const [saleSortDir, setSaleSortDir] = useState<'asc' | 'desc'>('desc')
-  const [poSortCol, setPoSortCol] = useState<'invoice_number' | 'supplier' | 'project' | 'issue_date' | 'due_date' | 'gross_amount' | 'status'>('due_date')
+  const [poSortCol, setPoSortCol] = useState<'invoice_number' | 'supplier' | 'project' | 'issue_date' | 'due_date' | 'gross_amount' | 'status'>('issue_date')
   const [poSortDir, setPoSortDir] = useState<'asc' | 'desc'>('desc')
 
   // Salaries state
@@ -198,8 +198,14 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
     let paid = 0, pending = 0
     for (const inv of purchaseInvoices) {
       const aed = inv.gross_amount * inv.fx_rate
-      if (inv.status === 'paid') paid += aed
-      else pending += aed
+      if (inv.status === 'paid') {
+        paid += aed
+      } else if (inv.status === 'partial' && inv.amount_paid > 0) {
+        paid += inv.amount_paid * inv.fx_rate
+        pending += (inv.gross_amount - inv.amount_paid) * inv.fx_rate
+      } else {
+        pending += aed
+      }
     }
     return { paid, pending }
   }, [purchaseInvoices])
@@ -955,7 +961,14 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                       <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(inv.issue_date)}</td>
                       <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(inv.due_date)}</td>
                       <td className="px-5 py-3 text-right font-medium text-gray-900 whitespace-nowrap">
-                        {formatAmount(inv.currency, inv.gross_amount)}
+                        <div>{formatAmount(inv.currency, inv.gross_amount)}</div>
+                        {inv.status === 'partial' && inv.amount_paid > 0 && (
+                          <div className="text-xs mt-0.5 space-x-1">
+                            <span className="text-green-600">{formatAmount(inv.currency, inv.amount_paid)} paid</span>
+                            <span className="text-gray-300">·</span>
+                            <span className="text-amber-600">{formatAmount(inv.currency, inv.gross_amount - inv.amount_paid)} due</span>
+                          </div>
+                        )}
                       </td>
                       <td className="px-5 py-3">
                         <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', PO_STATUS_STYLES[inv.status] ?? '')}>
