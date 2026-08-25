@@ -2,8 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound, redirect } from 'next/navigation'
 import { InvoiceDetailClient } from './client'
 
-export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export default async function InvoiceDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ from?: string }> }) {
+  const [{ id }, { from }] = await Promise.all([params, searchParams])
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -39,6 +39,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       lineItems={lineItems ?? []}
       settings={settings!}
       projects={projects ?? []}
+      returnTo={from === 'finance' ? '/finance' : undefined}
     />
   )
 }

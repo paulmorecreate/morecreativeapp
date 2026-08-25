@@ -49,6 +49,7 @@ type ShowTalent = {
   deal_type: string | null
   creative: string | null
   stylist_id: string | null
+  show_date: string | null
   notes: string | null
   talent: { id: string; name: string; category: string | null; ig_link: string | null } | null
   stylist: { id: string; name: string } | null
@@ -161,6 +162,7 @@ const CURRENCY_SYMBOL: Record<string, string> = { AED: 'AED ', EUR: '€', USD: 
 const INVOICE_STATUS_BADGE: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-600',
   sent: 'bg-blue-50 text-blue-700',
+  partial: 'bg-amber-50 text-amber-700',
   paid: 'bg-green-50 text-green-700',
 }
 const PO_STATUS_BADGE: Record<string, string> = {
@@ -592,7 +594,7 @@ function ProjectFinanceTab({
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Invoice #</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Billed To</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Due Date</th>
-                  <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Currency</th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Amount</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
                   <th className="px-3 py-3 w-10" />
                 </tr>
@@ -608,7 +610,16 @@ function ProjectFinanceTab({
                     <td className="px-5 py-3 text-gray-500">
                       {inv.due_date ? new Date(inv.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                     </td>
-                    <td className="px-5 py-3 text-right font-medium text-gray-500">{inv.currency}</td>
+                    <td className="px-5 py-3 text-right font-medium text-gray-900">
+                      <div>{fmtAmount(inv.currency, invoiceLineTotal(inv))}</div>
+                      {inv.status === 'partial' && inv.amount_paid > 0 && (
+                        <div className="text-xs mt-0.5 space-x-1">
+                          <span className="text-green-600">{fmtAmount(inv.currency, inv.amount_paid)} paid</span>
+                          <span className="text-gray-300">·</span>
+                          <span className="text-amber-600">{fmtAmount(inv.currency, invoiceLineTotal(inv) - inv.amount_paid)} due</span>
+                        </div>
+                      )}
+                    </td>
                     <td className="px-5 py-3">
                       <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', INVOICE_STATUS_BADGE[inv.status] ?? '')}>
                         {inv.status}
@@ -940,6 +951,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   const [draggingTalentId, setDraggingTalentId] = useState<string | null>(null)
   const [dragOverShowId, setDragOverShowId] = useState<string | null>(null)
   const [dragDuplicateShowId, setDragDuplicateShowId] = useState<string | null>(null)
+  const [exportingSchedule, setExportingSchedule] = useState(false)
 
   // Collapse state for brand show cards — all collapsed by default
   const [collapsedShows, setCollapsedShows] = useState<Set<string>>(() => new Set(brandShows.map(s => s.id)))
@@ -1226,6 +1238,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
         'Deal Type': entry.deal_type ?? '',
         'Creative': entry.creative ?? '',
         'Stylist': entry.stylist?.name ?? '',
+        'Date': entry.show_date ?? '',
         'Accepted': entry.accepted ? 'Yes' : 'No',
         'Notes': entry.notes ?? '',
         'Comments': (entry.project_brand_talent_notes ?? [])
@@ -1243,6 +1256,229 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
     const showDate = show.show_date ? ` ${show.show_date}` : ''
     const fileName = `${project.name} — ${brandName}${showDate}.xlsx`
     XLSX.writeFile(wb, fileName)
+  }
+
+  async function exportMovieSchedule() {
+    if (!project.start_date || !project.end_date) {
+      alert('Set the project start and end dates before exporting the schedule.')
+      return
+    }
+    setExportingSchedule(true)
+    try {
+      const ExcelJS = (await import('exceljs')).default
+
+      function ordSuffix(n: number): string {
+        const v = n % 100
+        const s = ['th', 'st', 'nd', 'rd']
+        return n + (s[(v - 20) % 10] || s[v] || s[0])
+      }
+      function dateHeader(iso: string): string {
+        const [y, m, d] = iso.split('-').map(Number)
+        const date = new Date(Date.UTC(y, m - 1, d))
+        const wd = date.toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' }).toUpperCase()
+        return `${wd} ${ordSuffix(d)}`
+      }
+
+      // Build date column list
+      const [sy, sm, sd] = project.start_date.split('-').map(Number)
+      const [ey, em, ed] = project.end_date.split('-').map(Number)
+      const cursor = new Date(Date.UTC(sy, sm - 1, sd))
+      const endUTC = new Date(Date.UTC(ey, em - 1, ed))
+      const dates: string[] = []
+      while (cursor <= endUTC) {
+        dates.push(cursor.toISOString().slice(0, 10))
+        cursor.setUTCDate(cursor.getUTCDate() + 1)
+      }
+      const numCols = dates.length
+
+      const wb = new ExcelJS.Workbook()
+      wb.creator = 'MoreCreative'
+      const ws = wb.addWorksheet('Movie Schedule')
+
+      ws.columns = dates.map(() => ({ width: 30 }))
+
+      // ── Title row ──────────────────────────────────────────────────────────
+      const titleRow = ws.addRow([project.name.toUpperCase() + ' — MOVIE SCHEDULE'])
+      ws.mergeCells(1, 1, 1, numCols)
+      titleRow.height = 30
+      const titleCell = titleRow.getCell(1)
+      titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A1A2E' } }
+      titleCell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 14, name: 'Arial' }
+      titleCell.alignment = { horizontal: 'center', vertical: 'middle' }
+
+      // ── Date header row ────────────────────────────────────────────────────
+      const headerRow = ws.addRow(dates.map(dateHeader))
+      headerRow.height = 36
+      for (let c = 1; c <= numCols; c++) {
+        const cell = headerRow.getCell(c)
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF00B050' } }
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11, name: 'Arial' }
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF007A3D' } },
+          left: { style: 'thin', color: { argb: 'FF007A3D' } },
+          bottom: { style: 'thin', color: { argb: 'FF007A3D' } },
+          right: { style: 'thin', color: { argb: 'FF007A3D' } },
+        }
+      }
+
+      // ── Pairings eligible for schedule:
+      //    • talent has a per-talent date (explicit booking, any status), OR
+      //    • talent is Confirmed (uses show-level date as fallback)
+      const eligible = brandShows.flatMap(s =>
+        s.project_brand_talents
+          .filter(e => {
+            if (!e.talent) return false
+            if (e.show_date) return true
+            return (e.status ?? '').toLowerCase() === 'confirmed'
+          })
+          .map(e => ({ show: s, entry: e, effectiveDate: e.show_date ?? s.show_date }))
+      )
+
+      const scheduled = eligible
+        .filter(({ effectiveDate }) => effectiveDate && dates.includes(effectiveDate))
+        .sort((a, b) => {
+          const d = (a.effectiveDate ?? '').localeCompare(b.effectiveDate ?? '')
+          return d !== 0 ? d : (a.entry.talent?.name ?? '').localeCompare(b.entry.talent?.name ?? '')
+        })
+
+      // ── Eligible but no resolvable date → exception report ─────────
+      const unscheduled = eligible
+        .filter(({ effectiveDate }) => !effectiveDate || !dates.includes(effectiveDate))
+        .sort((a, b) => (a.entry.talent?.name ?? '').localeCompare(b.entry.talent?.name ?? ''))
+
+      // ── Pack talents into rows: one talent per date column per row ───────────
+      type Pairing = typeof scheduled[number]
+      const packedRows: Array<Map<number, Pairing>> = []
+
+      for (const pairing of scheduled) {
+        const colIdx = dates.indexOf(pairing.effectiveDate!) + 1
+        let placed = false
+        for (const rowMap of packedRows) {
+          if (!rowMap.has(colIdx)) {
+            rowMap.set(colIdx, pairing)
+            placed = true
+            break
+          }
+        }
+        if (!placed) {
+          const newRow = new Map<number, Pairing>()
+          newRow.set(colIdx, pairing)
+          packedRows.push(newRow)
+        }
+      }
+
+      // ── Main schedule rows ─────────────────────────────────────────────────
+      for (const rowMap of packedRows) {
+        const row = ws.addRow(new Array(numCols).fill(null))
+        row.height = 120
+
+        for (let c = 1; c <= numCols; c++) {
+          const cell = row.getCell(c)
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } }
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+            left: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+            bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+            right: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+          }
+        }
+
+        for (const [colIdx, { show, entry }] of rowMap) {
+          const cell = row.getCell(colIdx)
+          const talentName = entry.talent!.name
+          const brandName = (show.brand?.name ?? 'Unknown').toUpperCase()
+          const plainNotes = entry.notes?.trim() ?? ''
+          const threadedNotes = (entry.project_brand_talent_notes ?? [])
+            .slice().sort((a, b) => a.created_at.localeCompare(b.created_at))
+            .map(n => n.content.trim()).filter(Boolean).join('\n')
+          const allNotes = [plainNotes, threadedNotes].filter(Boolean).join('\n')
+
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC0504D' } }
+          cell.alignment = { wrapText: true, vertical: 'top', horizontal: 'left' }
+          cell.border = {
+            top: { style: 'medium', color: { argb: 'FFAAAAAA' } },
+            left: { style: 'medium', color: { argb: 'FFAAAAAA' } },
+            bottom: { style: 'medium', color: { argb: 'FFAAAAAA' } },
+            right: { style: 'medium', color: { argb: 'FFAAAAAA' } },
+          }
+          cell.value = {
+            richText: [
+              { text: `${talentName} - ${brandName} TICKET`, font: { bold: true, size: 10, name: 'Arial', color: { argb: 'FF000000' } } },
+              ...(allNotes ? [{ text: `\n${allNotes}`, font: { size: 10, name: 'Arial', color: { argb: 'FF1A1A1A' } } }] : []),
+            ],
+          }
+        }
+      }
+
+      // ── Exception section (Confirmed but no show date set) ─────────────────
+      if (unscheduled.length > 0) {
+        // Spacer row
+        ws.addRow(new Array(numCols).fill(null)).height = 12
+
+        // Exception header — spans all columns
+        const excHeaderRow = ws.addRow(['⚠️  CONFIRMED — SHOW DATE NOT YET SET'])
+        ws.mergeCells(excHeaderRow.number, 1, excHeaderRow.number, numCols)
+        excHeaderRow.height = 26
+        const excHeaderCell = excHeaderRow.getCell(1)
+        excHeaderCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFB700' } }
+        excHeaderCell.font = { bold: true, size: 11, name: 'Arial', color: { argb: 'FF1A1A1A' } }
+        excHeaderCell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 }
+
+        // Column sub-headers
+        const excColHeaders = ['Talent', 'Brand', 'Notes']
+        const excColHeaderRow = ws.addRow([...excColHeaders, ...new Array(numCols - excColHeaders.length).fill(null)])
+        excColHeaderRow.height = 20
+        excColHeaders.forEach((_, i) => {
+          const cell = excColHeaderRow.getCell(i + 1)
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3CD' } }
+          cell.font = { bold: true, size: 10, name: 'Arial', color: { argb: 'FF856404' } }
+          cell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 }
+          cell.border = {
+            bottom: { style: 'thin', color: { argb: 'FFDDBB00' } },
+          }
+        })
+
+        // Exception data rows
+        for (const { show, entry } of unscheduled) {
+          const excPlain = entry.notes?.trim() ?? ''
+          const excThreaded = (entry.project_brand_talent_notes ?? [])
+            .slice().sort((a, b) => a.created_at.localeCompare(b.created_at))
+            .map(n => n.content.trim()).filter(Boolean).join('\n')
+          const excNotes = [excPlain, excThreaded].filter(Boolean).join('\n') || '—'
+          const excRow = ws.addRow([
+            entry.talent!.name,
+            show.brand?.name ?? '—',
+            excNotes,
+            ...new Array(numCols - 3).fill(null),
+          ])
+          excRow.height = 18
+          excRow.eachCell({ includeEmpty: false }, (cell, colNum) => {
+            if (colNum > 3) return
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFDF0' } }
+            cell.font = { size: 10, name: 'Arial', color: { argb: 'FF1A1A1A' } }
+            cell.alignment = { vertical: 'middle', wrapText: true, indent: 1 }
+            cell.border = {
+              bottom: { style: 'thin', color: { argb: 'FFEEEEEE' } },
+            }
+          })
+        }
+      }
+
+      // ── Download ───────────────────────────────────────────────────────────
+      const buffer = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${project.name} — Movie Schedule.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } finally {
+      setExportingSchedule(false)
+    }
   }
 
   return (
@@ -1356,6 +1592,12 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
             <Button variant="secondary" onClick={openAddShow}>
               <Plus className="w-3.5 h-3.5" /> Add Brand
             </Button>
+            {brandShows.some(s => s.show_date || s.project_brand_talents.some(e => e.show_date)) && (
+              <Button variant="secondary" onClick={exportMovieSchedule} disabled={exportingSchedule}>
+                <FileDown className="w-3.5 h-3.5" />
+                {exportingSchedule ? 'Exporting…' : 'Export Schedule'}
+              </Button>
+            )}
           </div>
         </div>
 
@@ -1517,6 +1759,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                           <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Deal</th>
                           <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Creative</th>
                           <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Stylist</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Date</th>
                           <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Notes</th>
                           <th className="px-4 py-2 w-8" />
                         </tr>
@@ -2010,12 +2253,14 @@ function InlineShowTalentRow({
   onRemove: () => void
 }) {
   const supabase = createClient()
+  const router = useRouter()
   const [status, setStatus] = useState(entry.status ?? '')
   const [dealType, setDealType] = useState(entry.deal_type ?? '')
   const [creative, setCreative] = useState<string[]>(
     entry.creative ? entry.creative.split(',').map(s => s.trim()).filter(Boolean) : []
   )
   const [stylistId, setStylistId] = useState(entry.stylist_id ?? '')
+  const [showDate, setShowDate] = useState(entry.show_date ?? '')
   const [notesList, setNotesList] = useState<TalentNote[]>(
     [...(entry.project_brand_talent_notes ?? [])].sort(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
@@ -2140,6 +2385,16 @@ function InlineShowTalentRow({
           <option value="">—</option>
           {stylists.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
+      </td>
+
+      {/* Per-talent date */}
+      <td className="px-4 py-2.5 min-w-[110px]">
+        <input
+          type="date"
+          value={showDate}
+          onChange={async e => { const v = e.target.value; setShowDate(v); await save({ show_date: v || null }); router.refresh() }}
+          className="text-xs rounded px-2 py-1 border border-transparent hover:border-gray-200 focus:border-gray-300 focus:outline-none text-gray-600 bg-transparent w-full"
+        />
       </td>
 
       {/* Notes */}

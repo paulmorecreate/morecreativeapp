@@ -321,7 +321,7 @@ export interface Invoice {
   project_id: string | null
   currency: 'AED' | 'EUR' | 'USD'
   apply_vat: boolean
-  status: 'draft' | 'sent' | 'paid'
+  status: 'draft' | 'sent' | 'paid' | 'partial'
   issue_date: string | null
   due_date: string | null
   billed_to_name: string | null

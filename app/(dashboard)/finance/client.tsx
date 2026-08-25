@@ -16,6 +16,7 @@ const CURRENCY_SYMBOL: Record<string, string> = { AED: 'AED ', EUR: '€', USD: 
 const SALE_STATUS_STYLES: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-600',
   sent: 'bg-blue-50 text-blue-700',
+  partial: 'bg-amber-50 text-amber-700',
   paid: 'bg-green-50 text-green-700',
 }
 
@@ -27,6 +28,12 @@ const PO_STATUS_STYLES: Record<string, string> = {
 
 function fmtAed(amount: number) {
   return `AED ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function fmtAedShort(amount: number) {
+  if (amount >= 1_000_000) return `AED ${(amount / 1_000_000).toFixed(1)}M`
+  if (amount >= 1_000) return `AED ${Math.round(amount / 1_000)}k`
+  return `AED ${Math.round(amount)}`
 }
 
 function formatAmount(currency: string, amount: number) {
@@ -59,7 +66,7 @@ type Props = {
   annualExpenses: AnnualExpense[]
   salaries: Salary[]
   operatingCosts: OperatingCost[]
-  initialTab: 'sales' | 'purchase' | 'annual' | 'running'
+  initialTab: 'overview' | 'sales' | 'purchase' | 'annual' | 'running'
 }
 
 const FREQ_OPTIONS = [
@@ -99,7 +106,7 @@ function AnnualStatusBadge({ dueDate }: { dueDate: string | null }) {
   return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">OK</span>
 }
 
-const SALE_STATUS_FILTERS = ['all', 'draft', 'sent', 'paid'] as const
+const SALE_STATUS_FILTERS = ['all', 'draft', 'sent', 'partial', 'paid'] as const
 const PO_STATUS_FILTERS = ['all', 'pending', 'partial', 'paid'] as const
 
 function SummaryBar({ paid, pending }: { paid: number; pending: number }) {
@@ -123,8 +130,8 @@ const EMPTY_OP_FORM = { expense_item: '', category: 'Software', frequency: 'mont
 
 export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annualExpenses: initialAnnualExpenses, salaries: initialSalaries, operatingCosts: initialOperatingCosts, initialTab }: Props) {
   const router = useRouter()
-  const [tab, setTab] = useState<'sales' | 'purchase' | 'annual' | 'running'>(initialTab)
-  const [saleFilter, setSaleFilter] = useState<'all' | 'draft' | 'sent' | 'paid'>('all')
+  const [tab, setTab] = useState<'overview' | 'sales' | 'purchase' | 'annual' | 'running'>(initialTab)
+  const [saleFilter, setSaleFilter] = useState<'all' | 'draft' | 'sent' | 'partial' | 'paid'>('all')
   const [poFilter, setPoFilter] = useState<'all' | 'pending' | 'partial' | 'paid'>('all')
   const [saleDueFrom, setSaleDueFrom] = useState('')
   const [saleDueTo, setSaleDueTo] = useState('')
@@ -174,8 +181,14 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
     for (const inv of invoices) {
       const fx = rateToAed(inv.currency, currencyRates)
       const total = invoiceTotal(inv) * fx
-      if (inv.status === 'paid') paid += total
-      else pending += total
+      if (inv.status === 'paid') {
+        paid += total
+      } else if (inv.status === 'partial' && inv.amount_paid > 0) {
+        paid += inv.amount_paid * fx
+        pending += (invoiceTotal(inv) - inv.amount_paid) * fx
+      } else {
+        pending += total
+      }
     }
     return { paid, pending }
   }, [invoices, currencyRates])
@@ -237,6 +250,26 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
     const totalMonthly = salaryMonthly + opsMonthly
     return { salaryMonthly, opsMonthly, totalMonthly, totalAnnual: totalMonthly * 12 }
   }, [salaries, operatingCosts])
+
+  // Overview stats (cross-tab aggregation)
+  const overviewStats = useMemo(() => {
+    const totalBilled = saleSummary.paid + saleSummary.pending
+    const collectionRate = totalBilled > 0 ? Math.round((saleSummary.paid / totalBilled) * 100) : null
+    const netRevenue = saleSummary.paid - poSummary.paid
+    const monthsCovered = runningSummary.totalMonthly > 0 && netRevenue > 0
+      ? Math.round((netRevenue / runningSummary.totalMonthly) * 10) / 10
+      : null
+    const today = new Date().toISOString().slice(0, 10)
+    const overdueItems = invoices.filter(inv => inv.status !== 'paid' && inv.due_date && inv.due_date < today)
+    const overdueAed = overdueItems.reduce((s, inv) => {
+      const fx = rateToAed(inv.currency, currencyRates)
+      const remaining = inv.status === 'partial'
+        ? (invoiceTotal(inv) - inv.amount_paid) * fx
+        : invoiceTotal(inv) * fx
+      return s + remaining
+    }, 0)
+    return { collectionRate, netRevenue, monthsCovered, overdueCount: overdueItems.length, overdueAed }
+  }, [saleSummary, poSummary, runningSummary, invoices, currencyRates])
 
   // Filtered + sorted sales invoices
   const filteredSales = useMemo(() => {
@@ -518,6 +551,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
       {/* Tab switcher */}
       <div className="flex gap-1 mb-5 border-b border-gray-200">
         {([
+          { key: 'overview', label: 'Overview' },
           { key: 'sales', label: 'Sales Invoices' },
           { key: 'purchase', label: 'Purchase Invoices' },
           { key: 'annual', label: 'Annual Expenses' },
@@ -537,6 +571,139 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
           </button>
         ))}
       </div>
+
+      {/* Overview tab */}
+      {tab === 'overview' && (
+        <>
+          {/* Revenue */}
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Revenue</p>
+          <div className="grid grid-cols-3 gap-3 mb-6">
+            <div className="bg-green-50 border border-green-100 rounded-xl px-5 py-4">
+              <p className="text-xs font-medium text-green-600 mb-1">Collected</p>
+              <p className="text-xl font-semibold text-green-800">{fmtAed(saleSummary.paid)}</p>
+              <p className="text-xs text-green-500 mt-1">all paid sales invoices</p>
+            </div>
+            <div className="bg-amber-50 border border-amber-100 rounded-xl px-5 py-4">
+              <p className="text-xs font-medium text-amber-600 mb-1">Outstanding</p>
+              <p className="text-xl font-semibold text-amber-800">{fmtAed(saleSummary.pending)}</p>
+              <p className="text-xs text-amber-500 mt-1">draft · sent · partial</p>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-xl px-5 py-4">
+              <p className="text-xs font-medium text-gray-400 mb-1">Collection Rate</p>
+              <p className="text-xl font-semibold text-gray-900">
+                {overviewStats.collectionRate !== null ? `${overviewStats.collectionRate}%` : '—'}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">of total billed</p>
+            </div>
+          </div>
+
+          {/* Costs */}
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Costs</p>
+          <div className="grid grid-cols-3 gap-3 mb-6">
+            <div className="bg-blue-50 border border-blue-100 rounded-xl px-5 py-4">
+              <p className="text-xs font-medium text-blue-600 mb-1">Monthly Burn</p>
+              <p className="text-xl font-semibold text-blue-900">{fmtAed(runningSummary.totalMonthly)}</p>
+              <p className="text-xs text-blue-400 mt-1">
+                Salaries {fmtAedShort(runningSummary.salaryMonthly)} · Ops {fmtAedShort(runningSummary.opsMonthly)}
+              </p>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-xl px-5 py-4">
+              <p className="text-xs font-medium text-gray-400 mb-1">Annual Overhead</p>
+              <p className="text-xl font-semibold text-gray-900">{fmtAed(annualSummary.total)}</p>
+              <p className="text-xs text-gray-400 mt-1">licences · insurance · other</p>
+            </div>
+            <div className={cn('rounded-xl px-5 py-4', poSummary.pending > 0 ? 'bg-amber-50 border border-amber-100' : 'bg-white border border-gray-200')}>
+              <p className={cn('text-xs font-medium mb-1', poSummary.pending > 0 ? 'text-amber-600' : 'text-gray-400')}>Purchase Outstanding</p>
+              <p className={cn('text-xl font-semibold', poSummary.pending > 0 ? 'text-amber-800' : 'text-gray-500')}>
+                {fmtAed(poSummary.pending)}
+              </p>
+              <p className={cn('text-xs mt-1', poSummary.pending > 0 ? 'text-amber-500' : 'text-gray-300')}>pending purchase invoices</p>
+            </div>
+          </div>
+
+          {/* Net Position */}
+          <div className="bg-white border border-gray-200 rounded-xl px-6 py-5 mb-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Net Revenue</p>
+                <p className={cn('text-2xl font-semibold', overviewStats.netRevenue < 0 ? 'text-red-700' : 'text-gray-900')}>
+                  {fmtAed(overviewStats.netRevenue)}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">Sales collected minus purchase invoices paid</p>
+              </div>
+              {overviewStats.monthsCovered !== null && (
+                <div className="text-right pl-6 border-l border-gray-100">
+                  <p className="text-xs font-medium text-gray-400 mb-1">Burn coverage</p>
+                  <p className="text-2xl font-semibold text-gray-900">
+                    {overviewStats.monthsCovered.toFixed(1)}
+                    <span className="text-base font-normal text-gray-400 ml-1">months</span>
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">at {fmtAed(runningSummary.totalMonthly)}/mo</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Needs Attention */}
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Needs Attention</p>
+          {overviewStats.overdueCount === 0 && annualSummary.overdue === 0 && annualSummary.dueSoon === 0 ? (
+            <div className="bg-green-50 border border-green-100 rounded-xl px-5 py-4 text-sm font-medium text-green-700">
+              All clear — no overdue items.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {annualSummary.overdue > 0 && (
+                <button
+                  onClick={() => setTab('annual')}
+                  className="w-full text-left bg-red-50 border border-red-100 rounded-xl px-5 py-3.5 hover:bg-red-100 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-red-800">
+                        {annualSummary.overdue} annual expense{annualSummary.overdue > 1 ? 's' : ''} overdue
+                      </p>
+                      <p className="text-xs text-red-500 mt-0.5">Licences, insurance or other renewals past due date</p>
+                    </div>
+                    <span className="text-red-400 text-xs font-medium shrink-0 ml-4">View →</span>
+                  </div>
+                </button>
+              )}
+              {annualSummary.dueSoon > 0 && (
+                <button
+                  onClick={() => setTab('annual')}
+                  className="w-full text-left bg-amber-50 border border-amber-100 rounded-xl px-5 py-3.5 hover:bg-amber-100 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-amber-800">
+                        {annualSummary.dueSoon} renewal{annualSummary.dueSoon > 1 ? 's' : ''} due within 30 days
+                      </p>
+                      <p className="text-xs text-amber-500 mt-0.5">Annual expenses approaching their due date</p>
+                    </div>
+                    <span className="text-amber-500 text-xs font-medium shrink-0 ml-4">View →</span>
+                  </div>
+                </button>
+              )}
+              {overviewStats.overdueCount > 0 && (
+                <button
+                  onClick={() => setTab('sales')}
+                  className="w-full text-left bg-amber-50 border border-amber-100 rounded-xl px-5 py-3.5 hover:bg-amber-100 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-amber-800">
+                        {overviewStats.overdueCount} sales invoice{overviewStats.overdueCount > 1 ? 's' : ''} overdue · {fmtAed(overviewStats.overdueAed)}
+                      </p>
+                      <p className="text-xs text-amber-500 mt-0.5">Unpaid invoices past their due date</p>
+                    </div>
+                    <span className="text-amber-500 text-xs font-medium shrink-0 ml-4">View →</span>
+                  </div>
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      )}
 
       {/* Sales Invoices tab */}
       {tab === 'sales' && (
@@ -613,7 +780,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                         key={col}
                         onClick={() => toggleSaleSort(col)}
                         className={cn(
-                          'px-5 py-3 text-xs font-semibold text-gray-500 cursor-pointer select-none hover:text-gray-800 transition-colors',
+                          'px-5 py-3 text-xs font-semibold text-gray-500 cursor-pointer select-none hover:text-gray-800 transition-colors whitespace-nowrap',
                           align === 'right' ? 'text-right' : 'text-left'
                         )}
                       >
@@ -630,25 +797,32 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                   {filteredSales.map(inv => (
                     <tr
                       key={inv.id}
-                      onClick={() => router.push(`/finance/${inv.id}`)}
+                      onClick={() => router.push(`/finance/${inv.id}?from=finance`)}
                       className="hover:bg-gray-50 cursor-pointer transition-colors group"
                     >
-                      <td className="px-5 py-3 font-medium text-gray-900">{inv.invoice_number}</td>
-                      <td className="px-5 py-3 text-gray-700">
-                        <div>{inv.billed_to_name ?? <span className="text-gray-300">—</span>}</div>
-                        {inv.billed_to_company && <div className="text-xs text-gray-400">{inv.billed_to_company}</div>}
+                      <td className="px-5 py-3 font-medium text-gray-900 whitespace-nowrap">{inv.invoice_number}</td>
+                      <td className="px-5 py-3 text-gray-700 max-w-[180px]">
+                        <div className="truncate">{inv.billed_to_name ?? <span className="text-gray-300">—</span>}</div>
+                        {inv.billed_to_company && <div className="text-xs text-gray-400 truncate">{inv.billed_to_company}</div>}
                       </td>
-                      <td className="px-5 py-3 text-gray-500">
+                      <td className="px-5 py-3 text-gray-500 max-w-[140px]">
                         {inv.project ? (
-                          <Link href={`/projects/${inv.project.id}`} onClick={e => e.stopPropagation()} className="hover:text-gray-900 transition-colors">
+                          <Link href={`/projects/${inv.project.id}`} onClick={e => e.stopPropagation()} className="hover:text-gray-900 transition-colors block truncate">
                             {inv.project.name}
                           </Link>
                         ) : <span className="text-gray-300">—</span>}
                       </td>
-                      <td className="px-5 py-3 text-gray-500">{formatDate(inv.issue_date)}</td>
-                      <td className="px-5 py-3 text-gray-500">{formatDate(inv.due_date)}</td>
-                      <td className="px-5 py-3 text-right font-medium text-gray-900">
-                        {formatAmount(inv.currency, invoiceTotal(inv))}
+                      <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(inv.issue_date)}</td>
+                      <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(inv.due_date)}</td>
+                      <td className="px-5 py-3 text-right font-medium text-gray-900 whitespace-nowrap">
+                        <div>{formatAmount(inv.currency, invoiceTotal(inv))}</div>
+                        {inv.status === 'partial' && inv.amount_paid > 0 && (
+                          <div className="text-xs mt-0.5 space-x-1">
+                            <span className="text-green-600">{formatAmount(inv.currency, inv.amount_paid)} paid</span>
+                            <span className="text-gray-300">·</span>
+                            <span className="text-amber-600">{formatAmount(inv.currency, invoiceTotal(inv) - inv.amount_paid)} due</span>
+                          </div>
+                        )}
                       </td>
                       <td className="px-5 py-3">
                         <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', SALE_STATUS_STYLES[inv.status] ?? '')}>
@@ -747,7 +921,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                         key={col}
                         onClick={() => togglePoSort(col)}
                         className={cn(
-                          'px-5 py-3 text-xs font-semibold text-gray-500 cursor-pointer select-none hover:text-gray-800 transition-colors',
+                          'px-5 py-3 text-xs font-semibold text-gray-500 cursor-pointer select-none hover:text-gray-800 transition-colors whitespace-nowrap',
                           align === 'right' ? 'text-right' : 'text-left'
                         )}
                       >
@@ -767,20 +941,20 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                       onClick={() => router.push(`/finance/purchase/${inv.id}`)}
                       className="hover:bg-gray-50 cursor-pointer transition-colors group"
                     >
-                      <td className="px-5 py-3 font-medium text-gray-900">
+                      <td className="px-5 py-3 font-medium text-gray-900 whitespace-nowrap">
                         {inv.invoice_number || <span className="text-gray-300">—</span>}
                       </td>
-                      <td className="px-5 py-3 text-gray-700">{inv.supplier || <span className="text-gray-300">—</span>}</td>
-                      <td className="px-5 py-3 text-gray-500">
+                      <td className="px-5 py-3 text-gray-700 max-w-[180px] truncate">{inv.supplier || <span className="text-gray-300">—</span>}</td>
+                      <td className="px-5 py-3 text-gray-500 max-w-[140px]">
                         {inv.project ? (
-                          <Link href={`/projects/${inv.project.id}`} onClick={e => e.stopPropagation()} className="hover:text-gray-900 transition-colors">
+                          <Link href={`/projects/${inv.project.id}`} onClick={e => e.stopPropagation()} className="hover:text-gray-900 transition-colors block truncate">
                             {inv.project.name}
                           </Link>
                         ) : <span className="text-gray-300">—</span>}
                       </td>
-                      <td className="px-5 py-3 text-gray-500">{formatDate(inv.issue_date)}</td>
-                      <td className="px-5 py-3 text-gray-500">{formatDate(inv.due_date)}</td>
-                      <td className="px-5 py-3 text-right font-medium text-gray-900">
+                      <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(inv.issue_date)}</td>
+                      <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(inv.due_date)}</td>
+                      <td className="px-5 py-3 text-right font-medium text-gray-900 whitespace-nowrap">
                         {formatAmount(inv.currency, inv.gross_amount)}
                       </td>
                       <td className="px-5 py-3">

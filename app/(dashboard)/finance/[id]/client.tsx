@@ -21,6 +21,7 @@ const CURRENCY_SYMBOL: Record<string, string> = { AED: 'AED ', EUR: '€', USD: 
 const STATUS_STYLES: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-600',
   sent: 'bg-blue-50 text-blue-700',
+  partial: 'bg-amber-50 text-amber-700',
   paid: 'bg-green-50 text-green-700',
 }
 
@@ -34,9 +35,10 @@ type Props = {
   lineItems: InvoiceLineItem[]
   settings: InvoiceSettings
   projects: { id: string; name: string }[]
+  returnTo?: string
 }
 
-export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, settings, projects }: Props) {
+export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, settings, projects, returnTo }: Props) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -127,15 +129,20 @@ export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, sett
     router.refresh()
   }
 
+  function backUrl() {
+    if (returnTo) return returnTo
+    return form.project_id ? `/projects/${form.project_id}?tab=finance` : '/finance'
+  }
+
   async function handleDelete() {
     setDeleting(true)
     await supabase.from('invoices').delete().eq('id', invoice.id)
-    router.push(invoice.project_id ? `/projects/${invoice.project_id}?tab=finance` : '/finance')
+    router.push(returnTo ?? (invoice.project_id ? `/projects/${invoice.project_id}?tab=finance` : '/finance'))
   }
 
   async function handleSaveAndClose() {
     await handleSave()
-    router.push(form.project_id ? `/projects/${form.project_id}?tab=finance` : '/finance')
+    router.push(backUrl())
   }
 
   function addLineItem() {
@@ -162,7 +169,7 @@ export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, sett
     <div className="max-w-4xl">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => router.push(form.project_id ? `/projects/${form.project_id}?tab=finance` : '/finance')} className="text-gray-400 hover:text-gray-700 transition-colors">
+        <button onClick={() => router.push(backUrl())} className="text-gray-400 hover:text-gray-700 transition-colors">
           <ArrowLeft className="w-4 h-4" />
         </button>
         <div className="flex-1">
@@ -218,6 +225,7 @@ export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, sett
               <Select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as Invoice['status'] }))}>
                 <option value="draft">Draft</option>
                 <option value="sent">Sent</option>
+                <option value="partial">Partial</option>
                 <option value="paid">Paid</option>
               </Select>
             </div>
@@ -240,6 +248,31 @@ export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, sett
               <label htmlFor="apply_vat" className="text-sm text-gray-700 cursor-pointer">Apply UAE VAT (5%)</label>
             </div>
           </div>
+
+          {form.status === 'partial' && (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 space-y-3">
+              <p className="text-xs font-semibold text-amber-800">Partial Payment</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-amber-700">Amount Received ({currency})</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={form.amount_paid}
+                    onChange={e => setForm(f => ({ ...f, amount_paid: parseFloat(e.target.value) || 0 }))}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-amber-700">Still Outstanding ({currency})</label>
+                  <div className="h-9 flex items-center px-3 rounded-lg bg-white border border-amber-200 text-sm font-semibold text-amber-800">
+                    {fmt(currency, Math.max(0, total - form.amount_paid))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Billed To */}
@@ -338,17 +371,25 @@ export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, sett
                 <span>Total</span>
                 <span>{fmt(currency, total)}</span>
               </div>
-              <div className="flex justify-between text-gray-600 items-center gap-2">
-                <span className="shrink-0">Amount Paid</span>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={form.amount_paid}
-                  onChange={e => setForm(f => ({ ...f, amount_paid: parseFloat(e.target.value) || 0 }))}
-                  className="w-28 text-right"
-                />
-              </div>
+              {form.status !== 'partial' && (
+                <div className="flex justify-between text-gray-600 items-center gap-2">
+                  <span className="shrink-0">Amount Paid</span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={form.amount_paid}
+                    onChange={e => setForm(f => ({ ...f, amount_paid: parseFloat(e.target.value) || 0 }))}
+                    className="w-28 text-right"
+                  />
+                </div>
+              )}
+              {form.status === 'partial' && form.amount_paid > 0 && (
+                <div className="flex justify-between text-amber-700 items-center gap-2">
+                  <span className="shrink-0">Amount Paid</span>
+                  <span className="font-medium">{fmt(currency, form.amount_paid)}</span>
+                </div>
+              )}
               <div className="flex justify-between font-semibold text-blue-700 border-t border-gray-100 pt-1.5">
                 <span>Amount Due ({currency})</span>
                 <span>{fmt(currency, amountDue)}</span>

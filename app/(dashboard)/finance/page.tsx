@@ -41,9 +41,9 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     supabase.from('operating_costs').select('*').order('expense_item'),
   ])
 
-  const validTab = ['sales', 'purchase', 'annual', 'running'].includes(tab ?? '')
-    ? (tab as 'sales' | 'purchase' | 'annual' | 'running')
-    : 'sales'
+  const validTab = ['overview', 'sales', 'purchase', 'annual', 'running'].includes(tab ?? '')
+    ? (tab as 'overview' | 'sales' | 'purchase' | 'annual' | 'running')
+    : 'overview'
 
   return (
     <FinanceClient
