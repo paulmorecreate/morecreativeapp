@@ -2271,6 +2271,8 @@ function InlineShowTalentRow({
   const [noteModal, setNoteModal] = useState<null | { mode: 'add' } | { mode: 'edit'; note: TalentNote }>(null)
   const [noteContent, setNoteContent] = useState('')
   const [savingNote, setSavingNote] = useState(false)
+  const [deleteNoteTarget, setDeleteNoteTarget] = useState<TalentNote | null>(null)
+  const [deletingNote, setDeletingNote] = useState(false)
 
   async function save(data: Record<string, unknown>) {
     await supabase.from('project_brand_talents').update(data).eq('id', entry.id)
@@ -2304,9 +2306,13 @@ function InlineShowTalentRow({
     setSavingNote(false)
   }
 
-  async function deleteNote(noteId: string) {
-    await supabase.from('project_brand_talent_notes').delete().eq('id', noteId)
-    setNotesList(prev => prev.filter(n => n.id !== noteId))
+  async function confirmDeleteNote() {
+    if (!deleteNoteTarget) return
+    setDeletingNote(true)
+    await supabase.from('project_brand_talent_notes').delete().eq('id', deleteNoteTarget.id)
+    setNotesList(prev => prev.filter(n => n.id !== deleteNoteTarget.id))
+    setDeletingNote(false)
+    setDeleteNoteTarget(null)
   }
 
   return (
@@ -2388,7 +2394,7 @@ function InlineShowTalentRow({
               >
                 {note.content}
               </span>
-              <button type="button" onClick={() => deleteNote(note.id)} className="shrink-0 text-gray-400 hover:text-red-500 transition-colors">
+              <button type="button" onClick={() => setDeleteNoteTarget(note)} className="shrink-0 text-gray-400 hover:text-red-500 transition-colors">
                 <X className="w-3 h-3" />
               </button>
             </div>
@@ -2430,6 +2436,26 @@ function InlineShowTalentRow({
           </Button>
         </div>
       </div>
+    </Modal>
+    <Modal open={!!deleteNoteTarget} onClose={() => setDeleteNoteTarget(null)} title="Delete note?">
+      {deleteNoteTarget && (
+        <div className="space-y-4">
+          <div className="rounded-lg bg-red-50 border border-red-100 px-4 py-3">
+            <p className="text-sm text-red-800">{deleteNoteTarget.content}</p>
+          </div>
+          <p className="text-sm text-gray-600">This will permanently delete this note. This cannot be undone.</p>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setDeleteNoteTarget(null)} className="flex-1">Cancel</Button>
+            <button
+              onClick={confirmDeleteNote}
+              disabled={deletingNote}
+              className="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {deletingNote ? 'Deleting…' : 'Yes, delete it'}
+            </button>
+          </div>
+        </div>
+      )}
     </Modal>
     </>
   )
