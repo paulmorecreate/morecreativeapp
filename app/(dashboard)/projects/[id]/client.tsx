@@ -2365,10 +2365,13 @@ function InlineShowTalentRow({
             className="text-xs rounded px-2 py-1 border border-transparent hover:border-gray-200 focus:border-gray-300 focus:outline-none text-gray-600 bg-transparent"
           />
           <input
-            type="time"
+            type="text"
             value={showTime}
             onChange={async e => { const v = e.target.value; setShowTime(v); await save({ show_time: v || null }) }}
-            className="text-xs rounded px-2 py-1 border border-transparent hover:border-gray-200 focus:border-gray-300 focus:outline-none text-gray-600 bg-transparent"
+            placeholder="21:30"
+            maxLength={5}
+            pattern="[0-2][0-9]:[0-5][0-9]"
+            className="text-xs rounded px-2 py-1 w-14 border border-transparent hover:border-gray-200 focus:border-gray-300 focus:outline-none text-gray-600 bg-transparent placeholder:text-gray-300"
           />
         </div>
       </td>
