@@ -8,6 +8,19 @@ import { TodoFab } from './todo-fab'
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
+
+  useEffect(() => {
+    setCollapsed(localStorage.getItem('sidebar-collapsed') === 'true')
+  }, [])
+
+  function toggleCollapsed() {
+    setCollapsed(c => {
+      const next = !c
+      localStorage.setItem('sidebar-collapsed', String(next))
+      return next
+    })
+  }
 
   useEffect(() => {
     const ping = () => fetch('/api/auth/heartbeat', { method: 'POST' }).catch(() => {})
@@ -18,18 +31,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
-      {/* Desktop sidebar — always visible */}
+      {/* Desktop sidebar */}
       <div className="hidden md:flex">
-        <Sidebar />
+        <Sidebar collapsed={collapsed} onToggle={toggleCollapsed} />
       </div>
 
       {/* Mobile drawer overlay */}
       {open && (
         <div className="fixed inset-0 z-40 md:hidden">
-          <div
-            className="absolute inset-0 bg-black/60"
-            onClick={() => setOpen(false)}
-          />
+          <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
           <div className="absolute left-0 top-0 h-full">
             <Sidebar onClose={() => setOpen(false)} />
           </div>
@@ -39,10 +49,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {/* Mobile top bar */}
         <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-zinc-950 border-b border-zinc-800 shrink-0">
-          <button
-            onClick={() => setOpen(true)}
-            className="text-zinc-400 hover:text-white transition-colors"
-          >
+          <button onClick={() => setOpen(true)} className="text-zinc-400 hover:text-white transition-colors">
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2">

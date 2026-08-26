@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Scissors, Camera, Building2, Users2, Receipt, Handshake, CalendarDays } from 'lucide-react'
+import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Scissors, Camera, Building2, Users2, Receipt, Handshake, CalendarDays, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { UserRole } from '@/lib/supabase/types'
@@ -24,7 +24,13 @@ const directoryNav = [
   { href: '/people', label: 'People', icon: Users2 },
 ]
 
-export function Sidebar({ onClose }: { onClose?: () => void }) {
+type Props = {
+  onClose?: () => void
+  collapsed?: boolean
+  onToggle?: () => void
+}
+
+export function Sidebar({ onClose, collapsed = false, onToggle }: Props) {
   const pathname = usePathname()
   const router = useRouter()
   const [userEmail, setUserEmail] = useState<string | null>(null)
@@ -53,14 +59,8 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
 
   async function changePassword() {
     setPasswordError(null)
-    if (newPassword.length < 6) {
-      setPasswordError('Password must be at least 6 characters.')
-      return
-    }
-    if (newPassword !== confirmPassword) {
-      setPasswordError('Passwords do not match.')
-      return
-    }
+    if (newPassword.length < 6) { setPasswordError('Password must be at least 6 characters.'); return }
+    if (newPassword !== confirmPassword) { setPasswordError('Passwords do not match.'); return }
     setPasswordLoading(true)
     const supabase = createClient()
     const { error } = await supabase.auth.updateUser({ password: newPassword })
@@ -85,7 +85,7 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
     router.refresh()
   }
 
-  function NavLink({ href, label, icon: Icon, indent }: { href: string; label: string; icon: React.ElementType; indent?: boolean }) {
+  function NavLink({ href, label, icon: Icon }: { href: string; label: string; icon: React.ElementType }) {
     const active = pathname === href ||
       (href !== '/dashboard' && pathname.startsWith(href)) ||
       (href === '/agencies' && pathname.startsWith('/agents'))
@@ -93,26 +93,33 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
       <Link
         href={href}
         onClick={onClose}
+        title={collapsed ? label : undefined}
         className={cn(
-          'flex items-center gap-2.5 py-2 rounded-lg text-sm transition-all',
-          indent ? 'pl-7 pr-3' : 'px-3',
-          active
-            ? 'bg-white/10 text-white font-medium'
-            : 'text-zinc-400 hover:text-white hover:bg-white/5'
+          'flex items-center rounded-lg text-sm transition-all',
+          collapsed ? 'justify-center p-2.5' : 'gap-2.5 px-3 py-2',
+          active ? 'bg-white/10 text-white font-medium' : 'text-zinc-400 hover:text-white hover:bg-white/5'
         )}
       >
         <Icon className="w-4 h-4 shrink-0" />
-        {label}
+        {!collapsed && label}
       </Link>
     )
   }
 
   return (
-    <aside className="flex flex-col w-56 shrink-0 bg-zinc-950 h-full">
+    <aside className={cn(
+      'flex flex-col shrink-0 bg-zinc-950 h-full transition-all duration-200',
+      collapsed ? 'w-14' : 'w-56'
+    )}>
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-4 py-5 border-b border-zinc-800">
-        <Image src="/mc-logo.jpg" alt="MoreCreative Operations Portal" width={28} height={28} className="rounded-lg shrink-0 object-cover" />
-        <span className="text-white font-semibold text-xs tracking-tight truncate">MoreCreative Operations Portal</span>
+      <div className={cn(
+        'flex items-center border-b border-zinc-800',
+        collapsed ? 'justify-center px-2 py-5' : 'gap-2.5 px-4 py-5'
+      )}>
+        <Image src="/mc-logo.jpg" alt="MoreCreative" width={28} height={28} className="rounded-lg shrink-0 object-cover" />
+        {!collapsed && (
+          <span className="text-white font-semibold text-xs tracking-tight truncate">MoreCreative Operations Portal</span>
+        )}
       </div>
 
       {/* Nav */}
@@ -125,8 +132,13 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
             <NavLink href="/finance" label="Finance" icon={Receipt} />
           )}
         </div>
-        <div className="my-3 h-px bg-zinc-800 mx-1" />
-        <p className="px-3 mb-1.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest">Directory</p>
+
+        {!collapsed && <div className="my-3 h-px bg-zinc-800 mx-1" />}
+        {collapsed && <div className="my-3 h-px bg-zinc-800 mx-1" />}
+
+        {!collapsed && (
+          <p className="px-3 mb-1.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest">Directory</p>
+        )}
         <div className="space-y-0.5">
           {directoryNav.map(item => <NavLink key={item.href} {...item} />)}
         </div>
@@ -137,12 +149,17 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
         <NavLink href="/admin" label="Admin" icon={Settings} />
         <button
           onClick={() => { onClose?.(); signOut() }}
-          className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm text-zinc-400 hover:text-white hover:bg-white/5 transition-all"
+          title={collapsed ? 'Sign out' : undefined}
+          className={cn(
+            'flex items-center w-full rounded-lg text-sm text-zinc-400 hover:text-white hover:bg-white/5 transition-all',
+            collapsed ? 'justify-center p-2.5' : 'gap-2.5 px-3 py-2'
+          )}
         >
           <LogOut className="w-4 h-4 shrink-0" />
-          Sign out
+          {!collapsed && 'Sign out'}
         </button>
-        {userEmail && (
+
+        {!collapsed && userEmail && (
           <button
             onClick={() => setShowPasswordModal(true)}
             className="px-3 pt-2 text-xs text-zinc-400 hover:text-white transition-colors text-left w-full truncate"
@@ -151,7 +168,22 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
             {userEmail}
           </button>
         )}
-        <p className="px-3 text-xs text-zinc-500">v{pkg.version}</p>
+        {!collapsed && <p className="px-3 text-xs text-zinc-500">v{pkg.version}</p>}
+
+        {/* Collapse toggle */}
+        {onToggle && (
+          <button
+            onClick={onToggle}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className={cn(
+              'flex items-center w-full rounded-lg text-sm text-zinc-600 hover:text-zinc-300 hover:bg-white/5 transition-all mt-1',
+              collapsed ? 'justify-center p-2.5' : 'gap-2.5 px-3 py-2'
+            )}
+          >
+            {collapsed ? <ChevronsRight className="w-4 h-4 shrink-0" /> : <ChevronsLeft className="w-4 h-4 shrink-0" />}
+            {!collapsed && <span className="text-xs">Collapse</span>}
+          </button>
+        )}
       </div>
 
       {showPasswordModal && (
@@ -165,42 +197,17 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
                 <div className="space-y-3">
                   <div>
                     <label className="text-xs text-zinc-400 mb-1 block">New password</label>
-                    <input
-                      type="password"
-                      value={newPassword}
-                      onChange={e => setNewPassword(e.target.value)}
-                      autoFocus
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-500"
-                      placeholder="Min. 6 characters"
-                    />
+                    <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoFocus className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-500" placeholder="Min. 6 characters" />
                   </div>
                   <div>
                     <label className="text-xs text-zinc-400 mb-1 block">Confirm new password</label>
-                    <input
-                      type="password"
-                      value={confirmPassword}
-                      onChange={e => setConfirmPassword(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && changePassword()}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-500"
-                      placeholder="Repeat password"
-                    />
+                    <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && changePassword()} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-500" placeholder="Repeat password" />
                   </div>
                 </div>
                 {passwordError && <p className="text-red-400 text-xs">{passwordError}</p>}
                 <div className="flex gap-2 justify-end pt-1">
-                  <button
-                    onClick={() => { setShowPasswordModal(false); setNewPassword(''); setConfirmPassword(''); setPasswordError(null) }}
-                    className="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={changePassword}
-                    disabled={passwordLoading}
-                    className="px-4 py-2 text-sm bg-white text-zinc-900 rounded-lg font-medium hover:bg-zinc-100 disabled:opacity-50 transition-colors"
-                  >
-                    {passwordLoading ? 'Saving…' : 'Save'}
-                  </button>
+                  <button onClick={() => { setShowPasswordModal(false); setNewPassword(''); setConfirmPassword(''); setPasswordError(null) }} className="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors">Cancel</button>
+                  <button onClick={changePassword} disabled={passwordLoading} className="px-4 py-2 text-sm bg-white text-zinc-900 rounded-lg font-medium hover:bg-zinc-100 disabled:opacity-50 transition-colors">{passwordLoading ? 'Saving…' : 'Save'}</button>
                 </div>
               </>
             )}
