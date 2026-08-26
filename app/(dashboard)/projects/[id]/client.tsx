@@ -1236,13 +1236,9 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
         'Category': entry.talent?.category ?? '',
         'Instagram': entry.talent?.ig_link ?? '',
         'Status': entry.status ?? '',
-        'Deal Type': entry.deal_type ?? '',
-        'Creative': entry.creative ?? '',
         'Stylist': entry.stylist?.name ?? '',
         'Date': entry.show_date ?? '',
         'Time': entry.show_time ?? '',
-        'Accepted': entry.accepted ? 'Yes' : 'No',
-        'Notes': entry.notes ?? '',
         'Comments': (entry.project_brand_talent_notes ?? [])
           .slice()
           .sort((a, b) => a.created_at.localeCompare(b.created_at))
