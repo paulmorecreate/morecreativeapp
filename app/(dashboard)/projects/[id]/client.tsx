@@ -1225,35 +1225,134 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   const linkedProjectTalentIds = new Set(projectTalents.map(pt => pt.talent_id))
   const availableProjectTalents = talents.filter(t => !linkedProjectTalentIds.has(t.id))
 
-  function exportShowToExcel(show: BrandShow) {
-    const XLSX = require('xlsx') as typeof import('xlsx')
-
-    const rows = show.project_brand_talents
-      .slice()
-      .sort((a, b) => (a.talent?.name ?? '').localeCompare(b.talent?.name ?? ''))
-      .map(entry => ({
-        'Talent': entry.talent?.name ?? '',
-        'Category': entry.talent?.category ?? '',
-        'Instagram': entry.talent?.ig_link ?? '',
-        'Status': entry.status ?? '',
-        'Stylist': entry.stylist?.name ?? '',
-        'Date': entry.show_date ?? '',
-        'Time': entry.show_time ?? '',
-        'Comments': (entry.project_brand_talent_notes ?? [])
-          .slice()
-          .sort((a, b) => a.created_at.localeCompare(b.created_at))
-          .map(n => n.content)
-          .join(' | '),
-      }))
-
-    const ws = XLSX.utils.json_to_sheet(rows)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Talents')
-
+  async function exportShowToExcel(show: BrandShow) {
+    const ExcelJS = (await import('exceljs')).default
     const brandName = show.brand?.name ?? 'Show'
-    const showDate = show.show_date ? ` ${show.show_date}` : ''
-    const fileName = `${project.name} — ${brandName}${showDate}.xlsx`
-    XLSX.writeFile(wb, fileName)
+
+    const COLS = [
+      { header: 'Talent',    width: 26 },
+      { header: 'Category',  width: 18 },
+      { header: 'Instagram', width: 32 },
+      { header: 'Status',    width: 16 },
+      { header: 'Stylist',   width: 22 },
+      { header: 'Date',      width: 14 },
+      { header: 'Time',      width: 10 },
+      { header: 'Comments',  width: 44 },
+    ]
+    const NUM_COLS = COLS.length
+
+    const wb = new ExcelJS.Workbook()
+    wb.creator = 'MoreCreative'
+    const ws = wb.addWorksheet('Lineup')
+    ws.columns = COLS.map(c => ({ width: c.width }))
+
+    // ── Title row ──────────────────────────────────────────────────────
+    const titleRow = ws.addRow([`${project.name.toUpperCase()} — ${brandName.toUpperCase()}`])
+    ws.mergeCells(1, 1, 1, NUM_COLS)
+    titleRow.height = 30
+    const titleCell = titleRow.getCell(1)
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A1A2E' } }
+    titleCell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 14, name: 'Arial' }
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' }
+
+    // ── Subtitle row (date + time) ──────────────────────────────────────
+    const formattedDate = show.show_date
+      ? new Date(show.show_date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+      : null
+    const subtitleParts = [formattedDate, show.show_time].filter(Boolean)
+    const subtitleText = subtitleParts.length ? subtitleParts.join(' · ') : `Exported ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`
+    const subtitleRow = ws.addRow([subtitleText])
+    ws.mergeCells(2, 1, 2, NUM_COLS)
+    subtitleRow.height = 20
+    const subtitleCell = subtitleRow.getCell(1)
+    subtitleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C2C44' } }
+    subtitleCell.font = { color: { argb: 'FFAAAACC' }, size: 10, name: 'Arial' }
+    subtitleCell.alignment = { horizontal: 'center', vertical: 'middle' }
+
+    // ── Column headers ──────────────────────────────────────────────────
+    const headerRow = ws.addRow(COLS.map(c => c.header.toUpperCase()))
+    headerRow.height = 22
+    headerRow.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } }
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9, name: 'Arial' }
+      cell.alignment = { horizontal: 'center', vertical: 'middle' }
+      cell.border = { bottom: { style: 'medium', color: { argb: 'FF1A252F' } } }
+    })
+
+    // ── Status colours ──────────────────────────────────────────────────
+    const STATUS_STYLE: Record<string, { bg: string; fg: string }> = {
+      'Confirmed':       { bg: 'FFD4EDDA', fg: 'FF155724' },
+      'Rejected':        { bg: 'FFFCE8E8', fg: 'FF721C24' },
+      'Declined':        { bg: 'FFFCE8E8', fg: 'FF721C24' },
+      'In Conversation': { bg: 'FFFFF3CD', fg: 'FF856404' },
+      'Approached':      { bg: 'FFFFEFD5', fg: 'FF7D4E00' },
+      'Proposed':        { bg: 'FFD1ECF1', fg: 'FF0C5460' },
+    }
+
+    // ── Data rows ───────────────────────────────────────────────────────
+    const entries = show.project_brand_talents
+      .slice()
+      .sort((a, b) => {
+        if (a.show_time && b.show_time) return a.show_time.localeCompare(b.show_time)
+        if (a.show_time) return -1
+        if (b.show_time) return 1
+        return (a.talent?.name ?? '').localeCompare(b.talent?.name ?? '')
+      })
+
+    entries.forEach((entry, i) => {
+      const rowBg = i % 2 === 0 ? 'FFFFFFFF' : 'FFF8F9FA'
+      const comments = (entry.project_brand_talent_notes ?? [])
+        .slice()
+        .sort((a, b) => a.created_at.localeCompare(b.created_at))
+        .map(n => n.content)
+        .join('\n')
+
+      const row = ws.addRow([
+        entry.talent?.name ?? '',
+        entry.talent?.category ?? '',
+        entry.talent?.ig_link ?? '',
+        entry.status ?? '',
+        entry.stylist?.name ?? '',
+        entry.show_date ?? '',
+        entry.show_time ?? '',
+        comments,
+      ])
+      row.height = comments ? Math.min(22 + (comments.split('\n').length - 1) * 14, 80) : 22
+
+      const statusStyle = STATUS_STYLE[entry.status ?? '']
+
+      row.eachCell({ includeEmpty: true }, (cell, col) => {
+        const isStatus = col === 4
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isStatus && statusStyle ? statusStyle.bg : rowBg } }
+        cell.font = { name: 'Arial', size: 10, bold: col === 1, color: { argb: isStatus && statusStyle ? statusStyle.fg : 'FF333333' } }
+        cell.alignment = { vertical: 'middle', horizontal: isStatus ? 'center' : 'left', wrapText: col === 8 }
+        cell.border = {
+          top:    { style: 'hair', color: { argb: 'FFDDDDDD' } },
+          bottom: { style: 'hair', color: { argb: 'FFDDDDDD' } },
+          left:   { style: 'hair', color: { argb: 'FFDDDDDD' } },
+          right:  { style: 'hair', color: { argb: 'FFDDDDDD' } },
+        }
+      })
+    })
+
+    // ── Footer ──────────────────────────────────────────────────────────
+    ws.addRow([])
+    const footerRow = ws.addRow([`${entries.length} talent${entries.length !== 1 ? 's' : ''}`])
+    ws.mergeCells(footerRow.number, 1, footerRow.number, NUM_COLS)
+    const footerCell = footerRow.getCell(1)
+    footerCell.font = { italic: true, color: { argb: 'FF999999' }, size: 9, name: 'Arial' }
+    footerCell.alignment = { horizontal: 'right' }
+
+    // ── Download ────────────────────────────────────────────────────────
+    const buffer = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const dateStr = show.show_date ?? new Date().toISOString().slice(0, 10)
+    a.download = `${project.name} — ${brandName} — ${dateStr}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   async function exportMovieSchedule() {
