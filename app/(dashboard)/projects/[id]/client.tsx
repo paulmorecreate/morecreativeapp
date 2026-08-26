@@ -1404,7 +1404,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
             bottom: { style: 'medium', color: { argb: 'FFAAAAAA' } },
             right: { style: 'medium', color: { argb: 'FFAAAAAA' } },
           }
-          const timeStr = entry.show_time?.trim() ? ` · ${entry.show_time.trim()}` : ''
+          const timeStr = entry.show_time ? ` · ${entry.show_time}` : ''
           cell.value = {
             richText: [
               { text: `${talentName} - ${brandName} TICKET${timeStr}`, font: { bold: true, size: 10, name: 'Arial', color: { argb: 'FF000000' } } },
@@ -2392,20 +2392,21 @@ function InlineShowTalentRow({
       </td>
 
       {/* Per-talent date / time */}
-      <td className="px-4 py-2.5 min-w-[120px]">
-        <input
-          type="date"
-          value={showDate}
-          onChange={async e => { const v = e.target.value; setShowDate(v); await save({ show_date: v || null }); router.refresh() }}
-          className="text-xs rounded px-2 py-1 border border-transparent hover:border-gray-200 focus:border-gray-300 focus:outline-none text-gray-600 bg-transparent w-full"
-        />
-        <input
-          type="text"
-          value={showTime}
-          onChange={async e => { const v = e.target.value; setShowTime(v); await save({ show_time: v || null }) }}
-          placeholder="e.g. 2:30 PM"
-          className="text-xs rounded px-2 py-1 border border-transparent hover:border-gray-200 focus:border-gray-300 focus:outline-none text-gray-500 bg-transparent w-full mt-0.5 placeholder:text-gray-300"
-        />
+      <td className="px-4 py-2.5 min-w-[200px]">
+        <div className="flex items-center gap-1.5">
+          <input
+            type="date"
+            value={showDate}
+            onChange={async e => { const v = e.target.value; setShowDate(v); await save({ show_date: v || null }); router.refresh() }}
+            className="text-xs rounded px-2 py-1 border border-transparent hover:border-gray-200 focus:border-gray-300 focus:outline-none text-gray-600 bg-transparent"
+          />
+          <input
+            type="time"
+            value={showTime}
+            onChange={async e => { const v = e.target.value; setShowTime(v); await save({ show_time: v || null }) }}
+            className="text-xs rounded px-2 py-1 border border-transparent hover:border-gray-200 focus:border-gray-300 focus:outline-none text-gray-600 bg-transparent"
+          />
+        </div>
       </td>
 
       {/* Notes */}
