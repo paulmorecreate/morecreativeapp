@@ -50,6 +50,7 @@ type ShowTalent = {
   creative: string | null
   stylist_id: string | null
   show_date: string | null
+  show_time: string | null
   notes: string | null
   talent: { id: string; name: string; category: string | null; ig_link: string | null } | null
   stylist: { id: string; name: string } | null
@@ -1239,6 +1240,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
         'Creative': entry.creative ?? '',
         'Stylist': entry.stylist?.name ?? '',
         'Date': entry.show_date ?? '',
+        'Time': entry.show_time ?? '',
         'Accepted': entry.accepted ? 'Yes' : 'No',
         'Notes': entry.notes ?? '',
         'Comments': (entry.project_brand_talent_notes ?? [])
@@ -1402,9 +1404,10 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
             bottom: { style: 'medium', color: { argb: 'FFAAAAAA' } },
             right: { style: 'medium', color: { argb: 'FFAAAAAA' } },
           }
+          const timeStr = entry.show_time?.trim() ? ` · ${entry.show_time.trim()}` : ''
           cell.value = {
             richText: [
-              { text: `${talentName} - ${brandName} TICKET`, font: { bold: true, size: 10, name: 'Arial', color: { argb: 'FF000000' } } },
+              { text: `${talentName} - ${brandName} TICKET${timeStr}`, font: { bold: true, size: 10, name: 'Arial', color: { argb: 'FF000000' } } },
               ...(allNotes ? [{ text: `\n${allNotes}`, font: { size: 10, name: 'Arial', color: { argb: 'FF1A1A1A' } } }] : []),
             ],
           }
@@ -1759,7 +1762,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                           <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Deal</th>
                           <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Creative</th>
                           <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Stylist</th>
-                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Date</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Date / Time</th>
                           <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Notes</th>
                           <th className="px-4 py-2 w-8" />
                         </tr>
@@ -2261,6 +2264,7 @@ function InlineShowTalentRow({
   )
   const [stylistId, setStylistId] = useState(entry.stylist_id ?? '')
   const [showDate, setShowDate] = useState(entry.show_date ?? '')
+  const [showTime, setShowTime] = useState(entry.show_time ?? '')
   const [notesList, setNotesList] = useState<TalentNote[]>(
     [...(entry.project_brand_talent_notes ?? [])].sort(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
@@ -2387,13 +2391,20 @@ function InlineShowTalentRow({
         </select>
       </td>
 
-      {/* Per-talent date */}
-      <td className="px-4 py-2.5 min-w-[110px]">
+      {/* Per-talent date / time */}
+      <td className="px-4 py-2.5 min-w-[120px]">
         <input
           type="date"
           value={showDate}
           onChange={async e => { const v = e.target.value; setShowDate(v); await save({ show_date: v || null }); router.refresh() }}
           className="text-xs rounded px-2 py-1 border border-transparent hover:border-gray-200 focus:border-gray-300 focus:outline-none text-gray-600 bg-transparent w-full"
+        />
+        <input
+          type="text"
+          value={showTime}
+          onChange={async e => { const v = e.target.value; setShowTime(v); await save({ show_time: v || null }) }}
+          placeholder="e.g. 2:30 PM"
+          className="text-xs rounded px-2 py-1 border border-transparent hover:border-gray-200 focus:border-gray-300 focus:outline-none text-gray-500 bg-transparent w-full mt-0.5 placeholder:text-gray-300"
         />
       </td>
 
