@@ -1759,8 +1759,6 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                         <tr className="border-b border-gray-50">
                           <th className="text-left px-5 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Talent</th>
                           <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Status</th>
-                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Deal</th>
-                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Creative</th>
                           <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Stylist</th>
                           <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Date / Time</th>
                           <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Notes</th>
@@ -2343,40 +2341,6 @@ function InlineShowTalentRow({
           <option value="">—</option>
           {talentStatusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-      </td>
-
-      {/* Deal */}
-      <td className="px-4 py-2.5 min-w-[90px]">
-        <select
-          value={dealType}
-          onChange={e => { const v = e.target.value; setDealType(v); save({ deal_type: v || null }) }}
-          className="text-xs rounded px-2 py-1 border border-transparent hover:border-gray-200 focus:border-gray-300 focus:outline-none cursor-pointer text-gray-600 bg-transparent w-full"
-        >
-          <option value="">—</option>
-          {dealTypeOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      </td>
-
-      {/* Creative — abbreviated pills */}
-      <td className="px-4 py-2.5">
-        <div className="flex gap-1">
-          {CREATIVE_OPTIONS.map(opt => (
-            <button
-              key={opt}
-              type="button"
-              title={opt}
-              onClick={() => toggleCreative(opt)}
-              className={cn(
-                'text-xs px-1.5 py-0.5 rounded border transition-all font-medium',
-                creative.includes(opt)
-                  ? 'bg-sky-50 text-sky-700 border-sky-200'
-                  : 'text-gray-300 border-gray-200 hover:text-gray-500 hover:border-gray-300'
-              )}
-            >
-              {CREATIVE_ABBREV[opt] ?? opt}
-            </button>
-          ))}
-        </div>
       </td>
 
       {/* Stylist */}
