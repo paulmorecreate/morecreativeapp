@@ -22,7 +22,7 @@ const STATUS_STYLES: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-600',
   sent: 'bg-blue-50 text-blue-700',
   partial: 'bg-amber-50 text-amber-700',
-  paid: 'bg-green-50 text-green-700',
+  received: 'bg-green-50 text-green-700',
   cancelled: 'bg-red-50 text-red-600',
 }
 
@@ -227,7 +227,7 @@ export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, sett
                 <option value="draft">Draft</option>
                 <option value="sent">Sent</option>
                 <option value="partial">Partial</option>
-                <option value="paid">Paid</option>
+                <option value="received">Received</option>
                 <option value="cancelled">Cancelled</option>
               </Select>
             </div>

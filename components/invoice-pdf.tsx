@@ -96,13 +96,27 @@ export function InvoiceDocument({
     settings.company_vat_number ? `VAT Number ${settings.company_vat_number}` : null,
   ].filter(Boolean).join('\n')
 
+  const useEur = invoice.currency === 'EUR'
+  const bank = useEur ? {
+    holder: settings.eur_bank_account_holder,
+    name: settings.eur_bank_name,
+    account: settings.eur_bank_account_number,
+    iban: settings.eur_bank_iban,
+    swift: settings.eur_bank_swift,
+  } : {
+    holder: settings.bank_account_holder,
+    name: settings.bank_name,
+    account: settings.bank_account_number,
+    iban: settings.bank_iban,
+    swift: settings.bank_swift,
+  }
   const bankDetails = [
     'BANK DETAILS',
-    settings.bank_account_holder ? `Account Holder Name : ${settings.bank_account_holder}` : null,
-    settings.bank_name ? `Bank Name : ${settings.bank_name}` : null,
-    settings.bank_account_number ? `Account Number : ${settings.bank_account_number}` : null,
-    settings.bank_iban ? `IBAN : ${settings.bank_iban}` : null,
-    settings.bank_swift ? `SWIFT/BIC: ${settings.bank_swift}` : null,
+    bank.holder ? `Account Holder Name : ${bank.holder}` : null,
+    bank.name ? `Bank Name : ${bank.name}` : null,
+    bank.account ? `Account Number : ${bank.account}` : null,
+    bank.iban ? `IBAN : ${bank.iban}` : null,
+    bank.swift ? `SWIFT/BIC: ${bank.swift}` : null,
   ].filter(Boolean).join('\n')
 
   const notesText = [bankDetails, invoice.notes].filter(Boolean).join('\n\n')

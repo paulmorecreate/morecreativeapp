@@ -302,6 +302,11 @@ export interface InvoiceSettings {
   bank_account_number: string | null
   bank_iban: string | null
   bank_swift: string | null
+  eur_bank_account_holder: string | null
+  eur_bank_name: string | null
+  eur_bank_account_number: string | null
+  eur_bank_iban: string | null
+  eur_bank_swift: string | null
   updated_at: string
 }
 
@@ -321,7 +326,7 @@ export interface Invoice {
   project_id: string | null
   currency: 'AED' | 'EUR' | 'USD'
   apply_vat: boolean
-  status: 'draft' | 'sent' | 'paid' | 'partial' | 'cancelled'
+  status: 'draft' | 'sent' | 'received' | 'partial' | 'cancelled'
   issue_date: string | null
   due_date: string | null
   billed_to_name: string | null
