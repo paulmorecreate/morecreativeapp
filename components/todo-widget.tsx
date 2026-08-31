@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Plus, Trash2, ChevronUp, ChevronDown, ChevronsUpDown, AlertCircle, Search, X } from 'lucide-react'
+import { Check, Plus, Trash2, ChevronUp, ChevronDown, ChevronsUpDown, AlertCircle, Search, X, Download } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 type Todo = {
@@ -234,6 +234,28 @@ export function TodoWidget({ todos, userProfiles }: { todos: Todo[]; userProfile
     set(current.includes(userId) ? current.filter(id => id !== userId) : [...current, userId])
   }
 
+  function exportCsv() {
+    const rows = [
+      ['Task', 'Status', 'Date Added', 'Assigned To', 'Deadline', 'Priority'],
+      ...sorted.map(t => [
+        t.title,
+        t.completed ? 'Completed' : 'Pending',
+        fmtDate(effectiveDateAdded(t)),
+        assignedText(t.assigned_to, userProfiles),
+        t.deadline ? fmtDate(t.deadline) : '',
+        t.priority ?? '',
+      ]),
+    ]
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `todos-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       {/* Header row */}
@@ -263,6 +285,14 @@ export function TodoWidget({ todos, userProfiles }: { todos: Todo[]; userProfile
           <input type="checkbox" checked={showCompleted} onChange={e => setShowCompleted(e.target.checked)} className="w-3.5 h-3.5 rounded border-gray-300 accent-gray-900" />
           Show Completed
         </label>
+        <button
+          onClick={exportCsv}
+          title="Export to CSV"
+          className="shrink-0 flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors px-2 py-1 rounded-md hover:bg-gray-100"
+        >
+          <Download className="w-3.5 h-3.5" />
+          Export
+        </button>
       </div>
       {/* Assigned To filter pills */}
       {userProfiles.length > 0 && (

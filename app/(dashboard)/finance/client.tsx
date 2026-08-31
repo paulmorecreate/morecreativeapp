@@ -18,6 +18,7 @@ const SALE_STATUS_STYLES: Record<string, string> = {
   sent: 'bg-blue-50 text-blue-700',
   partial: 'bg-amber-50 text-amber-700',
   paid: 'bg-green-50 text-green-700',
+  cancelled: 'bg-red-50 text-red-600',
 }
 
 const PO_STATUS_STYLES: Record<string, string> = {
@@ -106,7 +107,7 @@ function AnnualStatusBadge({ dueDate }: { dueDate: string | null }) {
   return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">OK</span>
 }
 
-const SALE_STATUS_FILTERS = ['all', 'draft', 'sent', 'partial', 'paid'] as const
+const SALE_STATUS_FILTERS = ['all', 'draft', 'sent', 'partial', 'paid', 'cancelled'] as const
 const PO_STATUS_FILTERS = ['all', 'pending', 'partial', 'paid'] as const
 
 function SummaryBar({ paid, pending }: { paid: number; pending: number }) {
@@ -179,6 +180,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
   const saleSummary = useMemo(() => {
     let paid = 0, pending = 0
     for (const inv of invoices) {
+      if (inv.status === 'cancelled') continue
       const fx = rateToAed(inv.currency, currencyRates)
       const total = invoiceTotal(inv) * fx
       if (inv.status === 'paid') {
@@ -266,7 +268,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
       ? Math.round((netRevenue / runningSummary.totalMonthly) * 10) / 10
       : null
     const today = new Date().toISOString().slice(0, 10)
-    const overdueItems = invoices.filter(inv => inv.status !== 'paid' && inv.due_date && inv.due_date < today)
+    const overdueItems = invoices.filter(inv => inv.status !== 'paid' && inv.status !== 'cancelled' && inv.due_date && inv.due_date < today)
     const overdueAed = overdueItems.reduce((s, inv) => {
       const fx = rateToAed(inv.currency, currencyRates)
       const remaining = inv.status === 'partial'
