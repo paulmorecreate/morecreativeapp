@@ -561,8 +561,14 @@ function CurrencyRatesPanel({ rates: initial }: { rates: CurrencyRate[] }) {
   const [rates, setRates] = useState<Record<string, string>>(
     Object.fromEntries(initial.map(r => [r.currency, String(r.rate_to_aed)]))
   )
+  const [updatedAt, setUpdatedAt] = useState<string | null>(
+    initial.filter(r => r.currency !== 'AED')[0]?.updated_at ?? null
+  )
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshed, setRefreshed] = useState(false)
+  const [refreshError, setRefreshError] = useState<string | null>(null)
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -578,12 +584,53 @@ function CurrencyRatesPanel({ rates: initial }: { rates: CurrencyRate[] }) {
     router.refresh()
   }
 
+  async function handleRefresh() {
+    setRefreshing(true)
+    setRefreshError(null)
+    try {
+      const res = await fetch('/api/update-currency-rates')
+      if (!res.ok) throw new Error('Failed')
+      const data = await res.json()
+      const newRates: Record<string, string> = {}
+      for (const r of data.rates as { currency: string; rate_to_aed: number; updated_at: string }[]) {
+        newRates[r.currency] = String(r.rate_to_aed)
+      }
+      setRates(prev => ({ ...prev, ...newRates }))
+      setUpdatedAt(new Date().toISOString())
+      setRefreshed(true)
+      setTimeout(() => setRefreshed(false), 3000)
+    } catch {
+      setRefreshError('Could not fetch live rates. Try again.')
+    }
+    setRefreshing(false)
+  }
+
+  function fmtUpdated(iso: string) {
+    return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  }
+
   return (
     <div className="bg-white rounded-xl border border-gray-200">
-      <div className="px-5 py-4 border-b border-gray-100">
-        <h2 className="text-sm font-semibold text-gray-900">Currency Rates → AED</h2>
-        <p className="text-xs text-gray-400 mt-0.5">Used to convert income and expenses to AED in the project P&L</p>
+      <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-900">Currency Rates → AED</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Used to convert income and expenses to AED in the project P&L</p>
+          {updatedAt && (
+            <p className="text-xs text-gray-400 mt-1">Last updated: {fmtUpdated(updatedAt)}</p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="shrink-0 flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 disabled:opacity-50 transition-colors mt-0.5"
+        >
+          {refreshing ? 'Fetching…' : refreshed ? '✓ Updated' : '↻ Refresh Live Rates'}
+        </button>
       </div>
+      {refreshError && (
+        <p className="px-5 pt-3 text-xs text-red-600">{refreshError}</p>
+      )}
       <form onSubmit={handleSave} className="p-5 space-y-3">
         {initial.filter(r => r.currency !== 'AED').map(r => (
           <div key={r.currency} className="flex items-center gap-3">
