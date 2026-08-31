@@ -37,14 +37,17 @@ export async function GET(req: NextRequest) {
 
   const toCurrencies = existing.map(r => r.currency).join(',')
 
-  const res = await fetch(`https://api.frankfurter.app/latest?from=AED&to=${toCurrencies}`, {
-    next: { revalidate: 0 },
-  })
+  const res = await fetch('https://open.er-api.com/v6/latest/AED', { cache: 'no-store' })
   if (!res.ok) {
-    return NextResponse.json({ error: 'Failed to fetch from frankfurter.app' }, { status: 502 })
+    return NextResponse.json({ error: 'Failed to fetch from open.er-api.com' }, { status: 502 })
   }
 
-  const { rates, date } = await res.json() as { rates: Record<string, number>; date: string }
+  const json = await res.json() as { result: string; time_last_update_utc: string; rates: Record<string, number> }
+  if (json.result !== 'success') {
+    return NextResponse.json({ error: 'Rate provider returned an error' }, { status: 502 })
+  }
+
+  const { rates, time_last_update_utc: date } = json
 
   const now = new Date().toISOString()
   // rates: { EUR: 0.2482 } means 1 AED = 0.2482 EUR → rate_to_aed = 1 / 0.2482
