@@ -132,7 +132,7 @@ const EMPTY_OP_FORM = { expense_item: '', category: 'Software', frequency: 'mont
 export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annualExpenses: initialAnnualExpenses, salaries: initialSalaries, operatingCosts: initialOperatingCosts, initialTab }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<'overview' | 'sales' | 'purchase' | 'annual' | 'running'>(initialTab)
-  const [saleFilter, setSaleFilter] = useState<'all' | 'draft' | 'sent' | 'partial' | 'paid'>('all')
+  const [saleFilter, setSaleFilter] = useState<'all' | 'draft' | 'sent' | 'partial' | 'paid' | 'cancelled'>('all')
   const [poFilter, setPoFilter] = useState<'all' | 'pending' | 'partial' | 'paid'>('all')
   const [saleDueFrom, setSaleDueFrom] = useState('')
   const [saleDueTo, setSaleDueTo] = useState('')
