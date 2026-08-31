@@ -39,7 +39,7 @@ export default async function InvoiceDetailPage({ params, searchParams }: { para
       lineItems={lineItems ?? []}
       settings={settings!}
       projects={projects ?? []}
-      returnTo={from === 'finance' ? '/finance' : undefined}
+      returnTo={from === 'finance' ? '/finance?tab=sales' : undefined}
     />
   )
 }
