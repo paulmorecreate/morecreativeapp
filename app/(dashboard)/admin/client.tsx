@@ -804,9 +804,14 @@ function ReportCard({ title, loading, headers, rows, onExport }: {
   rows: { cells: (string | null)[]; href?: string }[]
   onExport: () => void
 }) {
+  const [expanded, setExpanded] = useState(false)
+
   return (
     <div className="bg-white rounded-xl border border-gray-200">
-      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="w-full px-5 py-4 flex items-center justify-between text-left"
+      >
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
           {!loading && (
@@ -815,42 +820,50 @@ function ReportCard({ title, loading, headers, rows, onExport }: {
             </span>
           )}
         </div>
-        {!loading && rows.length > 0 && (
-          <button onClick={onExport} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors">
-            <Download className="w-3.5 h-3.5" />
-            Export CSV
-          </button>
-        )}
-      </div>
-      {loading ? (
-        <p className="px-5 py-6 text-sm text-gray-400">Loading…</p>
-      ) : rows.length === 0 ? (
-        <p className="px-5 py-6 text-sm text-gray-400">Nothing to report — all clear.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100">
-                {headers.map(h => (
-                  <th key={h} className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {rows.map((row, i) => (
-                <tr key={i} className="hover:bg-gray-50 transition-colors">
-                  {row.cells.map((cell, j) => (
-                    <td key={j} className="px-5 py-3">
-                      {j === 0 && row.href
-                        ? <Link href={row.href} className="text-gray-900 font-medium hover:underline underline-offset-2">{cell}</Link>
-                        : <span className={cell ? 'text-gray-600' : 'text-gray-300'}>{cell || '—'}</span>}
-                    </td>
+        <div className="flex items-center gap-3">
+          {!loading && rows.length > 0 && (
+            <span
+              onClick={e => { e.stopPropagation(); onExport() }}
+              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export CSV
+            </span>
+          )}
+          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+        </div>
+      </button>
+      {expanded && (
+        loading ? (
+          <p className="px-5 pb-6 text-sm text-gray-400">Loading…</p>
+        ) : rows.length === 0 ? (
+          <p className="px-5 pb-6 text-sm text-gray-400">Nothing to report — all clear.</p>
+        ) : (
+          <div className="overflow-x-auto border-t border-gray-100">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  {headers.map(h => (
+                    <th key={h} className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">{h}</th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {rows.map((row, i) => (
+                  <tr key={i} className="hover:bg-gray-50 transition-colors">
+                    {row.cells.map((cell, j) => (
+                      <td key={j} className="px-5 py-3">
+                        {j === 0 && row.href
+                          ? <Link href={row.href} className="text-gray-900 font-medium hover:underline underline-offset-2">{cell}</Link>
+                          : <span className={cell ? 'text-gray-600' : 'text-gray-300'}>{cell || '—'}</span>}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
       )}
     </div>
   )
