@@ -281,6 +281,7 @@ export function AgenciesClient({ agencies, agents, userProfiles }: Props) {
     e.preventDefault()
     setAgentSaving(true)
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
 
     let resolvedAgencyId = agentForm.agency_id || null
     if (agencyMode === 'new' && newAgencyName) {
@@ -299,6 +300,7 @@ export function AgenciesClient({ agencies, agents, userProfiles }: Props) {
       email: agentForm.email || null,
       phone: agentForm.phone || null,
       notes: agentForm.notes || null,
+      created_by: user?.email ?? null,
     })
 
     setAgentSaving(false)
