@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Trash2, KeyRound, X, ChevronDown, LockKeyhole, LockKeyholeOpen } from 'lucide-react'
+import { Plus, Trash2, KeyRound, X, ChevronDown, LockKeyhole, LockKeyholeOpen, Download } from 'lucide-react'
 import { ProjectCategory, Industry, AgentType, TalentCategory, BrandCategory, TalentLevel, InvoiceSettings, UserRole, ExpenseCategory, CurrencyRate } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Textarea } from '@/components/ui/input'
@@ -778,7 +778,160 @@ function InvoiceSettingsPanel({ settings }: { settings: InvoiceSettings | null }
   )
 }
 
-type Tab = 'users' | 'lookups' | 'finance' | 'audit'
+type Tab = 'users' | 'lookups' | 'reports' | 'finance' | 'audit'
+
+type ReportTalent = { id: string; name: string; ig_link: string | null }
+type ReportBrand  = { id: string; name: string; link: string | null }
+type ReportAgent  = { id: string; name: string; email: string | null; phone: string | null }
+
+function exportCsv(filename: string, headers: string[], rows: (string | null)[][]) {
+  const csv = [headers, ...rows]
+    .map(r => r.map(v => `"${(v ?? '').replace(/"/g, '""')}"`).join(','))
+    .join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function ReportCard({ title, loading, headers, rows, onExport }: {
+  title: string
+  loading: boolean
+  headers: string[]
+  rows: { cells: (string | null)[]; href?: string }[]
+  onExport: () => void
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200">
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
+          {!loading && (
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${rows.length === 0 ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+              {rows.length === 0 ? 'All clear' : rows.length}
+            </span>
+          )}
+        </div>
+        {!loading && rows.length > 0 && (
+          <button onClick={onExport} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors">
+            <Download className="w-3.5 h-3.5" />
+            Export CSV
+          </button>
+        )}
+      </div>
+      {loading ? (
+        <p className="px-5 py-6 text-sm text-gray-400">Loading…</p>
+      ) : rows.length === 0 ? (
+        <p className="px-5 py-6 text-sm text-gray-400">Nothing to report — all clear.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100">
+                {headers.map(h => (
+                  <th key={h} className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {rows.map((row, i) => (
+                <tr key={i} className="hover:bg-gray-50 transition-colors">
+                  {row.cells.map((cell, j) => (
+                    <td key={j} className="px-5 py-3">
+                      {j === 0 && row.href
+                        ? <Link href={row.href} className="text-gray-900 font-medium hover:underline underline-offset-2">{cell}</Link>
+                        : <span className={cell ? 'text-gray-600' : 'text-gray-300'}>{cell || '—'}</span>}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ReportsSection() {
+  const supabase = createClient()
+  const [loading, setLoading] = useState(true)
+  const [talentsNoAgent, setTalentsNoAgent] = useState<ReportTalent[]>([])
+  const [talentsNoIg, setTalentsNoIg] = useState<ReportTalent[]>([])
+  const [brandsNoIg, setBrandsNoIg] = useState<ReportBrand[]>([])
+  const [agentsNoEmail, setAgentsNoEmail] = useState<ReportAgent[]>([])
+  const [agentsNoPhone, setAgentsNoPhone] = useState<ReportAgent[]>([])
+
+  useEffect(() => {
+    async function load() {
+      const [
+        { data: talents },
+        { data: talentAgents },
+        { data: brands },
+        { data: agents },
+      ] = await Promise.all([
+        supabase.from('talents').select('id, name, ig_link').order('name'),
+        supabase.from('talent_agents').select('talent_id'),
+        supabase.from('brands').select('id, name, link').order('name'),
+        supabase.from('agents').select('id, name, email, phone').order('name'),
+      ])
+      const linkedIds = new Set((talentAgents ?? []).map(r => r.talent_id))
+      const t = (talents ?? []) as ReportTalent[]
+      const b = (brands ?? []) as ReportBrand[]
+      const a = (agents ?? []) as ReportAgent[]
+      setTalentsNoAgent(t.filter(x => !linkedIds.has(x.id)))
+      setTalentsNoIg(t.filter(x => !x.ig_link?.trim()))
+      setBrandsNoIg(b.filter(x => !x.link?.trim()))
+      setAgentsNoEmail(a.filter(x => !x.email?.trim()))
+      setAgentsNoPhone(a.filter(x => !x.phone?.trim()))
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  return (
+    <div className="space-y-4 max-w-3xl">
+      <ReportCard
+        title="Talents with no Agent linked"
+        loading={loading}
+        headers={['Talent', 'Instagram URL']}
+        rows={talentsNoAgent.map(t => ({ cells: [t.name, t.ig_link], href: `/talents/${t.id}` }))}
+        onExport={() => exportCsv('talents-no-agent.csv', ['Name', 'Instagram URL'], talentsNoAgent.map(t => [t.name, t.ig_link]))}
+      />
+      <ReportCard
+        title="Talents with no Instagram URL"
+        loading={loading}
+        headers={['Talent']}
+        rows={talentsNoIg.map(t => ({ cells: [t.name], href: `/talents/${t.id}` }))}
+        onExport={() => exportCsv('talents-no-instagram.csv', ['Name'], talentsNoIg.map(t => [t.name]))}
+      />
+      <ReportCard
+        title="Brands with no Instagram URL"
+        loading={loading}
+        headers={['Brand']}
+        rows={brandsNoIg.map(b => ({ cells: [b.name], href: `/brands/${b.id}` }))}
+        onExport={() => exportCsv('brands-no-instagram.csv', ['Name'], brandsNoIg.map(b => [b.name]))}
+      />
+      <ReportCard
+        title="Agents with no Email"
+        loading={loading}
+        headers={['Agent', 'Phone']}
+        rows={agentsNoEmail.map(a => ({ cells: [a.name, a.phone], href: `/agents/${a.id}` }))}
+        onExport={() => exportCsv('agents-no-email.csv', ['Name', 'Phone'], agentsNoEmail.map(a => [a.name, a.phone]))}
+      />
+      <ReportCard
+        title="Agents with no Phone"
+        loading={loading}
+        headers={['Agent', 'Email']}
+        rows={agentsNoPhone.map(a => ({ cells: [a.name, a.email], href: `/agents/${a.id}` }))}
+        onExport={() => exportCsv('agents-no-phone.csv', ['Name', 'Email'], agentsNoPhone.map(a => [a.name, a.email]))}
+      />
+    </div>
+  )
+}
 
 export function AdminClient({ categories, industries, agentTypes, talentCategories, brandCategories, talentLevels, invoiceSettings, expenseCategories, currencyRates, isAdmin, canViewFinance, loginAudit, recordAudit }: Props) {
   const router = useRouter()
@@ -831,7 +984,7 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
 
       {/* Tabs */}
       <div className="flex gap-0.5 mb-6 border-b border-gray-200">
-        {(['users', 'lookups', ...(canViewFinance ? ['finance'] : []), ...(isAdmin ? ['audit'] : [])] as Tab[]).map(tab => (
+        {(['users', 'lookups', 'reports', ...(canViewFinance ? ['finance'] : []), ...(isAdmin ? ['audit'] : [])] as Tab[]).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -847,6 +1000,8 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
       </div>
 
       {activeTab === 'users' && <UsersSection isAdmin={isAdmin} />}
+
+      {activeTab === 'reports' && <ReportsSection />}
 
       {activeTab === 'lookups' && (
         <div className="grid grid-cols-3 gap-4 max-w-4xl">
