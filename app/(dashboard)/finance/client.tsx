@@ -67,7 +67,38 @@ type Props = {
   annualExpenses: AnnualExpense[]
   salaries: Salary[]
   operatingCosts: OperatingCost[]
-  initialTab: 'overview' | 'sales' | 'purchase' | 'annual' | 'running'
+  initialTab: 'overview' | 'sales' | 'purchase' | 'annual' | 'running' | 'vat'
+}
+
+function getQuarterKey(dateStr: string | null): string | null {
+  if (!dateStr) return null
+  const d = new Date(dateStr)
+  const year = d.getFullYear()
+  const q = Math.floor(d.getMonth() / 3) + 1
+  return `${year}-Q${q}`
+}
+
+function quarterLabel(key: string): string {
+  const [year, q] = key.split('-')
+  return `${q} ${year}`
+}
+
+function vatDueDate(key: string): string {
+  const [year, q] = key.split('-')
+  const y = parseInt(year)
+  const qNum = parseInt(q.replace('Q', ''))
+  const dueMonth = [4, 7, 10, 1][qNum - 1]
+  const dueYear = qNum === 4 ? y + 1 : y
+  return new Date(dueYear, dueMonth - 1, 28).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function vatDueDateStr(key: string): string {
+  const [year, q] = key.split('-')
+  const y = parseInt(year)
+  const qNum = parseInt(q.replace('Q', ''))
+  const dueMonth = [4, 7, 10, 1][qNum - 1]
+  const dueYear = qNum === 4 ? y + 1 : y
+  return `${dueYear}-${String(dueMonth).padStart(2, '0')}-28`
 }
 
 const FREQ_OPTIONS = [
@@ -131,7 +162,7 @@ const EMPTY_OP_FORM = { expense_item: '', category: 'Software', frequency: 'mont
 
 export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annualExpenses: initialAnnualExpenses, salaries: initialSalaries, operatingCosts: initialOperatingCosts, initialTab }: Props) {
   const router = useRouter()
-  const [tab, setTab] = useState<'overview' | 'sales' | 'purchase' | 'annual' | 'running'>(initialTab)
+  const [tab, setTab] = useState<'overview' | 'sales' | 'purchase' | 'annual' | 'running' | 'vat'>(initialTab)
   const [saleFilter, setSaleFilter] = useState<'all' | 'draft' | 'sent' | 'partial' | 'received' | 'cancelled'>('all')
   const [poFilter, setPoFilter] = useState<'all' | 'pending' | 'partial' | 'paid'>('all')
   const [saleDueFrom, setSaleDueFrom] = useState('')
@@ -278,6 +309,47 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
     }, 0)
     return { collectionRate, netRevenue, monthsCovered, overdueCount: overdueItems.length, overdueAed }
   }, [saleSummary, poSummary, runningSummary, invoices, currencyRates])
+
+  // VAT by quarter
+  const currentQuarterKey = getQuarterKey(new Date().toISOString().slice(0, 10))
+
+  const vatByQuarter = useMemo(() => {
+    const map = new Map<string, { outputVat: number; inputVat: number }>()
+
+    for (const inv of invoices) {
+      if (inv.status === 'cancelled') continue
+      if (!inv.apply_vat) continue
+      const key = getQuarterKey(inv.issue_date)
+      if (!key) continue
+      const subtotal = (inv.line_items ?? []).reduce((s, l) => s + l.rate * l.qty, 0)
+      const vatAed = subtotal * 0.05 * rateToAed(inv.currency, currencyRates)
+      const entry = map.get(key) ?? { outputVat: 0, inputVat: 0 }
+      entry.outputVat += vatAed
+      map.set(key, entry)
+    }
+
+    for (const inv of purchaseInvoices) {
+      if (inv.vat_amount <= 0) continue
+      const key = getQuarterKey(inv.issue_date)
+      if (!key) continue
+      const vatAed = inv.vat_amount * inv.fx_rate
+      const entry = map.get(key) ?? { outputVat: 0, inputVat: 0 }
+      entry.inputVat += vatAed
+      map.set(key, entry)
+    }
+
+    return Array.from(map.entries())
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([key, { outputVat, inputVat }]) => ({
+        key,
+        label: quarterLabel(key),
+        dueDate: vatDueDate(key),
+        dueDateStr: vatDueDateStr(key),
+        outputVat,
+        inputVat,
+        netVat: outputVat - inputVat,
+      }))
+  }, [invoices, purchaseInvoices, currencyRates])
 
   // Filtered + sorted sales invoices
   const filteredSales = useMemo(() => {
@@ -566,6 +638,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
           { key: 'purchase', label: 'Purchase Invoices' },
           { key: 'annual', label: 'Annual Expenses' },
           { key: 'running', label: 'Running Costs' },
+          { key: 'vat', label: 'VAT' },
         ] as { key: typeof tab; label: string }[]).map(({ key, label }) => (
           <button
             key={key}
@@ -1130,6 +1203,78 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                     <td colSpan={4} />
                   </tr>
                 </tfoot>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* VAT Liability Summary tab */}
+      {tab === 'vat' && (
+        <>
+          <div className="mb-5 bg-blue-50 border border-blue-100 rounded-xl px-5 py-3.5">
+            <p className="text-xs font-medium text-blue-700 mb-0.5">UAE VAT — Quarterly Returns</p>
+            <p className="text-xs text-blue-500">Output VAT = 5% charged on sales invoices (non-cancelled, VAT-enabled). Input VAT = VAT paid on purchase invoices. Returns due 28 days after quarter end.</p>
+          </div>
+
+          {vatByQuarter.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <Receipt className="w-10 h-10 text-gray-200 mb-3" />
+              <p className="text-sm text-gray-400">No VAT data yet — add VAT to sales or purchase invoices.</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Reporting Quarter</th>
+                    <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Output VAT (Collected)</th>
+                    <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Input VAT (Paid)</th>
+                    <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Net VAT Payable / (Reclaimable)</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Return Due Date</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {vatByQuarter.map(q => {
+                    const isCurrent = q.key === currentQuarterKey
+                    const today = new Date().toISOString().slice(0, 10)
+                    const isOverdue = !isCurrent && q.dueDateStr < today
+                    return (
+                      <tr key={q.key} className={cn('transition-colors', isCurrent ? 'bg-blue-50/50' : 'hover:bg-gray-50')}>
+                        <td className="px-5 py-4 font-semibold text-gray-900">
+                          <span>{q.label}</span>
+                          {isCurrent && (
+                            <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">Current</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-4 text-right font-medium text-gray-900">
+                          {fmtAed(q.outputVat)}
+                        </td>
+                        <td className="px-5 py-4 text-right text-gray-700">
+                          {q.inputVat > 0 ? fmtAed(q.inputVat) : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-5 py-4 text-right">
+                          {q.netVat >= 0 ? (
+                            <span className="font-semibold text-gray-900">{fmtAed(q.netVat)}</span>
+                          ) : (
+                            <span className="font-semibold text-green-700">({fmtAed(Math.abs(q.netVat))})</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-4 text-gray-500 whitespace-nowrap">{q.dueDate}</td>
+                        <td className="px-5 py-4">
+                          {isCurrent ? (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">In Progress</span>
+                          ) : isOverdue ? (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700">Overdue</span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">Filed</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
               </table>
             </div>
           )}

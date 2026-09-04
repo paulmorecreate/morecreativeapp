@@ -41,8 +41,8 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     supabase.from('operating_costs').select('*').order('expense_item'),
   ])
 
-  const validTab = ['overview', 'sales', 'purchase', 'annual', 'running'].includes(tab ?? '')
-    ? (tab as 'overview' | 'sales' | 'purchase' | 'annual' | 'running')
+  const validTab = ['overview', 'sales', 'purchase', 'annual', 'running', 'vat'].includes(tab ?? '')
+    ? (tab as 'overview' | 'sales' | 'purchase' | 'annual' | 'running' | 'vat')
     : 'overview'
 
   return (
@@ -53,7 +53,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
       annualExpenses={(annualExpenses ?? []) as any}
       salaries={(salaries ?? []) as any}
       operatingCosts={(operatingCosts ?? []) as any}
-      initialTab={validTab}
+      initialTab={validTab as any}
     />
   )
 }
