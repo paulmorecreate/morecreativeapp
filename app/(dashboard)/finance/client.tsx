@@ -27,6 +27,12 @@ const PO_STATUS_STYLES: Record<string, string> = {
   paid: 'bg-green-50 text-green-700',
 }
 
+const FORECAST_SOURCE_STYLES: Record<string, string> = {
+  'Purchase Invoice': 'bg-amber-50 text-amber-700',
+  'Annual Expense': 'bg-purple-50 text-purple-700',
+  'Salary': 'bg-blue-50 text-blue-700',
+}
+
 function fmtAed(amount: number) {
   return `AED ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
@@ -157,7 +163,7 @@ function SummaryBar({ paid, pending }: { paid: number; pending: number }) {
 }
 
 const EMPTY_ANNUAL_FORM = { item: '', category: 'Licence', amount_aed: '', due_date: '', notes: '', document_url: '' }
-const EMPTY_SALARY_FORM = { employee: '', role: '', monthly_salary_aed: '', payment_due_day: '', notes: '' }
+const EMPTY_SALARY_FORM = { employee: '', role: '', monthly_salary_aed: '', payment_due_date: '', notes: '' }
 const EMPTY_OP_FORM = { expense_item: '', category: 'Software', frequency: 'monthly' as OperatingCost['frequency'], cost_aed: '', notes: '' }
 
 export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annualExpenses: initialAnnualExpenses, salaries: initialSalaries, operatingCosts: initialOperatingCosts, initialTab }: Props) {
@@ -197,6 +203,8 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
   const [salarySaving, setSalarySaving] = useState(false)
   const [deleteSalaryTarget, setDeleteSalaryTarget] = useState<Salary | null>(null)
   const [salaryDeleting, setSalaryDeleting] = useState(false)
+
+  const [forecastDays, setForecastDays] = useState<30 | 60 | 90>(30)
 
   // Operating costs state
   const [operatingCosts, setOperatingCosts] = useState<OperatingCost[]>(initialOperatingCosts)
@@ -309,6 +317,39 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
     }, 0)
     return { collectionRate, netRevenue, monthsCovered, overdueCount: overdueItems.length, overdueAed }
   }, [saleSummary, poSummary, runningSummary, invoices, currencyRates])
+
+  // Payment forecast
+  const forecastItems = useMemo(() => {
+    type ForecastItem = { id: string; date: string; label: string; source: 'Purchase Invoice' | 'Annual Expense' | 'Salary'; amountAed: number; days: number }
+    const items: ForecastItem[] = []
+
+    for (const inv of purchaseInvoices) {
+      if (inv.status !== 'pending' && inv.status !== 'partial') continue
+      if (!inv.due_date) continue
+      const d = daysUntil(inv.due_date)
+      if (d === null || d > forecastDays) continue
+      const outstanding = inv.status === 'partial'
+        ? (inv.gross_amount - inv.amount_paid) * inv.fx_rate
+        : inv.gross_amount * inv.fx_rate
+      items.push({ id: inv.id, date: inv.due_date, label: inv.supplier + (inv.invoice_number ? ` · ${inv.invoice_number}` : ''), source: 'Purchase Invoice', amountAed: outstanding, days: d })
+    }
+
+    for (const exp of annualExpenses) {
+      if (!exp.due_date) continue
+      const d = daysUntil(exp.due_date)
+      if (d === null || d > forecastDays) continue
+      items.push({ id: exp.id, date: exp.due_date, label: exp.item, source: 'Annual Expense', amountAed: exp.amount_aed, days: d })
+    }
+
+    for (const sal of salaries) {
+      if (!sal.payment_due_date) continue
+      const d = daysUntil(sal.payment_due_date)
+      if (d === null || d > forecastDays) continue
+      items.push({ id: sal.id, date: sal.payment_due_date, label: sal.employee + (sal.role ? ` · ${sal.role}` : ''), source: 'Salary', amountAed: sal.monthly_salary_aed, days: d })
+    }
+
+    return items.sort((a, b) => a.date.localeCompare(b.date))
+  }, [purchaseInvoices, annualExpenses, salaries, forecastDays])
 
   // VAT by quarter
   const currentQuarterKey = getQuarterKey(new Date().toISOString().slice(0, 10))
@@ -508,7 +549,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
   }
   function openEditSalary(s: Salary) {
     setEditingSalary(s)
-    setSalaryForm({ employee: s.employee, role: s.role, monthly_salary_aed: String(s.monthly_salary_aed), payment_due_day: s.payment_due_day ? String(s.payment_due_day) : '', notes: s.notes ?? '' })
+    setSalaryForm({ employee: s.employee, role: s.role, monthly_salary_aed: String(s.monthly_salary_aed), payment_due_date: s.payment_due_date ?? '', notes: s.notes ?? '' })
     setSalaryModalOpen(true)
   }
   async function handleSaveSalary(e: React.FormEvent) {
@@ -520,7 +561,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
       employee: salaryForm.employee.trim(),
       role: salaryForm.role.trim(),
       monthly_salary_aed: parseFloat(salaryForm.monthly_salary_aed) || 0,
-      payment_due_day: salaryForm.payment_due_day ? parseInt(salaryForm.payment_due_day) : null,
+      payment_due_date: salaryForm.payment_due_date || null,
       notes: salaryForm.notes.trim() || null,
       updated_at: new Date().toISOString(),
     }
@@ -642,7 +683,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
         ] as { key: typeof tab; label: string }[]).map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => setTab(key)}
+            onClick={() => { setTab(key); router.replace(`/finance?tab=${key}`) }}
             className={cn(
               'px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap',
               tab === key
@@ -659,94 +700,84 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
       {tab === 'overview' && (
         <>
           {/* Revenue */}
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Revenue</p>
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            <div className="bg-green-50 border border-green-100 rounded-xl px-5 py-4">
-              <p className="text-xs font-medium text-green-600 mb-1">Collected</p>
-              <p className="text-xl font-semibold text-green-800">{fmtAed(saleSummary.paid)}</p>
-              <p className="text-xs text-green-500 mt-1">all paid sales invoices</p>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Revenue</p>
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            <div className="bg-green-50 border border-green-100 rounded-lg px-4 py-3">
+              <p className="text-xs font-medium text-green-600 mb-0.5">Collected</p>
+              <p className="text-base font-semibold text-green-800">{fmtAed(saleSummary.paid)}</p>
             </div>
-            <div className="bg-amber-50 border border-amber-100 rounded-xl px-5 py-4">
-              <p className="text-xs font-medium text-amber-600 mb-1">Outstanding</p>
-              <p className="text-xl font-semibold text-amber-800">{fmtAed(saleSummary.pending)}</p>
-              <p className="text-xs text-amber-500 mt-1">draft · sent · partial</p>
+            <div className="bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
+              <p className="text-xs font-medium text-amber-600 mb-0.5">Outstanding</p>
+              <p className="text-base font-semibold text-amber-800">{fmtAed(saleSummary.pending)}</p>
             </div>
-            <div className="bg-white border border-gray-200 rounded-xl px-5 py-4">
-              <p className="text-xs font-medium text-gray-400 mb-1">Collection Rate</p>
-              <p className="text-xl font-semibold text-gray-900">
+            <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
+              <p className="text-xs font-medium text-gray-400 mb-0.5">Collection Rate</p>
+              <p className="text-base font-semibold text-gray-900">
                 {overviewStats.collectionRate !== null ? `${overviewStats.collectionRate}%` : '—'}
               </p>
-              <p className="text-xs text-gray-400 mt-1">of total billed</p>
             </div>
           </div>
 
           {/* Costs */}
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Costs</p>
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            <div className="bg-blue-50 border border-blue-100 rounded-xl px-5 py-4">
-              <p className="text-xs font-medium text-blue-600 mb-1">Monthly Burn</p>
-              <p className="text-xl font-semibold text-blue-900">{fmtAed(runningSummary.totalMonthly)}</p>
-              <p className="text-xs text-blue-400 mt-1">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Costs</p>
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3">
+              <p className="text-xs font-medium text-blue-600 mb-0.5">Monthly Burn</p>
+              <p className="text-base font-semibold text-blue-900">{fmtAed(runningSummary.totalMonthly)}</p>
+              <p className="text-xs text-blue-400 mt-0.5">
                 Salaries {fmtAedShort(runningSummary.salaryMonthly)} · Ops {fmtAedShort(runningSummary.opsMonthly)}
               </p>
             </div>
-            <div className="bg-white border border-gray-200 rounded-xl px-5 py-4">
-              <p className="text-xs font-medium text-gray-400 mb-1">Annual Overhead</p>
-              <p className="text-xl font-semibold text-gray-900">{fmtAed(annualSummary.total)}</p>
-              <p className="text-xs text-gray-400 mt-1">licences · insurance · other</p>
+            <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
+              <p className="text-xs font-medium text-gray-400 mb-0.5">Annual Overhead</p>
+              <p className="text-base font-semibold text-gray-900">{fmtAed(annualSummary.total)}</p>
             </div>
-            <div className={cn('rounded-xl px-5 py-4', poSummary.pending > 0 ? 'bg-amber-50 border border-amber-100' : 'bg-white border border-gray-200')}>
-              <p className={cn('text-xs font-medium mb-1', poSummary.pending > 0 ? 'text-amber-600' : 'text-gray-400')}>Purchase Outstanding</p>
-              <p className={cn('text-xl font-semibold', poSummary.pending > 0 ? 'text-amber-800' : 'text-gray-500')}>
+            <div className={cn('rounded-lg px-4 py-3', poSummary.pending > 0 ? 'bg-amber-50 border border-amber-100' : 'bg-white border border-gray-200')}>
+              <p className={cn('text-xs font-medium mb-0.5', poSummary.pending > 0 ? 'text-amber-600' : 'text-gray-400')}>Purchase Outstanding</p>
+              <p className={cn('text-base font-semibold', poSummary.pending > 0 ? 'text-amber-800' : 'text-gray-500')}>
                 {fmtAed(poSummary.pending)}
               </p>
-              <p className={cn('text-xs mt-1', poSummary.pending > 0 ? 'text-amber-500' : 'text-gray-300')}>pending purchase invoices</p>
             </div>
           </div>
 
           {/* Net Position */}
-          <div className="bg-white border border-gray-200 rounded-xl px-6 py-5 mb-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Net Revenue</p>
-                <p className={cn('text-2xl font-semibold', overviewStats.netRevenue < 0 ? 'text-red-700' : 'text-gray-900')}>
-                  {fmtAed(overviewStats.netRevenue)}
-                </p>
-                <p className="text-xs text-gray-400 mt-1">Sales collected minus purchase invoices paid</p>
-              </div>
-              {overviewStats.monthsCovered !== null && (
-                <div className="text-right pl-6 border-l border-gray-100">
-                  <p className="text-xs font-medium text-gray-400 mb-1">Burn coverage</p>
-                  <p className="text-2xl font-semibold text-gray-900">
-                    {overviewStats.monthsCovered.toFixed(1)}
-                    <span className="text-base font-normal text-gray-400 ml-1">months</span>
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">at {fmtAed(runningSummary.totalMonthly)}/mo</p>
-                </div>
-              )}
+          <div className="bg-white border border-gray-200 rounded-lg px-5 py-3 mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Net Revenue</p>
+              <p className={cn('text-lg font-semibold', overviewStats.netRevenue < 0 ? 'text-red-700' : 'text-gray-900')}>
+                {fmtAed(overviewStats.netRevenue)}
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">Sales collected minus purchase invoices paid</p>
             </div>
+            {overviewStats.monthsCovered !== null && (
+              <div className="text-right pl-5 border-l border-gray-100">
+                <p className="text-xs font-medium text-gray-400 mb-0.5">Burn coverage</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  {overviewStats.monthsCovered.toFixed(1)}
+                  <span className="text-sm font-normal text-gray-400 ml-1">months</span>
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">at {fmtAed(runningSummary.totalMonthly)}/mo</p>
+              </div>
+            )}
           </div>
 
           {/* Needs Attention */}
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Needs Attention</p>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Needs Attention</p>
           {overviewStats.overdueCount === 0 && annualSummary.overdue === 0 && annualSummary.dueSoon === 0 ? (
-            <div className="bg-green-50 border border-green-100 rounded-xl px-5 py-4 text-sm font-medium text-green-700">
+            <div className="bg-green-50 border border-green-100 rounded-lg px-4 py-2.5 text-sm font-medium text-green-700">
               All clear — no overdue items.
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {annualSummary.overdue > 0 && (
                 <button
                   onClick={() => setTab('annual')}
-                  className="w-full text-left bg-red-50 border border-red-100 rounded-xl px-5 py-3.5 hover:bg-red-100 transition-colors"
+                  className="w-full text-left bg-red-50 border border-red-100 rounded-lg px-4 py-2.5 hover:bg-red-100 transition-colors"
                 >
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-red-800">
-                        {annualSummary.overdue} annual expense{annualSummary.overdue > 1 ? 's' : ''} overdue
-                      </p>
-                      <p className="text-xs text-red-500 mt-0.5">Licences, insurance or other renewals past due date</p>
-                    </div>
+                    <p className="text-sm font-medium text-red-800">
+                      {annualSummary.overdue} annual expense{annualSummary.overdue > 1 ? 's' : ''} overdue
+                    </p>
                     <span className="text-red-400 text-xs font-medium shrink-0 ml-4">View →</span>
                   </div>
                 </button>
@@ -754,15 +785,12 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
               {annualSummary.dueSoon > 0 && (
                 <button
                   onClick={() => setTab('annual')}
-                  className="w-full text-left bg-amber-50 border border-amber-100 rounded-xl px-5 py-3.5 hover:bg-amber-100 transition-colors"
+                  className="w-full text-left bg-amber-50 border border-amber-100 rounded-lg px-4 py-2.5 hover:bg-amber-100 transition-colors"
                 >
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-amber-800">
-                        {annualSummary.dueSoon} renewal{annualSummary.dueSoon > 1 ? 's' : ''} due within 30 days
-                      </p>
-                      <p className="text-xs text-amber-500 mt-0.5">Annual expenses approaching their due date</p>
-                    </div>
+                    <p className="text-sm font-medium text-amber-800">
+                      {annualSummary.dueSoon} renewal{annualSummary.dueSoon > 1 ? 's' : ''} due within 30 days
+                    </p>
                     <span className="text-amber-500 text-xs font-medium shrink-0 ml-4">View →</span>
                   </div>
                 </button>
@@ -770,21 +798,95 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
               {overviewStats.overdueCount > 0 && (
                 <button
                   onClick={() => setTab('sales')}
-                  className="w-full text-left bg-amber-50 border border-amber-100 rounded-xl px-5 py-3.5 hover:bg-amber-100 transition-colors"
+                  className="w-full text-left bg-amber-50 border border-amber-100 rounded-lg px-4 py-2.5 hover:bg-amber-100 transition-colors"
                 >
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-amber-800">
-                        {overviewStats.overdueCount} sales invoice{overviewStats.overdueCount > 1 ? 's' : ''} overdue · {fmtAed(overviewStats.overdueAed)}
-                      </p>
-                      <p className="text-xs text-amber-500 mt-0.5">Unpaid invoices past their due date</p>
-                    </div>
+                    <p className="text-sm font-medium text-amber-800">
+                      {overviewStats.overdueCount} sales invoice{overviewStats.overdueCount > 1 ? 's' : ''} overdue · {fmtAed(overviewStats.overdueAed)}
+                    </p>
                     <span className="text-amber-500 text-xs font-medium shrink-0 ml-4">View →</span>
                   </div>
                 </button>
               )}
             </div>
           )}
+
+          {/* Upcoming Payments forecast */}
+          <div className="mt-5">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Upcoming Payments</p>
+              <div className="flex gap-1">
+                {([30, 60, 90] as const).map(d => (
+                  <button
+                    key={d}
+                    onClick={() => setForecastDays(d)}
+                    className={cn(
+                      'px-3 py-1 text-xs font-medium rounded-lg transition-colors',
+                      forecastDays === d
+                        ? 'bg-gray-900 text-white'
+                        : 'bg-white border border-gray-200 text-gray-500 hover:text-gray-700'
+                    )}
+                  >
+                    {d} days
+                  </button>
+                ))}
+              </div>
+            </div>
+            {forecastItems.length === 0 ? (
+              <div className="bg-white border border-gray-200 rounded-xl px-5 py-6 text-center">
+                <p className="text-sm text-gray-400">No payments due in the next {forecastDays} days.</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Due Date</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Description</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Type</th>
+                      <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Amount (AED)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {forecastItems.map(item => (
+                      <tr key={`${item.source}-${item.id}`} className={cn('transition-colors', item.days < 0 ? 'bg-red-50/40' : 'hover:bg-gray-50')}>
+                        <td className="px-5 py-3 text-gray-700 whitespace-nowrap">
+                          <span className={cn('font-medium', item.days < 0 && 'text-red-700')}>
+                            {formatDate(item.date)}
+                          </span>
+                          {item.days < 0 && (
+                            <span className="ml-2 text-xs font-medium text-red-600">Overdue</span>
+                          )}
+                          {item.days === 0 && (
+                            <span className="ml-2 text-xs font-medium text-amber-600">Today</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3 text-gray-700">{item.label}</td>
+                        <td className="px-5 py-3">
+                          <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', FORECAST_SOURCE_STYLES[item.source])}>
+                            {item.source}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-right font-medium text-gray-900">
+                          {item.amountAed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-gray-200 bg-gray-50">
+                      <td colSpan={3} className="px-5 py-3 text-xs font-semibold text-gray-500">
+                        Total due within {forecastDays} days
+                      </td>
+                      <td className="px-5 py-3 text-right text-sm font-semibold text-gray-900">
+                        {forecastItems.reduce((s, i) => s + i.amountAed, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
         </>
       )}
 
@@ -1420,7 +1522,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                     <tr className="border-b border-gray-100">
                       <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Employee</th>
                       <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Role</th>
-                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Payment Day</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Next Payment Date</th>
                       <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Monthly (AED)</th>
                       <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Notes</th>
                       <th className="px-3 py-3 w-16" />
@@ -1432,7 +1534,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                         <td className="px-5 py-3 font-medium text-gray-900">{s.employee}</td>
                         <td className="px-5 py-3 text-gray-500">{s.role || '—'}</td>
                         <td className="px-5 py-3 text-gray-500">
-                          {s.payment_due_day ? `${ordinal(s.payment_due_day)} of month` : '—'}
+                          {s.payment_due_date ? new Date(s.payment_due_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                         </td>
                         <td className="px-5 py-3 text-right font-medium text-gray-900">
                           {s.monthly_salary_aed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1556,8 +1658,8 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
               <Input type="number" step="0.01" min="0" value={salaryForm.monthly_salary_aed} onChange={e => setSalaryForm(f => ({ ...f, monthly_salary_aed: e.target.value }))} placeholder="0.00" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Payment Day of Month</label>
-              <Input type="number" min="1" max="31" value={salaryForm.payment_due_day} onChange={e => setSalaryForm(f => ({ ...f, payment_due_day: e.target.value }))} placeholder="e.g. 1 or 15" />
+              <label className="text-xs font-medium text-gray-700">Next Payment Date</label>
+              <Input type="date" value={salaryForm.payment_due_date} onChange={e => setSalaryForm(f => ({ ...f, payment_due_date: e.target.value }))} />
             </div>
           </div>
           <div className="space-y-1.5">

@@ -414,6 +414,7 @@ export interface Salary {
   role: string
   monthly_salary_aed: number
   payment_due_day: number | null
+  payment_due_date: string | null
   notes: string | null
   created_at: string
   updated_at: string
@@ -431,6 +432,58 @@ export interface OperatingCost {
 }
 
 export type UserRole = 'admin' | 'finance' | 'general'
+
+export interface MonthlyFxRate {
+  id: string
+  year: number
+  month: number
+  currency: string
+  rate_to_aed: number
+  created_at: string
+}
+
+export interface BankTransaction {
+  id: string
+  date: string
+  value_date: string | null
+  currency: string
+  account_number: string
+  reference: string
+  description: string
+  credit: number
+  debit: number
+  balance: number | null
+  transaction_type: string | null
+  accounting_category: string | null
+  fx_rate_to_aed: number
+  aed_equivalent: number | null
+  document_required: string | null
+  document_status: string | null
+  document_url: string | null
+  notes: string | null
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface BankCategorisationRule {
+  id: string
+  pattern: string
+  accounting_category: string
+  transaction_type: string | null
+  document_required: string | null
+  created_at: string
+}
+
+export interface BankOpeningBalance {
+  id: string
+  account_name: string
+  debit_aed: number
+  credit_aed: number
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
 
 export interface ScheduleEvent {
   id: string
