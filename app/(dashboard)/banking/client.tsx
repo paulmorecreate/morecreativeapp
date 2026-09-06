@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo, useRef, useCallback } from 'react'
+import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Upload, CheckCircle, AlertCircle, ChevronUp, ChevronDown, Pencil, X, Check, Trash2, Sparkles, ExternalLink } from 'lucide-react'
 import { BankTransaction, BankOpeningBalance, MonthlyFxRate, BankCategorisationRule } from '@/lib/supabase/types'
@@ -252,6 +252,7 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Transactions filter/sort state
+  const [txSearchInput, setTxSearchInput] = useState('')
   const [txSearch, setTxSearch] = useState('')
   const [txAccount, setTxAccount] = useState<'all' | string>('all')
   const [txCategories, setTxCategories] = useState<string[]>([])
@@ -259,8 +260,13 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
   const [txDocStatus, setTxDocStatus] = useState('all')
   const [txNeedsReview, setTxNeedsReview] = useState(false)
   const [txMissingDoc, setTxMissingDoc] = useState(false)
-  const [txSortCol, setTxSortCol] = useState<'date' | 'amount' | 'category'>('date')
+  const [txSortCol, setTxSortCol] = useState<'date' | 'description' | 'credit' | 'debit' | 'balance' | 'aed_balance' | 'amount' | 'category' | 'doc_status' | 'notes'>('date')
   const [txSortDir, setTxSortDir] = useState<SortDir>('desc')
+
+  useEffect(() => {
+    const t = setTimeout(() => setTxSearch(txSearchInput), 300)
+    return () => clearTimeout(t)
+  }, [txSearchInput])
 
   // Opening balance edit state
   const [editingOb, setEditingOb] = useState<BankOpeningBalance | null>(null)
@@ -378,10 +384,24 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
       if (txSortCol === 'date') {
         cmp = a.date.localeCompare(b.date)
         if (cmp === 0) cmp = (a.sort_order ?? 0) - (b.sort_order ?? 0)
+      } else if (txSortCol === 'description') {
+        cmp = a.description.localeCompare(b.description)
+      } else if (txSortCol === 'credit') {
+        cmp = a.credit - b.credit
+      } else if (txSortCol === 'debit') {
+        cmp = a.debit - b.debit
+      } else if (txSortCol === 'balance') {
+        cmp = (a.balance ?? 0) - (b.balance ?? 0)
+      } else if (txSortCol === 'aed_balance') {
+        cmp = ((a.balance ?? 0) * a.fx_rate_to_aed) - ((b.balance ?? 0) * b.fx_rate_to_aed)
       } else if (txSortCol === 'amount') {
         cmp = Math.abs(a.aed_equivalent ?? 0) - Math.abs(b.aed_equivalent ?? 0)
       } else if (txSortCol === 'category') {
         cmp = (a.accounting_category ?? '').localeCompare(b.accounting_category ?? '')
+      } else if (txSortCol === 'doc_status') {
+        cmp = (a.document_status ?? '').localeCompare(b.document_status ?? '')
+      } else if (txSortCol === 'notes') {
+        cmp = (a.notes ?? '').localeCompare(b.notes ?? '')
       }
       return txSortDir === 'asc' ? cmp : -cmp
     })
@@ -506,7 +526,7 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
 
   // ── Transaction table ──────────────────────────────────────────────────────
 
-  function TxTable({ rows, showFilters = false, showBalance = false, balanceCurrency = 'AED', showAedBalance = false, availableAccounts, needsReview, missingDoc, showAedEquiv = true }: {
+  function TxTable({ rows, showFilters = false, showBalance = false, balanceCurrency = 'AED', showAedBalance = false, availableAccounts, needsReview, missingDoc, showAedEquiv = true, showAedNet = false }: {
     rows: BankTransaction[]
     showFilters?: boolean
     showBalance?: boolean
@@ -516,6 +536,7 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
     needsReview?: number
     missingDoc?: number
     showAedEquiv?: boolean
+    showAedNet?: boolean
   }) {
     const filterAccounts = availableAccounts ?? accounts
     return (
@@ -523,8 +544,8 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
         {showFilters && (
           <div className="flex flex-wrap gap-2 mb-4">
             <Input
-              value={txSearch}
-              onChange={e => setTxSearch(e.target.value)}
+              value={txSearchInput}
+              onChange={e => setTxSearchInput(e.target.value)}
               placeholder="Search description or reference…"
               className="w-64 text-xs"
             />
@@ -614,12 +635,16 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
               const totalCredit = rows.reduce((s, t) => s + t.credit, 0)
               const totalDebit = rows.reduce((s, t) => s + t.debit, 0)
               const net = totalCredit - totalDebit
+              const aedNet = showAedNet ? rows.reduce((s, t) => s + (t.aed_equivalent ?? 0), 0) : null
               return (
                 <div className="ml-auto flex items-center gap-4 text-xs text-gray-500 px-1">
                   <span>{rows.length} rows</span>
                   <span>Credit: <span className="font-mono font-medium text-green-700">{totalCredit.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
                   <span>Debit: <span className="font-mono font-medium text-red-700">{totalDebit.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
                   <span>Net: <span className={cn('font-mono font-medium', net >= 0 ? 'text-green-700' : 'text-red-700')}>{net >= 0 ? '+' : ''}{net.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
+                  {aedNet !== null && (
+                    <span className="border-l border-gray-200 pl-4">AED Equiv: <span className={cn('font-mono font-medium', aedNet >= 0 ? 'text-green-700' : 'text-red-700')}>{aedNet >= 0 ? '+' : ''}{aedNet.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
+                  )}
                 </div>
               )
             })()}
@@ -639,11 +664,19 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
                     Date <SortIcon col="date" />
                   </th>
                   <th className="px-3 py-2.5 text-left font-semibold text-gray-500">Acct</th>
-                  <th className="px-3 py-2.5 text-left font-semibold text-gray-500">Description</th>
-                  <th className="px-3 py-2.5 text-right font-semibold text-gray-500">Credit</th>
-                  <th className="px-3 py-2.5 text-right font-semibold text-gray-500">Debit</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-gray-500 cursor-pointer" onClick={() => toggleSort('description')}>
+                    Description <SortIcon col="description" />
+                  </th>
+                  <th className="px-3 py-2.5 text-right font-semibold text-gray-500 cursor-pointer whitespace-nowrap" onClick={() => toggleSort('credit')}>
+                    Credit <SortIcon col="credit" />
+                  </th>
+                  <th className="px-3 py-2.5 text-right font-semibold text-gray-500 cursor-pointer whitespace-nowrap" onClick={() => toggleSort('debit')}>
+                    Debit <SortIcon col="debit" />
+                  </th>
                   {showBalance && (
-                    <th className="px-3 py-2.5 text-right font-semibold text-gray-500 whitespace-nowrap">{balanceCurrency} Balance</th>
+                    <th className="px-3 py-2.5 text-right font-semibold text-gray-500 cursor-pointer whitespace-nowrap" onClick={() => toggleSort('balance')}>
+                      {balanceCurrency} Balance <SortIcon col="balance" />
+                    </th>
                   )}
                   {showAedEquiv && (
                     <th className="px-3 py-2.5 text-right font-semibold text-gray-500 cursor-pointer whitespace-nowrap" onClick={() => toggleSort('amount')}>
@@ -651,13 +684,19 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
                     </th>
                   )}
                   {showAedBalance && (
-                    <th className="px-3 py-2.5 text-right font-semibold text-gray-500 whitespace-nowrap">AED Balance</th>
+                    <th className="px-3 py-2.5 text-right font-semibold text-gray-500 cursor-pointer whitespace-nowrap" onClick={() => toggleSort('aed_balance')}>
+                      AED Balance <SortIcon col="aed_balance" />
+                    </th>
                   )}
                   <th className="px-3 py-2.5 text-left font-semibold text-gray-500 cursor-pointer" onClick={() => toggleSort('category')}>
                     Category <SortIcon col="category" />
                   </th>
-                  <th className="px-3 py-2.5 text-left font-semibold text-gray-500">Doc Status</th>
-                  <th className="px-3 py-2.5 text-left font-semibold text-gray-500">Notes</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-gray-500 cursor-pointer" onClick={() => toggleSort('doc_status')}>
+                    Doc Status <SortIcon col="doc_status" />
+                  </th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-gray-500 cursor-pointer" onClick={() => toggleSort('notes')}>
+                    Notes <SortIcon col="notes" />
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -1009,6 +1048,7 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
           balanceCurrency="EUR"
           showAedEquiv={false}
           showAedBalance
+          showAedNet
           availableAccounts={eurAccounts}
           needsReview={eurNeedsReviewCount}
           missingDoc={eurMissingDocCount}
