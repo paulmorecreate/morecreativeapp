@@ -344,7 +344,7 @@ export async function POST(req: NextRequest) {
         transaction_type: cat?.transaction_type ?? null,
         accounting_category: cat?.accounting_category ?? null,
         document_required: cat?.document_required ?? null,
-        document_status: cat?.accounting_category === 'Bank charges' || cat?.accounting_category === 'Own-account transfer' ? 'Not Required' : 'Missing',
+        document_status: cat?.accounting_category === 'Bank charges' || cat?.accounting_category === 'Own-account transfer' || /noon|apple\.com|apple|deliveroo|google|careem|medicina|supermarket|spinneys|kick|market|amazon|orbit|framer|anthropic|ev charging|osn|cooling|botim|sondos|lemon|polar|future link|pet corner|vox|higgsfield|adobe/i.test(description) ? 'Not Required' : 'Missing',
         sort_order: rawSeq,
         updated_at: now,
       })
