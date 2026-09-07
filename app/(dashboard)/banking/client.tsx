@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Upload, CheckCircle, AlertCircle, ChevronUp, ChevronDown, Pencil, X, Check, Trash2, Sparkles, ExternalLink } from 'lucide-react'
-import { BankTransaction, BankOpeningBalance, MonthlyFxRate, BankCategorisationRule } from '@/lib/supabase/types'
+import { BankTransaction, BankOpeningBalance, MonthlyFxRate, BankCategorisationRule, BankAccountingCategory } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Select } from '@/components/ui/input'
 import { createClient } from '@/lib/supabase/client'
@@ -142,6 +142,7 @@ type Props = {
   openingBalances: BankOpeningBalance[]
   fxRates: MonthlyFxRate[]
   rules: BankCategorisationRule[]
+  categories: BankAccountingCategory[]
   initialTab: Tab
 }
 
@@ -232,12 +233,16 @@ function TextCell({ value, onChange, placeholder }: {
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export function BankingClient({ transactions: initialTransactions, openingBalances: initialOpeningBalances, fxRates, rules: initialRules, initialTab }: Props) {
+export function BankingClient({ transactions: initialTransactions, openingBalances: initialOpeningBalances, fxRates, rules: initialRules, categories: initialCategories, initialTab }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>(initialTab)
   const [transactions, setTransactions] = useState<BankTransaction[]>(initialTransactions)
   const [openingBalances, setOpeningBalances] = useState<BankOpeningBalance[]>(initialOpeningBalances)
   const [rules, setRules] = useState<BankCategorisationRule[]>(initialRules)
+  const [categories, setCategories] = useState<BankAccountingCategory[]>(initialCategories)
+  const [newCatName, setNewCatName] = useState('')
+  const [newCatType, setNewCatType] = useState<BankAccountingCategory['ledger_type']>('expense')
+  const [catSaving, setCatSaving] = useState(false)
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null)
   const [tbYear, setTbYear] = useState(new Date().getFullYear())
   const [rememberPrompt, setRememberPrompt] = useState<RememberPrompt | null>(null)
@@ -272,6 +277,12 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
   const [editingOb, setEditingOb] = useState<BankOpeningBalance | null>(null)
   const [obDraft, setObDraft] = useState({ debit_aed: '', credit_aed: '' })
   const [obSaving, setObSaving] = useState(false)
+
+  // Derived from DB categories — replaces hardcoded constants
+  const categoryNames = useMemo(() => categories.map(c => c.name), [categories])
+  const expenseCategorySet = useMemo(() => new Set(categories.filter(c => c.ledger_type === 'expense').map(c => c.name)), [categories])
+  const incomeCategorySet = useMemo(() => new Set(categories.filter(c => c.ledger_type === 'income').map(c => c.name)), [categories])
+  const shareholderCategorySet = useMemo(() => new Set(categories.filter(c => c.ledger_type === 'shareholder').map(c => c.name)), [categories])
 
   function switchTab(t: Tab) {
     setTab(t)
@@ -424,9 +435,9 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
 
   const aedTxFiltered = useMemo(() => sortTx(filterTx(transactions.filter(t => t.currency === 'AED'))), [transactions, txSearch, txAccount, txCategories, txDocStatus, txNeedsReview, txMissingDoc, txSortCol, txSortDir])
   const eurTxFiltered = useMemo(() => sortTx(filterTx(transactions.filter(t => t.currency === 'EUR'))), [transactions, txSearch, txAccount, txCategories, txDocStatus, txNeedsReview, txMissingDoc, txSortCol, txSortDir])
-  const expenseTx = useMemo(() => sortTx(transactions.filter(t => t.debit > 0 && t.accounting_category !== 'Own-account transfer' && !SHAREHOLDER_CATEGORIES.has(t.accounting_category ?? ''))), [transactions, txSortCol, txSortDir])
-  const incomeTx = useMemo(() => sortTx(transactions.filter(t => t.credit > 0 && t.accounting_category !== 'Own-account transfer' && !SHAREHOLDER_CATEGORIES.has(t.accounting_category ?? ''))), [transactions, txSortCol, txSortDir])
-  const shareholderTx = useMemo(() => sortTx(transactions.filter(t => SHAREHOLDER_CATEGORIES.has(t.accounting_category ?? ''))), [transactions, txSortCol, txSortDir])
+  const expenseTx = useMemo(() => sortTx(transactions.filter(t => t.debit > 0 && t.accounting_category !== 'Own-account transfer' && !shareholderCategorySet.has(t.accounting_category ?? ''))), [transactions, txSortCol, txSortDir, shareholderCategorySet])
+  const incomeTx = useMemo(() => sortTx(transactions.filter(t => t.credit > 0 && t.accounting_category !== 'Own-account transfer' && !shareholderCategorySet.has(t.accounting_category ?? ''))), [transactions, txSortCol, txSortDir, shareholderCategorySet])
+  const shareholderTx = useMemo(() => sortTx(transactions.filter(t => shareholderCategorySet.has(t.accounting_category ?? ''))), [transactions, txSortCol, txSortDir, shareholderCategorySet])
 
   // Trial balance computation
   const trialBalance = useMemo(() => {
@@ -442,21 +453,21 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
       if (!cat || cat === 'Own-account transfer') continue
       const aed = Math.abs(t.aed_equivalent ?? 0)
 
-      if (EXPENSE_CATEGORIES.has(cat)) {
+      if (expenseCategorySet.has(cat)) {
         const entry = expenseMap.get(cat) ?? { debit: 0, credit: 0 }
         if (t.debit > 0) entry.debit += aed
         else entry.credit += aed
         expenseMap.set(cat, entry)
-      } else if (INCOME_CATEGORIES.has(cat)) {
+      } else if (incomeCategorySet.has(cat)) {
         if (t.credit > 0) incomeCredit += aed
-      } else if (SHAREHOLDER_CATEGORIES.has(cat)) {
+      } else if (shareholderCategorySet.has(cat)) {
         if (t.debit > 0) shareholderDebit += aed
         else shareholderCredit += aed
       }
     }
 
     return { expenseMap, incomeCredit, shareholderDebit, shareholderCredit }
-  }, [transactions, tbYear])
+  }, [transactions, tbYear, expenseCategorySet, incomeCategorySet, shareholderCategorySet])
 
   function toggleSort(col: typeof txSortCol) {
     if (txSortCol === col) setTxSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -524,6 +535,31 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
     setRules(prev => prev.filter(r => r.id !== id))
   }
 
+  async function handleAddCategory() {
+    const name = newCatName.trim()
+    if (!name) return
+    if (categories.some(c => c.name.toLowerCase() === name.toLowerCase())) return
+    setCatSaving(true)
+    const supabase = createClient()
+    const sortOrder = categories.length > 0 ? Math.max(...categories.map(c => c.sort_order)) + 1 : 1
+    const { data, error } = await supabase
+      .from('bank_accounting_categories')
+      .insert({ name, ledger_type: newCatType, sort_order: sortOrder })
+      .select()
+      .single()
+    setCatSaving(false)
+    if (!error && data) {
+      setCategories(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)))
+      setNewCatName('')
+    }
+  }
+
+  async function handleDeleteCategory(id: string) {
+    const supabase = createClient()
+    await supabase.from('bank_accounting_categories').delete().eq('id', id)
+    setCategories(prev => prev.filter(c => c.id !== id))
+  }
+
   // ── Transaction table ──────────────────────────────────────────────────────
 
   function TxTable({ rows, showFilters = false, showBalance = false, balanceCurrency = 'AED', showAedBalance = false, availableAccounts, needsReview, missingDoc, showAedEquiv = true, showAedNet = false }: {
@@ -579,7 +615,7 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
                     Clear all
                   </button>
                   <div className="h-px bg-gray-100 mx-2 my-1" />
-                  {ACCOUNTING_CATEGORIES.map(c => (
+                  {categoryNames.map(c => (
                     <label key={c} className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer">
                       <input
                         type="checkbox"
@@ -747,7 +783,7 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
                     <td className="px-3 py-2 min-w-[140px]" onClick={e => e.stopPropagation()}>
                       <SelectCell
                         value={t.accounting_category}
-                        options={ACCOUNTING_CATEGORIES}
+                        options={categoryNames}
                         onChange={v => updateTransaction(t.id, { accounting_category: v }, t.accounting_category)}
                         placeholder="Set category"
                       />
@@ -992,6 +1028,85 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
               </div>
             </div>
           )}
+
+          {/* Accounting Categories */}
+          <div className="mt-6">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Accounting Categories</p>
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="px-4 py-2.5 text-left font-semibold text-gray-500">Category Name</th>
+                    <th className="px-4 py-2.5 text-left font-semibold text-gray-500">Ledger Type</th>
+                    <th className="px-4 py-2.5 w-10" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {categories.map(c => (
+                    <tr key={c.id} className="hover:bg-gray-50 group">
+                      <td className="px-4 py-2 text-gray-700">{c.name}</td>
+                      <td className="px-4 py-2">
+                        <span className={cn('px-1.5 py-0.5 rounded text-[10px] font-medium', {
+                          'bg-red-50 text-red-700': c.ledger_type === 'expense',
+                          'bg-green-50 text-green-700': c.ledger_type === 'income',
+                          'bg-purple-50 text-purple-700': c.ledger_type === 'shareholder',
+                          'bg-blue-50 text-blue-700': c.ledger_type === 'transfer',
+                          'bg-gray-100 text-gray-500': c.ledger_type === 'neutral',
+                        })}>
+                          {c.ledger_type}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2">
+                        <button
+                          onClick={() => handleDeleteCategory(c.id)}
+                          className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="border-t border-gray-100 bg-gray-50">
+                    <td className="px-4 py-2">
+                      <input
+                        type="text"
+                        value={newCatName}
+                        onChange={e => setNewCatName(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleAddCategory()}
+                        placeholder="New category name…"
+                        className="w-full text-xs bg-transparent focus:outline-none placeholder:text-gray-400"
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <select
+                        value={newCatType}
+                        onChange={e => setNewCatType(e.target.value as BankAccountingCategory['ledger_type'])}
+                        className="text-xs bg-white border border-gray-200 rounded px-2 py-1 focus:outline-none"
+                      >
+                        <option value="expense">expense</option>
+                        <option value="income">income</option>
+                        <option value="shareholder">shareholder</option>
+                        <option value="transfer">transfer</option>
+                        <option value="neutral">neutral</option>
+                      </select>
+                    </td>
+                    <td className="px-4 py-2">
+                      <button
+                        onClick={handleAddCategory}
+                        disabled={catSaving || !newCatName.trim()}
+                        className="text-gray-400 hover:text-green-600 disabled:opacity-30 transition-colors"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="px-4 py-2 text-[10px] text-gray-400 border-t border-gray-100">
+                Ledger type determines where the category appears in the Trial Balance — expense (P&L debit), income (P&L credit), shareholder, transfer (excluded).
+              </p>
+            </div>
+          </div>
 
           {/* FX Rates reference */}
           {fxRates.length > 0 && (

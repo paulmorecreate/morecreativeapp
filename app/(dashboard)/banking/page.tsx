@@ -24,6 +24,7 @@ export default async function BankingPage({ searchParams }: { searchParams: Prom
     { data: openingBalances },
     { data: fxRates },
     { data: rules },
+    { data: categories },
   ] = await Promise.all([
     supabase
       .from('bank_transactions')
@@ -43,6 +44,10 @@ export default async function BankingPage({ searchParams }: { searchParams: Prom
       .from('bank_categorisation_rules')
       .select('*')
       .order('created_at', { ascending: false }),
+    supabase
+      .from('bank_accounting_categories')
+      .select('*')
+      .order('sort_order'),
   ])
 
   const validTabs = ['upload', 'aed', 'eur', 'expenses', 'income', 'shareholder', 'trial-balance']
@@ -54,6 +59,7 @@ export default async function BankingPage({ searchParams }: { searchParams: Prom
       openingBalances={openingBalances ?? []}
       fxRates={fxRates ?? []}
       rules={rules ?? []}
+      categories={categories ?? []}
       initialTab={initialTab as any}
     />
   )

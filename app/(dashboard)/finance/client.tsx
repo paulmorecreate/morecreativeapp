@@ -151,7 +151,7 @@ function SummaryBar({ paid, pending }: { paid: number; pending: number }) {
   return (
     <div className="grid grid-cols-2 gap-3 mb-5">
       <div className="bg-green-50 border border-green-100 rounded-xl px-5 py-3.5">
-        <p className="text-xs font-medium text-green-600 mb-0.5">Total Paid</p>
+        <p className="text-xs font-medium text-green-600 mb-0.5">Total Received</p>
         <p className="text-lg font-semibold text-green-800">{fmtAed(paid)}</p>
       </div>
       <div className="bg-amber-50 border border-amber-100 rounded-xl px-5 py-3.5">

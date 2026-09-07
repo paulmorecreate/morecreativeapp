@@ -466,6 +466,14 @@ export interface BankTransaction {
   updated_at: string
 }
 
+export interface BankAccountingCategory {
+  id: string
+  name: string
+  ledger_type: 'expense' | 'income' | 'shareholder' | 'transfer' | 'neutral'
+  sort_order: number
+  created_at: string
+}
+
 export interface BankCategorisationRule {
   id: string
   pattern: string
