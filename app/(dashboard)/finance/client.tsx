@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Plus, Receipt, Trash2, X, ExternalLink, Pencil, ChevronUp, ChevronDown } from 'lucide-react'
@@ -169,6 +169,7 @@ const EMPTY_OP_FORM = { expense_item: '', category: 'Software', frequency: 'mont
 export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annualExpenses: initialAnnualExpenses, salaries: initialSalaries, operatingCosts: initialOperatingCosts, initialTab }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<'overview' | 'sales' | 'purchase' | 'annual' | 'running' | 'vat'>(initialTab)
+  const [expandedVatQuarter, setExpandedVatQuarter] = useState<string | null>(null)
   const [saleFilter, setSaleFilter] = useState<'all' | 'draft' | 'sent' | 'partial' | 'received' | 'cancelled'>('all')
   const [poFilter, setPoFilter] = useState<'all' | 'pending' | 'partial' | 'paid'>('all')
   const [saleDueFrom, setSaleDueFrom] = useState('')
@@ -355,7 +356,9 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
   const currentQuarterKey = getQuarterKey(new Date().toISOString().slice(0, 10))
 
   const vatByQuarter = useMemo(() => {
-    const map = new Map<string, { outputVat: number; inputVat: number }>()
+    type OutputLine = { invoiceNumber: string; billedTo: string; currency: string; subtotal: number; vatAed: number; date: string | null }
+    type InputLine = { invoiceNumber: string; supplier: string; currency: string; netAmount: number; vatAed: number; date: string | null }
+    const map = new Map<string, { outputVat: number; inputVat: number; outputLines: OutputLine[]; inputLines: InputLine[] }>()
 
     for (const inv of invoices) {
       if (inv.status === 'cancelled') continue
@@ -363,9 +366,11 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
       const key = getQuarterKey(inv.issue_date)
       if (!key) continue
       const subtotal = (inv.line_items ?? []).reduce((s, l) => s + l.rate * l.qty, 0)
-      const vatAed = subtotal * 0.05 * rateToAed(inv.currency, currencyRates)
-      const entry = map.get(key) ?? { outputVat: 0, inputVat: 0 }
+      const rate = rateToAed(inv.currency, currencyRates)
+      const vatAed = subtotal * 0.05 * rate
+      const entry = map.get(key) ?? { outputVat: 0, inputVat: 0, outputLines: [], inputLines: [] }
       entry.outputVat += vatAed
+      entry.outputLines.push({ invoiceNumber: inv.invoice_number, billedTo: inv.billed_to_company ?? inv.billed_to_name ?? '—', currency: inv.currency, subtotal, vatAed, date: inv.issue_date })
       map.set(key, entry)
     }
 
@@ -374,14 +379,15 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
       const key = getQuarterKey(inv.issue_date)
       if (!key) continue
       const vatAed = inv.vat_amount * inv.fx_rate
-      const entry = map.get(key) ?? { outputVat: 0, inputVat: 0 }
+      const entry = map.get(key) ?? { outputVat: 0, inputVat: 0, outputLines: [], inputLines: [] }
       entry.inputVat += vatAed
+      entry.inputLines.push({ invoiceNumber: inv.invoice_number, supplier: inv.supplier, currency: inv.currency, netAmount: inv.net_amount, vatAed, date: inv.issue_date })
       map.set(key, entry)
     }
 
     return Array.from(map.entries())
       .sort(([a], [b]) => b.localeCompare(a))
-      .map(([key, { outputVat, inputVat }]) => ({
+      .map(([key, { outputVat, inputVat, outputLines, inputLines }]) => ({
         key,
         label: quarterLabel(key),
         dueDate: vatDueDate(key),
@@ -389,6 +395,8 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
         outputVat,
         inputVat,
         netVat: outputVat - inputVat,
+        outputLines,
+        inputLines,
       }))
   }, [invoices, purchaseInvoices, currencyRates])
 
@@ -1342,38 +1350,105 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                     const isCurrent = q.key === currentQuarterKey
                     const today = new Date().toISOString().slice(0, 10)
                     const isOverdue = !isCurrent && q.dueDateStr < today
+                    const isExpanded = expandedVatQuarter === q.key
                     return (
-                      <tr key={q.key} className={cn('transition-colors', isCurrent ? 'bg-blue-50/50' : 'hover:bg-gray-50')}>
-                        <td className="px-5 py-4 font-semibold text-gray-900">
-                          <span>{q.label}</span>
-                          {isCurrent && (
-                            <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">Current</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-4 text-right font-medium text-gray-900">
-                          {fmtAed(q.outputVat)}
-                        </td>
-                        <td className="px-5 py-4 text-right text-gray-700">
-                          {q.inputVat > 0 ? fmtAed(q.inputVat) : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-5 py-4 text-right">
-                          {q.netVat >= 0 ? (
-                            <span className="font-semibold text-gray-900">{fmtAed(q.netVat)}</span>
-                          ) : (
-                            <span className="font-semibold text-green-700">({fmtAed(Math.abs(q.netVat))})</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-4 text-gray-500 whitespace-nowrap">{q.dueDate}</td>
-                        <td className="px-5 py-4">
-                          {isCurrent ? (
-                            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">In Progress</span>
-                          ) : isOverdue ? (
-                            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700">Overdue</span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">Filed</span>
-                          )}
-                        </td>
-                      </tr>
+                      <React.Fragment key={q.key}>
+                        <tr
+                          onClick={() => setExpandedVatQuarter(isExpanded ? null : q.key)}
+                          className={cn('transition-colors cursor-pointer', isCurrent ? 'bg-blue-50/50 hover:bg-blue-50' : 'hover:bg-gray-50', isExpanded && '!bg-gray-50')}
+                        >
+                          <td className="px-5 py-4 font-semibold text-gray-900">
+                            <div className="flex items-center gap-2">
+                              {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
+                              <span>{q.label}</span>
+                              {isCurrent && <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">Current</span>}
+                            </div>
+                          </td>
+                          <td className="px-5 py-4 text-right font-medium text-gray-900">{fmtAed(q.outputVat)}</td>
+                          <td className="px-5 py-4 text-right text-gray-700">
+                            {q.inputVat > 0 ? fmtAed(q.inputVat) : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-5 py-4 text-right">
+                            {q.netVat >= 0
+                              ? <span className="font-semibold text-gray-900">{fmtAed(q.netVat)}</span>
+                              : <span className="font-semibold text-green-700">({fmtAed(Math.abs(q.netVat))})</span>}
+                          </td>
+                          <td className="px-5 py-4 text-gray-500 whitespace-nowrap">{q.dueDate}</td>
+                          <td className="px-5 py-4">
+                            {isCurrent ? (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">In Progress</span>
+                            ) : isOverdue ? (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700">Overdue</span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">Filed</span>
+                            )}
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr className="bg-gray-50/80">
+                            <td colSpan={6} className="px-6 py-4 border-b border-gray-200">
+                              <div className="grid grid-cols-2 gap-6">
+                                {/* Output VAT detail */}
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Output VAT — Sales Invoices ({q.outputLines.length})</p>
+                                  {q.outputLines.length === 0 ? (
+                                    <p className="text-xs text-gray-400">No sales invoices with VAT this quarter.</p>
+                                  ) : (
+                                    <table className="w-full text-xs">
+                                      <thead>
+                                        <tr className="text-gray-400 border-b border-gray-200">
+                                          <th className="pb-1.5 text-left font-medium">Invoice</th>
+                                          <th className="pb-1.5 text-left font-medium">Billed To</th>
+                                          <th className="pb-1.5 text-right font-medium">Subtotal</th>
+                                          <th className="pb-1.5 text-right font-medium">VAT (AED)</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-gray-100">
+                                        {q.outputLines.map((l, i) => (
+                                          <tr key={i}>
+                                            <td className="py-1.5 text-gray-700 font-mono">{l.invoiceNumber}</td>
+                                            <td className="py-1.5 text-gray-600 truncate max-w-[120px]">{l.billedTo}</td>
+                                            <td className="py-1.5 text-right text-gray-600">{l.currency} {l.subtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                                            <td className="py-1.5 text-right font-medium text-gray-900">{fmtAed(l.vatAed)}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  )}
+                                </div>
+                                {/* Input VAT detail */}
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Input VAT — Purchase Invoices ({q.inputLines.length})</p>
+                                  {q.inputLines.length === 0 ? (
+                                    <p className="text-xs text-gray-400">No purchase invoices with VAT this quarter.</p>
+                                  ) : (
+                                    <table className="w-full text-xs">
+                                      <thead>
+                                        <tr className="text-gray-400 border-b border-gray-200">
+                                          <th className="pb-1.5 text-left font-medium">Invoice</th>
+                                          <th className="pb-1.5 text-left font-medium">Supplier</th>
+                                          <th className="pb-1.5 text-right font-medium">Net Amount</th>
+                                          <th className="pb-1.5 text-right font-medium">VAT (AED)</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-gray-100">
+                                        {q.inputLines.map((l, i) => (
+                                          <tr key={i}>
+                                            <td className="py-1.5 text-gray-700 font-mono">{l.invoiceNumber}</td>
+                                            <td className="py-1.5 text-gray-600 truncate max-w-[120px]">{l.supplier}</td>
+                                            <td className="py-1.5 text-right text-gray-600">{l.currency} {l.netAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                                            <td className="py-1.5 text-right font-medium text-gray-900">{fmtAed(l.vatAed)}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     )
                   })}
                 </tbody>
