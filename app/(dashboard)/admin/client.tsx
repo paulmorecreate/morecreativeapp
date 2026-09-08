@@ -778,7 +778,7 @@ function InvoiceSettingsPanel({ settings }: { settings: InvoiceSettings | null }
   )
 }
 
-type Tab = 'users' | 'lookups' | 'reports' | 'finance' | 'audit'
+type Tab = 'users' | 'lookups' | 'reports' | 'finance' | 'audit' | 'diagnostics'
 
 type ReportTalent = { id: string; name: string; ig_link: string | null }
 type ReportBrand  = { id: string; name: string; link: string | null }
@@ -946,6 +946,139 @@ function ReportsSection() {
   )
 }
 
+const DB_LIMIT_BYTES = 500 * 1024 * 1024   // 500 MB free tier
+const AUTH_MAU_LIMIT = 50_000               // 50k MAU free tier
+
+type TableStat = { table: string; size_bytes: number; row_estimate: number }
+type DiagnosticsData = { db_size_bytes: number; table_stats: TableStat[]; auth_user_count: number }
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function UsageBar({ used, total, label, valueLabel, limitLabel }: {
+  used: number; total: number; label: string; valueLabel: string; limitLabel: string
+}) {
+  const pct = Math.min((used / total) * 100, 100)
+  const color = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-400' : 'bg-emerald-500'
+  const textColor = pct >= 90 ? 'text-red-600' : pct >= 70 ? 'text-amber-600' : 'text-emerald-600'
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-gray-700">{label}</span>
+        <span className={`text-sm font-semibold ${textColor}`}>{valueLabel} <span className="text-gray-400 font-normal">/ {limitLabel}</span></span>
+      </div>
+      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+      <p className="text-xs text-gray-400">{pct.toFixed(1)}% used</p>
+    </div>
+  )
+}
+
+function DiagnosticsSection() {
+  const [data, setData] = useState<DiagnosticsData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [showAllTables, setShowAllTables] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/admin/diagnostics')
+      .then(r => r.json())
+      .then(d => { if (d.error) setError(d.error); else setData(d) })
+      .catch(() => setError('Failed to load diagnostics'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <p className="text-sm text-gray-400 py-6">Loading diagnostics…</p>
+  if (error) return <p className="text-sm text-red-500 py-6">{error}</p>
+  if (!data) return null
+
+  const topTables = showAllTables ? data.table_stats : data.table_stats.slice(0, 10)
+
+  return (
+    <div className="space-y-5 max-w-2xl">
+
+      {/* Free Tier Usage */}
+      <div className="bg-white rounded-xl border border-gray-200">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h2 className="text-sm font-semibold text-gray-900">Supabase Free Plan Usage</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Limits reset monthly for MAU; database is cumulative</p>
+        </div>
+        <div className="px-5 py-5 space-y-5">
+          <UsageBar
+            label="Database Size"
+            used={data.db_size_bytes}
+            total={DB_LIMIT_BYTES}
+            valueLabel={formatBytes(data.db_size_bytes)}
+            limitLabel="500 MB"
+          />
+          <UsageBar
+            label="Auth Users (MAU)"
+            used={data.auth_user_count}
+            total={AUTH_MAU_LIMIT}
+            valueLabel={`${data.auth_user_count.toLocaleString()} users`}
+            limitLabel="50,000"
+          />
+        </div>
+        <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 rounded-b-xl">
+          <p className="text-xs text-gray-400">
+            Remaining database capacity: <span className="font-medium text-gray-600">{formatBytes(DB_LIMIT_BYTES - data.db_size_bytes)}</span>
+            {' · '}At current usage you have plenty of headroom.
+          </p>
+        </div>
+      </div>
+
+      {/* Table Breakdown */}
+      <div className="bg-white rounded-xl border border-gray-200">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">Table Storage Breakdown</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{data.table_stats.length} tables · sizes include indexes</p>
+          </div>
+          <span className="text-xs text-gray-400 font-medium">{formatBytes(data.db_size_bytes)} total</span>
+        </div>
+        <div className="divide-y divide-gray-50">
+          {topTables.map(t => {
+            const pct = (t.size_bytes / data.db_size_bytes) * 100
+            return (
+              <div key={t.table} className="px-5 py-3 flex items-center gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-mono text-gray-700 truncate">{t.table}</span>
+                    <div className="flex items-center gap-3 shrink-0 ml-4">
+                      {t.row_estimate > 0 && (
+                        <span className="text-xs text-gray-400">{t.row_estimate.toLocaleString()} rows</span>
+                      )}
+                      <span className="text-xs font-medium text-gray-600 w-16 text-right">{formatBytes(t.size_bytes)}</span>
+                    </div>
+                  </div>
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-400 rounded-full" style={{ width: `${Math.max(pct, 0.5)}%` }} />
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        {data.table_stats.length > 10 && (
+          <div className="px-5 py-3 border-t border-gray-100">
+            <button
+              onClick={() => setShowAllTables(v => !v)}
+              className="text-xs text-gray-500 hover:text-gray-800 transition-colors"
+            >
+              {showAllTables ? 'Show less' : `Show all ${data.table_stats.length} tables`}
+            </button>
+          </div>
+        )}
+      </div>
+
+    </div>
+  )
+}
+
 export function AdminClient({ categories, industries, agentTypes, talentCategories, brandCategories, talentLevels, invoiceSettings, expenseCategories, currencyRates, isAdmin, canViewFinance, loginAudit, recordAudit }: Props) {
   const router = useRouter()
   const supabase = createClient()
@@ -997,7 +1130,7 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
 
       {/* Tabs */}
       <div className="flex gap-0.5 mb-6 border-b border-gray-200">
-        {(['users', 'lookups', 'reports', ...(canViewFinance ? ['finance'] : []), ...(isAdmin ? ['audit'] : [])] as Tab[]).map(tab => (
+        {(['users', 'lookups', 'reports', ...(canViewFinance ? ['finance'] : []), ...(isAdmin ? ['audit', 'diagnostics'] : [])] as Tab[]).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -1034,6 +1167,8 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
           <InvoiceSettingsPanel settings={invoiceSettings} />
         </div>
       )}
+
+      {activeTab === 'diagnostics' && isAdmin && <DiagnosticsSection />}
 
       {activeTab === 'audit' && (
         <div className="space-y-6 max-w-4xl">
