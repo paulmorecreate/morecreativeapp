@@ -321,7 +321,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
 
   // Payment forecast
   const forecastItems = useMemo(() => {
-    type ForecastItem = { id: string; date: string; label: string; source: 'Purchase Invoice' | 'Annual Expense' | 'Salary'; amountAed: number; days: number }
+    type ForecastItem = { id: string; date: string; label: string; source: 'Purchase Invoice' | 'Annual Expense' | 'Salary'; amountAed: number; days: number; nativeCurrency?: string; nativeAmount?: number }
     const items: ForecastItem[] = []
 
     for (const inv of purchaseInvoices) {
@@ -329,10 +329,13 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
       if (!inv.due_date) continue
       const d = daysUntil(inv.due_date)
       if (d === null || d > forecastDays) continue
-      const outstanding = inv.status === 'partial'
-        ? (inv.gross_amount - inv.amount_paid) * inv.fx_rate
-        : inv.gross_amount * inv.fx_rate
-      items.push({ id: inv.id, date: inv.due_date, label: inv.supplier + (inv.invoice_number ? ` · ${inv.invoice_number}` : ''), source: 'Purchase Invoice', amountAed: outstanding, days: d })
+      // Use live currency rates for conversion; fall back to stored fx_rate if live rate unavailable
+      const liveRate = rateToAed(inv.currency, currencyRates)
+      const fx = liveRate !== 1 || inv.currency === 'AED' ? liveRate : inv.fx_rate
+      const nativeOutstanding = inv.status === 'partial' ? inv.gross_amount - inv.amount_paid : inv.gross_amount
+      const outstanding = nativeOutstanding * fx
+      const isNonAed = inv.currency !== 'AED'
+      items.push({ id: inv.id, date: inv.due_date, label: inv.supplier + (inv.invoice_number ? ` · ${inv.invoice_number}` : ''), source: 'Purchase Invoice', amountAed: outstanding, days: d, ...(isNonAed && { nativeCurrency: inv.currency, nativeAmount: nativeOutstanding }) })
     }
 
     for (const exp of annualExpenses) {
@@ -350,7 +353,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
     }
 
     return items.sort((a, b) => a.date.localeCompare(b.date))
-  }, [purchaseInvoices, annualExpenses, salaries, forecastDays])
+  }, [purchaseInvoices, annualExpenses, salaries, forecastDays, currencyRates])
 
   // VAT by quarter
   const currentQuarterKey = getQuarterKey(new Date().toISOString().slice(0, 10))
@@ -876,7 +879,10 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                           </span>
                         </td>
                         <td className="px-5 py-3 text-right font-medium text-gray-900">
-                          {item.amountAed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <div>AED {item.amountAed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                          {item.nativeCurrency && item.nativeAmount != null && (
+                            <div className="text-xs font-normal text-gray-400">{formatAmount(item.nativeCurrency, item.nativeAmount)}</div>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -887,7 +893,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                         Total due within {forecastDays} days
                       </td>
                       <td className="px-5 py-3 text-right text-sm font-semibold text-gray-900">
-                        {forecastItems.reduce((s, i) => s + i.amountAed, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        AED {forecastItems.reduce((s, i) => s + i.amountAed, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                     </tr>
                   </tfoot>
