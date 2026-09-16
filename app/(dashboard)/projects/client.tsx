@@ -26,7 +26,6 @@ type Props = {
 export function ProjectsClient({ projects, categories }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
-  const [showCompleted, setShowCompleted] = useState(false)
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<ProjectRow | null>(null)
@@ -76,23 +75,22 @@ export function ProjectsClient({ projects, categories }: Props) {
   }
 
   const q = search.toLowerCase()
-  const filtered = projects.filter(p => {
-    const matchCompleted = showCompleted ? true : p.status !== 'completed'
+  const matchesSearch = (p: ProjectRow) => {
+    if (!search) return true
     const brandNames = p.project_brands?.map(pb => pb.brand?.name ?? '') ?? []
     const talentNames = p.project_brands?.flatMap(pb => pb.project_brand_talents?.map(pbt => pbt.talent?.name ?? '') ?? []) ?? []
-    const matchSearch = !search ||
+    return (
       p.name.toLowerCase().includes(q) ||
       (p.location ?? '').toLowerCase().includes(q) ||
       (p.notes ?? '').toLowerCase().includes(q) ||
       (p.category ?? '').toLowerCase().includes(q) ||
       brandNames.some(n => n.toLowerCase().includes(q)) ||
       talentNames.some(n => n.toLowerCase().includes(q))
-    return matchCompleted && matchSearch
-  })
+    )
+  }
 
-  const active = filtered.filter(p => p.status !== 'completed')
-  const completed = filtered.filter(p => p.status === 'completed')
-  const displayed = showCompleted ? [...active, ...completed] : active
+  const active = projects.filter(p => p.status !== 'completed' && matchesSearch(p))
+  const completed = projects.filter(p => p.status === 'completed' && matchesSearch(p))
 
   return (
     <div>
@@ -100,7 +98,7 @@ export function ProjectsClient({ projects, categories }: Props) {
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Projects</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {displayed.length} of {projects.length}
+            {active.length} active{completed.length > 0 ? `, ${completed.length} completed` : ''}
           </p>
         </div>
         <Button onClick={() => setOpen(true)}>
@@ -119,15 +117,6 @@ export function ProjectsClient({ projects, categories }: Props) {
             className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/10 bg-white"
           />
         </div>
-        <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={showCompleted}
-            onChange={e => setShowCompleted(e.target.checked)}
-            className="rounded border-gray-300"
-          />
-          Show Completed
-        </label>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -143,17 +132,17 @@ export function ProjectsClient({ projects, categories }: Props) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {displayed.length === 0 && (
+            {active.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
                   {search ? 'No results.' : 'No projects yet.'}
                 </td>
               </tr>
             )}
-            {displayed.map(project => (
+            {active.map(project => (
               <tr
                 key={project.id}
-                className={`group hover:bg-gray-50/50 transition-colors cursor-pointer ${project.status === 'completed' ? 'opacity-60' : ''}`}
+                className="group hover:bg-gray-50/50 transition-colors cursor-pointer"
                 onClick={() => router.push(`/projects/${project.id}`)}
               >
                 <td className="px-4 py-3 font-medium text-gray-900">{project.name}</td>
@@ -178,6 +167,53 @@ export function ProjectsClient({ projects, categories }: Props) {
           </tbody>
         </table>
       </div>
+
+      {completed.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">Completed</h2>
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/50">
+                  <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Project</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Category</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Location</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Start Date</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">End Date</th>
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {completed.map(project => (
+                  <tr
+                    key={project.id}
+                    className="group hover:bg-gray-50/50 transition-colors cursor-pointer opacity-60"
+                    onClick={() => router.push(`/projects/${project.id}`)}
+                  >
+                    <td className="px-4 py-3 font-medium text-gray-900">{project.name}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{project.category ?? <span className="text-gray-300">—</span>}</td>
+                    <td className="px-4 py-3 text-gray-500">{project.location ?? <span className="text-gray-300">—</span>}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(project.start_date) ?? <span className="text-gray-300">—</span>}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(project.end_date) ?? <span className="text-gray-300">—</span>}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={e => { e.stopPropagation(); setDeleteTarget(project) }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-500"
+                          title="Delete project"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                        <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-colors" />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Project">
         <div className="space-y-4">
