@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Receipt, Trash2, X, ExternalLink, Pencil, ChevronUp, ChevronDown } from 'lucide-react'
+import { Plus, Receipt, Trash2, X, ExternalLink, Pencil, ChevronUp, ChevronDown, Search } from 'lucide-react'
 import { Invoice, PurchaseInvoice, CurrencyRate, AnnualExpense, Salary, OperatingCost } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
@@ -171,7 +171,9 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
   const [tab, setTab] = useState<'overview' | 'sales' | 'purchase' | 'annual' | 'running' | 'vat'>(initialTab)
   const [expandedVatQuarter, setExpandedVatQuarter] = useState<string | null>(null)
   const [saleFilter, setSaleFilter] = useState<'all' | 'draft' | 'sent' | 'partial' | 'received' | 'cancelled'>('all')
+  const [saleSearch, setSaleSearch] = useState('')
   const [poFilter, setPoFilter] = useState<'all' | 'pending' | 'partial' | 'paid'>('all')
+  const [poSearch, setPoSearch] = useState('')
   const [saleDueFrom, setSaleDueFrom] = useState('')
   const [saleDueTo, setSaleDueTo] = useState('')
   const [poDueFrom, setPoDueFrom] = useState('')
@@ -405,10 +407,15 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
 
   // Filtered + sorted sales invoices
   const filteredSales = useMemo(() => {
+    const q = saleSearch.toLowerCase().trim()
     const list = invoices.filter(inv => {
       if (saleFilter !== 'all' && inv.status !== saleFilter) return false
       if (saleDueFrom && (inv.due_date ?? '') < saleDueFrom) return false
       if (saleDueTo && (inv.due_date ?? '') > saleDueTo) return false
+      if (q) {
+        const haystack = [inv.invoice_number, inv.billed_to_name ?? '', inv.billed_to_company ?? '', inv.project?.name ?? ''].join(' ').toLowerCase()
+        if (!haystack.includes(q)) return false
+      }
       return true
     })
     return list.sort((a, b) => {
@@ -429,14 +436,19 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
       }
       return saleSortDir === 'asc' ? cmp : -cmp
     })
-  }, [invoices, saleFilter, saleDueFrom, saleDueTo, saleSortCol, saleSortDir])
+  }, [invoices, saleFilter, saleSearch, saleDueFrom, saleDueTo, saleSortCol, saleSortDir])
 
   // Filtered + sorted purchase invoices
   const filteredPo = useMemo(() => {
+    const q = poSearch.toLowerCase().trim()
     const list = purchaseInvoices.filter(inv => {
       if (poFilter !== 'all' && inv.status !== poFilter) return false
       if (poDueFrom && (inv.due_date ?? '') < poDueFrom) return false
       if (poDueTo && (inv.due_date ?? '') > poDueTo) return false
+      if (q) {
+        const haystack = [inv.invoice_number ?? '', inv.supplier ?? '', inv.project?.name ?? ''].join(' ').toLowerCase()
+        if (!haystack.includes(q)) return false
+      }
       return true
     })
     return list.sort((a, b) => {
@@ -457,7 +469,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
       }
       return poSortDir === 'asc' ? cmp : -cmp
     })
-  }, [purchaseInvoices, poFilter, poDueFrom, poDueTo, poSortCol, poSortDir])
+  }, [purchaseInvoices, poFilter, poSearch, poDueFrom, poDueTo, poSortCol, poSortDir])
 
   async function handleNewSalesInvoice() {
     setCreating(true)
@@ -927,6 +939,16 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                 </button>
               ))}
             </div>
+            <div className="relative flex-1 min-w-[180px] max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                value={saleSearch}
+                onChange={e => setSaleSearch(e.target.value)}
+                placeholder="Search invoices…"
+                className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-gray-300 placeholder:text-gray-400"
+              />
+            </div>
             <div className="flex items-center gap-2 ml-auto">
               <span className="text-xs text-gray-400 font-medium">Due date</span>
               <Input
@@ -967,12 +989,29 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                 <thead>
                   <tr className="border-b border-gray-100">
                     {([
-                      { col: 'invoice_number', label: 'Invoice #', align: 'left' },
                       { col: 'billed_to_name', label: 'Billed To', align: 'left' },
                       { col: 'project', label: 'Project', align: 'left' },
+                      { col: 'invoice_number', label: 'Invoice #', align: 'left' },
                       { col: 'issue_date', label: 'Issue Date', align: 'left' },
                       { col: 'due_date', label: 'Due Date', align: 'left' },
                       { col: 'amount', label: 'Amount', align: 'right' },
+                    ] as { col: typeof saleSortCol; label: string; align: string }[]).map(({ col, label, align }) => (
+                      <th
+                        key={col}
+                        onClick={() => toggleSaleSort(col)}
+                        className={cn(
+                          'px-5 py-3 text-xs font-semibold text-gray-500 cursor-pointer select-none hover:text-gray-800 transition-colors whitespace-nowrap',
+                          align === 'right' ? 'text-right' : 'text-left'
+                        )}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          {label}
+                          {saleSortCol === col && (saleSortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                        </span>
+                      </th>
+                    ))}
+                    <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">VAT</th>
+                    {([
                       { col: 'aed', label: 'AED', align: 'right' },
                       { col: 'status', label: 'Status', align: 'left' },
                     ] as { col: typeof saleSortCol; label: string; align: string }[]).map(({ col, label, align }) => (
@@ -994,57 +1033,61 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {filteredSales.map(inv => (
-                    <tr
-                      key={inv.id}
-                      onClick={() => router.push(`/finance/${inv.id}?from=finance`)}
-                      className="hover:bg-gray-50 cursor-pointer transition-colors group"
-                    >
-                      <td className="px-5 py-3 font-medium text-gray-900 whitespace-nowrap">{inv.invoice_number}</td>
-                      <td className="px-5 py-3 text-gray-700 max-w-[180px]">
-                        <div className="truncate">{inv.billed_to_name ?? <span className="text-gray-300">—</span>}</div>
-                        {inv.billed_to_company && <div className="text-xs text-gray-400 truncate">{inv.billed_to_company}</div>}
-                      </td>
-                      <td className="px-5 py-3 text-gray-500 max-w-[140px]">
-                        {inv.project ? (
-                          <Link href={`/projects/${inv.project.id}`} onClick={e => e.stopPropagation()} className="hover:text-gray-900 transition-colors block truncate">
-                            {inv.project.name}
-                          </Link>
-                        ) : <span className="text-gray-300">—</span>}
-                      </td>
-                      <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(inv.issue_date)}</td>
-                      <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(inv.due_date)}</td>
-                      <td className="px-5 py-3 text-right font-medium text-gray-900 whitespace-nowrap">
-                        <div>{formatAmount(inv.currency, invoiceTotal(inv))}</div>
-                        {inv.status === 'partial' && inv.amount_paid > 0 && (
-                          <div className="text-xs mt-0.5 space-x-1">
-                            <span className="text-green-600">{formatAmount(inv.currency, inv.amount_paid)} paid</span>
-                            <span className="text-gray-300">·</span>
-                            <span className="text-amber-600">{formatAmount(inv.currency, invoiceTotal(inv) - inv.amount_paid)} due</span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-5 py-3 text-right text-gray-500 whitespace-nowrap">
-                        {inv.currency === 'AED'
-                          ? <span className="text-gray-300">—</span>
-                          : fmtAed(invoiceTotal(inv) * rateToAed(inv.currency, currencyRates))
-                        }
-                      </td>
-                      <td className="px-5 py-3">
-                        <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', SALE_STATUS_STYLES[inv.status] ?? '')}>
-                          {inv.status}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3">
-                        <button
-                          onClick={e => { e.stopPropagation(); setDeleteSaleTarget(inv) }}
-                          className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredSales.map(inv => {
+                    const subtotal = (inv.line_items ?? []).reduce((s, l) => s + l.rate * l.qty, 0)
+                    const vatAmount = inv.apply_vat ? subtotal * 0.05 : 0
+                    return (
+                      <tr
+                        key={inv.id}
+                        onClick={() => router.push(`/finance/${inv.id}?from=finance`)}
+                        className="hover:bg-gray-50 cursor-pointer transition-colors group"
+                      >
+                        <td className="px-5 py-3 text-gray-700 max-w-[180px]">
+                          <div className="truncate">{inv.billed_to_name ?? <span className="text-gray-300">—</span>}</div>
+                          {inv.billed_to_company && <div className="text-xs text-gray-400 truncate">{inv.billed_to_company}</div>}
+                        </td>
+                        <td className="px-5 py-3 text-gray-500 max-w-[140px]">
+                          {inv.project ? (
+                            <Link href={`/projects/${inv.project.id}`} onClick={e => e.stopPropagation()} className="hover:text-gray-900 transition-colors block truncate">
+                              {inv.project.name}
+                            </Link>
+                          ) : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-5 py-3 font-medium text-gray-900 whitespace-nowrap">{inv.invoice_number}</td>
+                        <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(inv.issue_date)}</td>
+                        <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(inv.due_date)}</td>
+                        <td className="px-5 py-3 text-right font-medium text-gray-900 whitespace-nowrap">
+                          <div>{formatAmount(inv.currency, invoiceTotal(inv))}</div>
+                          {inv.status === 'partial' && inv.amount_paid > 0 && (
+                            <div className="text-xs mt-0.5 space-x-1">
+                              <span className="text-green-600">{formatAmount(inv.currency, inv.amount_paid)} paid</span>
+                              <span className="text-gray-300">·</span>
+                              <span className="text-amber-600">{formatAmount(inv.currency, invoiceTotal(inv) - inv.amount_paid)} due</span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-5 py-3 text-right text-gray-500 whitespace-nowrap">
+                          {vatAmount > 0 ? formatAmount(inv.currency, vatAmount) : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-5 py-3 text-right text-gray-500 whitespace-nowrap">
+                          {fmtAed(invoiceTotal(inv) * rateToAed(inv.currency, currencyRates))}
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', SALE_STATUS_STYLES[inv.status] ?? '')}>
+                            {inv.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <button
+                            onClick={e => { e.stopPropagation(); setDeleteSaleTarget(inv) }}
+                            className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1074,6 +1117,16 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                   {s}
                 </button>
               ))}
+            </div>
+            <div className="relative flex-1 min-w-[180px] max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                value={poSearch}
+                onChange={e => setPoSearch(e.target.value)}
+                placeholder="Search invoices…"
+                className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-gray-300 placeholder:text-gray-400"
+              />
             </div>
             <div className="flex items-center gap-2 ml-auto">
               <span className="text-xs text-gray-400 font-medium">Due date</span>
@@ -1115,12 +1168,29 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                 <thead>
                   <tr className="border-b border-gray-100">
                     {([
-                      { col: 'invoice_number', label: 'Invoice #', align: 'left' },
                       { col: 'supplier', label: 'Supplier', align: 'left' },
                       { col: 'project', label: 'Project', align: 'left' },
+                      { col: 'invoice_number', label: 'Invoice #', align: 'left' },
                       { col: 'issue_date', label: 'Issue Date', align: 'left' },
                       { col: 'due_date', label: 'Due Date', align: 'left' },
                       { col: 'gross_amount', label: 'Gross Amount', align: 'right' },
+                    ] as { col: typeof poSortCol; label: string; align: string }[]).map(({ col, label, align }) => (
+                      <th
+                        key={col}
+                        onClick={() => togglePoSort(col)}
+                        className={cn(
+                          'px-5 py-3 text-xs font-semibold text-gray-500 cursor-pointer select-none hover:text-gray-800 transition-colors whitespace-nowrap',
+                          align === 'right' ? 'text-right' : 'text-left'
+                        )}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          {label}
+                          {poSortCol === col && (poSortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                        </span>
+                      </th>
+                    ))}
+                    <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">VAT</th>
+                    {([
                       { col: 'aed', label: 'AED', align: 'right' },
                       { col: 'status', label: 'Status', align: 'left' },
                     ] as { col: typeof poSortCol; label: string; align: string }[]).map(({ col, label, align }) => (
@@ -1148,9 +1218,6 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                       onClick={() => router.push(`/finance/purchase/${inv.id}`)}
                       className="hover:bg-gray-50 cursor-pointer transition-colors group"
                     >
-                      <td className="px-5 py-3 font-medium text-gray-900 whitespace-nowrap">
-                        {inv.invoice_number || <span className="text-gray-300">—</span>}
-                      </td>
                       <td className="px-5 py-3 text-gray-700 max-w-[180px] truncate">{inv.supplier || <span className="text-gray-300">—</span>}</td>
                       <td className="px-5 py-3 text-gray-500 max-w-[140px]">
                         {inv.project ? (
@@ -1158,6 +1225,9 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                             {inv.project.name}
                           </Link>
                         ) : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-5 py-3 font-medium text-gray-900 whitespace-nowrap">
+                        {inv.invoice_number || <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(inv.issue_date)}</td>
                       <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(inv.due_date)}</td>
@@ -1172,10 +1242,10 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                         )}
                       </td>
                       <td className="px-5 py-3 text-right text-gray-500 whitespace-nowrap">
-                        {inv.currency === 'AED'
-                          ? <span className="text-gray-300">—</span>
-                          : fmtAed(inv.gross_amount * inv.fx_rate)
-                        }
+                        {inv.vat_amount > 0 ? formatAmount(inv.currency, inv.vat_amount) : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-5 py-3 text-right text-gray-500 whitespace-nowrap">
+                        {fmtAed(inv.gross_amount * inv.fx_rate)}
                       </td>
                       <td className="px-5 py-3">
                         <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', PO_STATUS_STYLES[inv.status] ?? '')}>
