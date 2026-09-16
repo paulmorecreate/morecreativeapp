@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Scissors, Camera, Building2, Users2, Receipt, Handshake, CalendarDays, ChevronsLeft, ChevronsRight, Landmark } from 'lucide-react'
+import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Scissors, Camera, Building2, Users2, Receipt, Handshake, CalendarDays, ChevronsLeft, ChevronsRight, Landmark, FileSignature } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { UserRole } from '@/lib/supabase/types'
@@ -127,7 +127,7 @@ export function Sidebar({ onClose, collapsed = false, onToggle }: Props) {
         <div className="space-y-0.5">
           {primaryNav.map(item => <NavLink key={item.href} {...item} />)}
           <NavLink href="/opportunities" label="Opportunities" icon={Handshake} />
-          <NavLink href="/schedule" label="Schedule" icon={CalendarDays} />
+<NavLink href="/schedule" label="Schedule" icon={CalendarDays} />
           {(userRole === 'admin' || userRole === 'finance') && (
             <NavLink href="/finance" label="Finance" icon={Receipt} />
           )}

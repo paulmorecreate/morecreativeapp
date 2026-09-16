@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, Star, AlertTriangle } from 'lucide-react'
-import { Brand, Conversation, Contact, Industry, BrandCategory } from '@/lib/supabase/types'
+import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, Star, AlertTriangle, FileSignature } from 'lucide-react'
+import { Brand, Conversation, Contact, Industry, BrandCategory, Contract } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
@@ -35,6 +35,28 @@ type BrandProject = {
   project: { id: string; name: string; start_date: string | null; location: string | null; status: string; category: string | null } | null
 }
 
+type BrandContract = Pick<Contract, 'id' | 'title' | 'contract_type' | 'status' | 'fee_amount' | 'fee_currency' | 'effective_date' | 'end_date' | 'signed_date' | 'brands_involved'>
+
+const CONTRACT_STATUS_COLORS: Record<string, string> = {
+  draft: 'bg-gray-100 text-gray-600',
+  sent: 'bg-blue-50 text-blue-700',
+  signed: 'bg-purple-50 text-purple-700',
+  active: 'bg-green-50 text-green-700',
+  completed: 'bg-zinc-100 text-zinc-500',
+  terminated: 'bg-red-50 text-red-600',
+}
+
+const CONTRACT_TYPE_LABELS: Record<string, string> = {
+  service_agreement: 'Service Agreement',
+  representation: 'Representation',
+  placement: 'Placement',
+  gifting_seeding: 'Gifting & Seeding',
+  ambassadorship: 'Ambassadorship',
+  nda: 'NDA',
+  talent_deal: 'Talent Deal',
+  other: 'Other',
+}
+
 type Props = {
   brand: Brand
   brandProjects: BrandProject[]
@@ -42,9 +64,10 @@ type Props = {
   contacts: Contact[]
   industries: Industry[]
   brandCategories: BrandCategory[]
+  contracts: BrandContract[]
 }
 
-export function BrandDetailClient({ brand, brandProjects, conversations, contacts, industries, brandCategories }: Props) {
+export function BrandDetailClient({ brand, brandProjects, conversations, contacts, industries, brandCategories, contracts }: Props) {
   const router = useRouter()
 
   const knownCategoryNames = new Set(brandCategories.map(c => c.name))
@@ -375,6 +398,43 @@ export function BrandDetailClient({ brand, brandProjects, conversations, contact
                   </div>
                   {c.content && <p className="text-sm text-gray-700">{c.content}</p>}
                   {c.follow_up && <p className="text-xs text-amber-600 mt-1">↳ {c.follow_up}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Contracts */}
+          <div className="bg-white rounded-xl border border-gray-200">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+                <FileSignature className="w-3.5 h-3.5 text-gray-400" />
+                Contracts
+              </h2>
+              <a href="/contracts" className="text-xs text-gray-400 hover:text-gray-700">View all</a>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {contracts.length === 0 && (
+                <p className="px-5 py-4 text-sm text-gray-400">No contracts linked to this brand.</p>
+              )}
+              {contracts.map(c => (
+                <div key={c.id} className="px-5 py-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-gray-900 truncate">{c.title ?? '—'}</div>
+                      <div className="text-xs text-gray-400 mt-0.5">
+                        {c.contract_type ? CONTRACT_TYPE_LABELS[c.contract_type] ?? c.contract_type : ''}
+                        {c.effective_date && <span> · {formatDate(c.effective_date)}{c.end_date ? ` → ${formatDate(c.end_date)}` : ''}</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {c.fee_amount != null && (
+                        <span className="text-xs text-gray-500">{c.fee_currency} {c.fee_amount.toLocaleString()}</span>
+                      )}
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${CONTRACT_STATUS_COLORS[c.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                        {c.status}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>

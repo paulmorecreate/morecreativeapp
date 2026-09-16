@@ -182,6 +182,35 @@ export interface ProjectCategory {
   created_at: string
 }
 
+export interface Contract {
+  id: string
+  brand_id: string | null
+  talent_id: string | null
+  title: string | null
+  contract_type: string | null
+  status: string
+  client_name: string | null
+  client_email: string | null
+  brands_involved: string[]
+  effective_date: string | null
+  end_date: string | null
+  signed_date: string | null
+  fee_amount: number | null
+  fee_currency: string | null
+  fee_aed_equivalent: number | null
+  payment_terms: string | null
+  services_summary: string | null
+  territory: string | null
+  governing_law: string | null
+  exclusivity: boolean
+  document_url: string | null
+  notes: string | null
+  extracted_text: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Industry {
   id: string
   name: string
