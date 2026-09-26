@@ -37,9 +37,10 @@ type Props = {
   settings: InvoiceSettings
   projects: { id: string; name: string }[]
   returnTo?: string
+  isNew?: boolean
 }
 
-export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, settings, projects, returnTo }: Props) {
+export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, settings, projects, returnTo, isNew }: Props) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -72,7 +73,66 @@ export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, sett
 
   const pdfInvoice: Invoice = { ...invoice, ...form, amount_paid: Number(form.amount_paid) }
 
+  async function createInvoiceAndNavigate(closeAfter: boolean) {
+    setSaving(true)
+    const year = new Date().getFullYear()
+    const { data: last } = await supabase
+      .from('invoices')
+      .select('invoice_number')
+      .ilike('invoice_number', `${year}-%`)
+      .order('invoice_number', { ascending: false })
+      .limit(1)
+      .single()
+    let seq = 1
+    if (last?.invoice_number) {
+      const parts = last.invoice_number.split('-')
+      seq = (parseInt(parts[1] ?? '0', 10) || 0) + 1
+    }
+    const invoice_number = form.invoice_number.trim() || `${year}-${String(seq).padStart(4, '0')}`
+
+    const { data: newInv } = await supabase
+      .from('invoices')
+      .insert({
+        invoice_number,
+        project_id: form.project_id || null,
+        currency: form.currency,
+        apply_vat: form.apply_vat,
+        status: form.status,
+        issue_date: form.issue_date || null,
+        due_date: form.due_date || null,
+        billed_to_name: form.billed_to_name || null,
+        billed_to_company: form.billed_to_company || null,
+        billed_to_address: form.billed_to_address || null,
+        amount_paid: Number(form.amount_paid),
+        notes: form.notes || null,
+      })
+      .select()
+      .single()
+
+    if (!newInv) { setSaving(false); return }
+
+    if (lineItems.length > 0) {
+      await supabase.from('invoice_line_items').insert(
+        lineItems.map((item, i) => ({
+          invoice_id: newInv.id,
+          description: item.description,
+          rate: item.rate,
+          qty: item.qty,
+          sort_order: i,
+        }))
+      )
+    }
+
+    setSaving(false)
+    if (closeAfter) {
+      router.push('/finance?tab=sales')
+    } else {
+      router.push(`/finance/${newInv.id}`)
+    }
+  }
+
   async function handleSave() {
+    if (isNew) { await createInvoiceAndNavigate(false); return }
     setSaving(true)
     await supabase.from('invoices').update({
       invoice_number: form.invoice_number,
@@ -131,6 +191,7 @@ export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, sett
   }
 
   function backUrl() {
+    if (isNew) return '/finance?tab=sales'
     if (returnTo) return returnTo
     return form.project_id ? `/projects/${form.project_id}?tab=finance` : '/finance'
   }
@@ -142,6 +203,7 @@ export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, sett
   }
 
   async function handleSaveAndClose() {
+    if (isNew) { await createInvoiceAndNavigate(true); return }
     await handleSave()
     router.push(backUrl())
   }
@@ -180,13 +242,19 @@ export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, sett
           </span>
         </div>
         <div className="flex items-center gap-2">
-          {/* PDF download */}
-          <InvoicePDFDownload
-            invoice={pdfInvoice}
-            lineItems={lineItems}
-            settings={settings}
-            fileName={`${form.invoice_number}.pdf`}
-          />
+          {isNew && (
+            <span className="text-xs font-medium text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
+              Unsaved
+            </span>
+          )}
+          {!isNew && (
+            <InvoicePDFDownload
+              invoice={pdfInvoice}
+              lineItems={lineItems}
+              settings={settings}
+              fileName={`${form.invoice_number}.pdf`}
+            />
+          )}
           <Button variant="secondary" onClick={handleSaveAndClose} disabled={saving}>
             {saving ? 'Saving…' : 'Save & Close'}
           </Button>
@@ -413,14 +481,16 @@ export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, sett
         </div>
 
         {/* Danger */}
-        <div className="flex justify-end pb-4">
-          <button
-            onClick={() => setConfirmDelete(true)}
-            className="text-xs text-red-400 hover:text-red-600 transition-colors"
-          >
-            Delete invoice
-          </button>
-        </div>
+        {!isNew && (
+          <div className="flex justify-end pb-4">
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="text-xs text-red-400 hover:text-red-600 transition-colors"
+            >
+              Delete invoice
+            </button>
+          </div>
+        )}
       </div>
 
       <Modal open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Delete Invoice">

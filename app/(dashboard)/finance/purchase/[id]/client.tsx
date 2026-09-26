@@ -26,9 +26,10 @@ function fmt(currency: string, amount: number) {
 type Props = {
   invoice: PurchaseInvoice & { project: { id: string; name: string } | null }
   projects: { id: string; name: string }[]
+  isNew?: boolean
 }
 
-export function PurchaseInvoiceDetailClient({ invoice, projects }: Props) {
+export function PurchaseInvoiceDetailClient({ invoice, projects, isNew }: Props) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -58,10 +59,40 @@ export function PurchaseInvoiceDetailClient({ invoice, projects }: Props) {
   const amountRemaining = grossAmount - form.amount_paid
 
   function backTarget() {
+    if (isNew) return '/finance?tab=purchase'
     return form.project_id ? `/projects/${form.project_id}?tab=finance` : '/finance?tab=purchase'
   }
 
+  async function createInvoiceAndNavigate(closeAfter: boolean) {
+    setSaving(true)
+    const amountPaid = form.status === 'partial' ? Number(form.amount_paid) : form.status === 'paid' ? grossAmount : 0
+    const { data: newInv, error } = await supabase.from('purchase_invoices').insert({
+      invoice_number: form.invoice_number,
+      supplier: form.supplier,
+      project_id: form.project_id || null,
+      currency: form.currency,
+      net_amount: Number(form.net_amount),
+      vat_rate: Number(form.vat_rate),
+      vat_amount: vatAmount,
+      gross_amount: grossAmount,
+      fx_rate: Number(form.fx_rate),
+      issue_date: form.issue_date || null,
+      due_date: form.due_date || null,
+      status: form.status,
+      amount_paid: amountPaid,
+      notes: form.notes || null,
+    }).select().single()
+    setSaving(false)
+    if (error || !newInv) return
+    if (closeAfter) {
+      router.push('/finance?tab=purchase')
+    } else {
+      router.push(`/finance/purchase/${newInv.id}`)
+    }
+  }
+
   async function handleSave() {
+    if (isNew) { await createInvoiceAndNavigate(false); return }
     setSaving(true)
     await supabase.from('purchase_invoices').update({
       invoice_number: form.invoice_number,
@@ -93,6 +124,7 @@ export function PurchaseInvoiceDetailClient({ invoice, projects }: Props) {
   }
 
   async function handleSaveAndClose() {
+    if (isNew) { await createInvoiceAndNavigate(true); return }
     await handleSave()
     router.push(backTarget())
   }
@@ -105,9 +137,14 @@ export function PurchaseInvoiceDetailClient({ invoice, projects }: Props) {
           <ArrowLeft className="w-4 h-4" />
         </button>
         <div className="flex-1">
-          <h1 className="text-2xl font-semibold text-gray-900">
-            {form.supplier || <span className="text-gray-300">New Purchase Invoice</span>}
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold text-gray-900">
+              {form.supplier || <span className="text-gray-300">New Purchase Invoice</span>}
+            </h1>
+            {isNew && (
+              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">Unsaved</span>
+            )}
+          </div>
           {form.invoice_number && (
             <p className="text-sm text-gray-400 mt-0.5">{form.invoice_number}</p>
           )}
@@ -284,14 +321,16 @@ export function PurchaseInvoiceDetailClient({ invoice, projects }: Props) {
         </div>
 
         {/* Danger */}
-        <div className="flex justify-end pb-4">
-          <button
-            onClick={() => setConfirmDelete(true)}
-            className="text-xs text-red-400 hover:text-red-600 transition-colors"
-          >
-            Delete invoice
-          </button>
-        </div>
+        {!isNew && (
+          <div className="flex justify-end pb-4">
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="text-xs text-red-400 hover:text-red-600 transition-colors"
+            >
+              Delete invoice
+            </button>
+          </div>
+        )}
       </div>
 
       <Modal open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Delete Purchase Invoice">

@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Receipt, Trash2, X, ExternalLink, Pencil, ChevronUp, ChevronDown, Search } from 'lucide-react'
+import { Plus, Receipt, Trash2, X, ExternalLink, Pencil, ChevronUp, ChevronDown, Search, Copy } from 'lucide-react'
 import { Invoice, PurchaseInvoice, CurrencyRate, AnnualExpense, Salary, OperatingCost } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
@@ -178,10 +178,11 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
   const [saleDueTo, setSaleDueTo] = useState('')
   const [poDueFrom, setPoDueFrom] = useState('')
   const [poDueTo, setPoDueTo] = useState('')
-  const [creating, setCreating] = useState(false)
   const [deleteSaleTarget, setDeleteSaleTarget] = useState<InvoiceRow | null>(null)
   const [deletePoTarget, setDeletePoTarget] = useState<PurchaseInvoiceRow | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [cloningSaleId, setCloningSaleId] = useState<string | null>(null)
+  const [cloningPoId, setCloningPoId] = useState<string | null>(null)
 
   // Annual expenses state
   const [annualExpenses, setAnnualExpenses] = useState<AnnualExpense[]>(initialAnnualExpenses)
@@ -471,8 +472,16 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
     })
   }, [purchaseInvoices, poFilter, poSearch, poDueFrom, poDueTo, poSortCol, poSortDir])
 
-  async function handleNewSalesInvoice() {
-    setCreating(true)
+  function handleNewSalesInvoice() {
+    router.push('/finance/new')
+  }
+
+  function handleNewPurchaseInvoice() {
+    router.push('/finance/purchase/new')
+  }
+
+  async function handleCloneSale(inv: InvoiceRow) {
+    setCloningSaleId(inv.id)
     const supabase = createClient()
     const year = new Date().getFullYear()
     const { data: last } = await supabase
@@ -482,7 +491,6 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
       .order('invoice_number', { ascending: false })
       .limit(1)
       .single()
-
     let seq = 1
     if (last?.invoice_number) {
       const parts = last.invoice_number.split('-')
@@ -490,26 +498,70 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
     }
     const invoice_number = `${year}-${String(seq).padStart(4, '0')}`
 
-    const { data: inv, error } = await supabase
+    const { data: newInv } = await supabase
       .from('invoices')
-      .insert({ invoice_number, status: 'draft' })
+      .insert({
+        invoice_number,
+        project_id: inv.project_id,
+        currency: inv.currency,
+        apply_vat: inv.apply_vat,
+        status: 'draft',
+        billed_to_name: inv.billed_to_name,
+        billed_to_company: inv.billed_to_company,
+        billed_to_address: inv.billed_to_address,
+        notes: inv.notes,
+        amount_paid: 0,
+      })
       .select()
       .single()
 
-    setCreating(false)
-    if (!error && inv) router.push(`/finance/${inv.id}`)
+    if (newInv) {
+      const { data: srcItems } = await supabase
+        .from('invoice_line_items')
+        .select('*')
+        .eq('invoice_id', inv.id)
+        .order('sort_order')
+      if (srcItems && srcItems.length > 0) {
+        await supabase.from('invoice_line_items').insert(
+          srcItems.map((item, i) => ({
+            invoice_id: newInv.id,
+            description: item.description,
+            rate: item.rate,
+            qty: item.qty,
+            sort_order: i,
+          }))
+        )
+      }
+    }
+
+    setCloningSaleId(null)
+    if (newInv) router.push(`/finance/${newInv.id}`)
   }
 
-  async function handleNewPurchaseInvoice() {
-    setCreating(true)
+  async function handleClonePo(inv: PurchaseInvoiceRow) {
+    setCloningPoId(inv.id)
     const supabase = createClient()
-    const { data: inv, error } = await supabase
+    const { data: newInv } = await supabase
       .from('purchase_invoices')
-      .insert({ supplier: '', invoice_number: '', status: 'pending', currency: 'AED', net_amount: 0, vat_rate: 0, vat_amount: 0, gross_amount: 0, fx_rate: 1 })
+      .insert({
+        supplier: inv.supplier,
+        invoice_number: '',
+        project_id: inv.project_id,
+        currency: inv.currency,
+        net_amount: inv.net_amount,
+        vat_rate: inv.vat_rate,
+        vat_amount: inv.vat_amount,
+        gross_amount: inv.gross_amount,
+        fx_rate: inv.fx_rate,
+        status: 'pending',
+        amount_paid: 0,
+        notes: inv.notes,
+      })
       .select()
       .single()
-    setCreating(false)
-    if (!error && inv) router.push(`/finance/purchase/${inv.id}`)
+
+    setCloningPoId(null)
+    if (newInv) router.push(`/finance/purchase/${newInv.id}`)
   }
 
   function openNewAnnual() {
@@ -677,14 +729,14 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
           <p className="text-sm text-gray-500 mt-0.5">Invoices across all projects</p>
         </div>
         {tab === 'sales' ? (
-          <Button onClick={handleNewSalesInvoice} disabled={creating}>
+          <Button onClick={handleNewSalesInvoice}>
             <Plus className="w-3.5 h-3.5" />
-            {creating ? 'Creating…' : 'New Sales Invoice'}
+            New Sales Invoice
           </Button>
         ) : tab === 'purchase' ? (
-          <Button onClick={handleNewPurchaseInvoice} disabled={creating}>
+          <Button onClick={handleNewPurchaseInvoice}>
             <Plus className="w-3.5 h-3.5" />
-            {creating ? 'Creating…' : 'New Purchase Invoice'}
+            New Purchase Invoice
           </Button>
         ) : tab === 'annual' ? (
           <Button onClick={openNewAnnual}>
@@ -1011,31 +1063,23 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                       </th>
                     ))}
                     <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">VAT</th>
-                    {([
-                      { col: 'aed', label: 'AED', align: 'right' },
-                      { col: 'status', label: 'Status', align: 'left' },
-                    ] as { col: typeof saleSortCol; label: string; align: string }[]).map(({ col, label, align }) => (
-                      <th
-                        key={col}
-                        onClick={() => toggleSaleSort(col)}
-                        className={cn(
-                          'px-5 py-3 text-xs font-semibold text-gray-500 cursor-pointer select-none hover:text-gray-800 transition-colors whitespace-nowrap',
-                          align === 'right' ? 'text-right' : 'text-left'
-                        )}
-                      >
-                        <span className="inline-flex items-center gap-1">
-                          {label}
-                          {saleSortCol === col && (saleSortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
-                        </span>
-                      </th>
-                    ))}
-                    <th className="px-3 py-3 w-10" />
+                    <th
+                      onClick={() => toggleSaleSort('aed')}
+                      className="px-5 py-3 text-right text-xs font-semibold text-gray-500 cursor-pointer select-none hover:text-gray-800 transition-colors whitespace-nowrap"
+                    >
+                      <span className="inline-flex items-center gap-1 justify-end">
+                        AED
+                        {saleSortCol === 'aed' && (saleSortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                      </span>
+                    </th>
+                    <th className="px-3 py-3 w-16" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {filteredSales.map(inv => {
                     const subtotal = (inv.line_items ?? []).reduce((s, l) => s + l.rate * l.qty, 0)
                     const vatAmount = inv.apply_vat ? subtotal * 0.05 : 0
+                    const isOverdue = inv.status !== 'received' && inv.status !== 'cancelled' && (daysUntil(inv.due_date) ?? 1) < 0
                     return (
                       <tr
                         key={inv.id}
@@ -1053,37 +1097,50 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                             </Link>
                           ) : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-5 py-3 font-medium text-gray-900 whitespace-nowrap">{inv.invoice_number}</td>
+                        <td className="px-5 py-3 font-medium text-gray-900"><div className="max-w-[90px] truncate" title={inv.invoice_number}>{inv.invoice_number}</div></td>
                         <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(inv.issue_date)}</td>
-                        <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(inv.due_date)}</td>
-                        <td className="px-5 py-3 text-right font-medium text-gray-900 whitespace-nowrap">
-                          <div>{formatAmount(inv.currency, invoiceTotal(inv))}</div>
+                        <td className={cn('px-5 py-3 whitespace-nowrap', isOverdue ? 'text-red-600 font-medium' : 'text-gray-500')}>
+                          {formatDate(inv.due_date)}
+                          {isOverdue && <div className="text-xs font-normal text-red-500">Overdue</div>}
+                        </td>
+                        <td className="px-5 py-3 text-right font-medium text-gray-900">
+                          <div className="whitespace-nowrap">{formatAmount(inv.currency, invoiceTotal(inv))}</div>
                           {inv.status === 'partial' && inv.amount_paid > 0 && (
-                            <div className="text-xs mt-0.5 space-x-1">
-                              <span className="text-green-600">{formatAmount(inv.currency, inv.amount_paid)} paid</span>
-                              <span className="text-gray-300">·</span>
-                              <span className="text-amber-600">{formatAmount(inv.currency, invoiceTotal(inv) - inv.amount_paid)} due</span>
+                            <div className="text-xs mt-0.5">
+                              <div className="text-green-600 whitespace-nowrap">{formatAmount(inv.currency, inv.amount_paid)} paid</div>
+                              <div className="text-amber-600 whitespace-nowrap">{formatAmount(inv.currency, invoiceTotal(inv) - inv.amount_paid)} due</div>
                             </div>
                           )}
                         </td>
                         <td className="px-5 py-3 text-right text-gray-500 whitespace-nowrap">
                           {vatAmount > 0 ? formatAmount(inv.currency, vatAmount) : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-5 py-3 text-right text-gray-500 whitespace-nowrap">
-                          {fmtAed(invoiceTotal(inv) * rateToAed(inv.currency, currencyRates))}
+                        <td className="px-5 py-3 text-right whitespace-nowrap">
+                          <div className="text-gray-500">{fmtAed(invoiceTotal(inv) * rateToAed(inv.currency, currencyRates))}</div>
+                          <div className="mt-1">
+                            <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', SALE_STATUS_STYLES[inv.status] ?? '')}>
+                              {inv.status}
+                            </span>
+                          </div>
                         </td>
-                        <td className="px-5 py-3">
-                          <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', SALE_STATUS_STYLES[inv.status] ?? '')}>
-                            {inv.status}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3">
-                          <button
-                            onClick={e => { e.stopPropagation(); setDeleteSaleTarget(inv) }}
-                            className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                        <td className="px-3 py-3 w-16">
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={e => { e.stopPropagation(); handleCloneSale(inv) }}
+                              disabled={cloningSaleId === inv.id}
+                              className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-40"
+                              title="Clone invoice"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); setDeleteSaleTarget(inv) }}
+                              className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                              title="Delete invoice"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )
@@ -1190,29 +1247,22 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                       </th>
                     ))}
                     <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">VAT</th>
-                    {([
-                      { col: 'aed', label: 'AED', align: 'right' },
-                      { col: 'status', label: 'Status', align: 'left' },
-                    ] as { col: typeof poSortCol; label: string; align: string }[]).map(({ col, label, align }) => (
-                      <th
-                        key={col}
-                        onClick={() => togglePoSort(col)}
-                        className={cn(
-                          'px-5 py-3 text-xs font-semibold text-gray-500 cursor-pointer select-none hover:text-gray-800 transition-colors whitespace-nowrap',
-                          align === 'right' ? 'text-right' : 'text-left'
-                        )}
-                      >
-                        <span className="inline-flex items-center gap-1">
-                          {label}
-                          {poSortCol === col && (poSortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
-                        </span>
-                      </th>
-                    ))}
-                    <th className="px-3 py-3 w-10" />
+                    <th
+                      onClick={() => togglePoSort('aed')}
+                      className="px-5 py-3 text-right text-xs font-semibold text-gray-500 cursor-pointer select-none hover:text-gray-800 transition-colors whitespace-nowrap"
+                    >
+                      <span className="inline-flex items-center gap-1 justify-end">
+                        AED
+                        {poSortCol === 'aed' && (poSortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                      </span>
+                    </th>
+                    <th className="px-3 py-3 w-16" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {filteredPo.map(inv => (
+                  {filteredPo.map(inv => {
+                    const isOverdue = inv.status !== 'paid' && (daysUntil(inv.due_date) ?? 1) < 0
+                    return (
                     <tr
                       key={inv.id}
                       onClick={() => router.push(`/finance/purchase/${inv.id}`)}
@@ -1226,42 +1276,56 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                           </Link>
                         ) : <span className="text-gray-300">—</span>}
                       </td>
-                      <td className="px-5 py-3 font-medium text-gray-900 whitespace-nowrap">
-                        {inv.invoice_number || <span className="text-gray-300">—</span>}
+                      <td className="px-5 py-3 font-medium text-gray-900">
+                        <div className="max-w-[90px] truncate" title={inv.invoice_number ?? ''}>{inv.invoice_number || <span className="text-gray-300">—</span>}</div>
                       </td>
                       <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(inv.issue_date)}</td>
-                      <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(inv.due_date)}</td>
-                      <td className="px-5 py-3 text-right font-medium text-gray-900 whitespace-nowrap">
-                        <div>{formatAmount(inv.currency, inv.gross_amount)}</div>
+                      <td className={cn('px-5 py-3 whitespace-nowrap', isOverdue ? 'text-red-600 font-medium' : 'text-gray-500')}>
+                        {formatDate(inv.due_date)}
+                        {isOverdue && <div className="text-xs font-normal text-red-500">Overdue</div>}
+                      </td>
+                      <td className="px-5 py-3 text-right font-medium text-gray-900">
+                        <div className="whitespace-nowrap">{formatAmount(inv.currency, inv.gross_amount)}</div>
                         {inv.status === 'partial' && inv.amount_paid > 0 && (
-                          <div className="text-xs mt-0.5 space-x-1">
-                            <span className="text-green-600">{formatAmount(inv.currency, inv.amount_paid)} paid</span>
-                            <span className="text-gray-300">·</span>
-                            <span className="text-amber-600">{formatAmount(inv.currency, inv.gross_amount - inv.amount_paid)} due</span>
+                          <div className="text-xs mt-0.5">
+                            <div className="text-green-600 whitespace-nowrap">{formatAmount(inv.currency, inv.amount_paid)} paid</div>
+                            <div className="text-amber-600 whitespace-nowrap">{formatAmount(inv.currency, inv.gross_amount - inv.amount_paid)} due</div>
                           </div>
                         )}
                       </td>
                       <td className="px-5 py-3 text-right text-gray-500 whitespace-nowrap">
                         {inv.vat_amount > 0 ? formatAmount(inv.currency, inv.vat_amount) : <span className="text-gray-300">—</span>}
                       </td>
-                      <td className="px-5 py-3 text-right text-gray-500 whitespace-nowrap">
-                        {fmtAed(inv.gross_amount * inv.fx_rate)}
+                      <td className="px-5 py-3 text-right whitespace-nowrap">
+                        <div className="text-gray-500">{fmtAed(inv.gross_amount * inv.fx_rate)}</div>
+                        <div className="mt-1">
+                          <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', PO_STATUS_STYLES[inv.status] ?? '')}>
+                            {inv.status}
+                          </span>
+                        </div>
                       </td>
-                      <td className="px-5 py-3">
-                        <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', PO_STATUS_STYLES[inv.status] ?? '')}>
-                          {inv.status}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3">
-                        <button
-                          onClick={e => { e.stopPropagation(); setDeletePoTarget(inv) }}
-                          className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                      <td className="px-3 py-3 w-16">
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={e => { e.stopPropagation(); handleClonePo(inv) }}
+                            disabled={cloningPoId === inv.id}
+                            className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-40"
+                            title="Clone invoice"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={e => { e.stopPropagation(); setDeletePoTarget(inv) }}
+                            className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                            title="Delete invoice"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
