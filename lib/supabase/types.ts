@@ -12,10 +12,23 @@ export interface Talent {
   email: string | null
   phone: string | null
   notes: string | null
+  city: string | null
+  nationality: string | null
+  languages: string[] | null
+  height: string | null
+  skills: string[] | null
+  exclusivity: string | null
+  ai_profile: string | null
   created_by: string | null
   updated_by: string | null
   created_at: string
   updated_at: string
+}
+
+export interface TalentSkill {
+  id: string
+  name: string
+  created_at: string
 }
 
 export interface TalentLevel {

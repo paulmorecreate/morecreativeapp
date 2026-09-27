@@ -18,6 +18,7 @@ export default async function AdminPage() {
     { data: talentCategories },
     { data: brandCategories },
     { data: talentLevels },
+    { data: talentSkills },
     { data: invoiceSettings },
     { data: expenseCategories },
     { data: currencyRates },
@@ -30,6 +31,7 @@ export default async function AdminPage() {
     supabase.from('talent_categories').select('*').order('name'),
     supabase.from('brand_categories').select('*').order('name'),
     supabase.from('talent_levels').select('*').order('name'),
+    supabase.from('talent_skills').select('*').order('name'),
     supabase.from('invoice_settings').select('*').limit(1).single(),
     supabase.from('expense_categories').select('*').order('name'),
     supabase.from('currency_rates').select('*').order('currency'),
@@ -49,6 +51,7 @@ export default async function AdminPage() {
       talentCategories={talentCategories ?? []}
       brandCategories={brandCategories ?? []}
       talentLevels={talentLevels ?? []}
+      talentSkills={talentSkills ?? []}
       invoiceSettings={invoiceSettings ?? null}
       expenseCategories={expenseCategories ?? []}
       currencyRates={currencyRates ?? []}

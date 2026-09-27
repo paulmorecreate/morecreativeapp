@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, AlertTriangle } from 'lucide-react'
-import { Talent, TalentEventDetail, Conversation, TalentCategory, TalentLevel } from '@/lib/supabase/types'
+import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, AlertTriangle, Sparkles, X } from 'lucide-react'
+import { Talent, TalentEventDetail, Conversation, TalentCategory, TalentLevel, TalentSkill } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
@@ -58,12 +58,15 @@ type Props = {
   agentTypes: { id: string; name: string }[]
   allAgencies: { id: string; name: string }[]
   talentLevels: TalentLevel[]
+  talentSkills: TalentSkill[]
 }
 
-export function TalentDetailClient({ talent, talentProjects, eventDetails, conversations, agentLinks, stylistLinks, personLinks, talentCategories, allAgents, allStylists, allPeople, agentTypes, allAgencies, talentLevels }: Props) {
+export function TalentDetailClient({ talent, talentProjects, eventDetails, conversations, agentLinks, stylistLinks, personLinks, talentCategories, allAgents, allStylists, allPeople, agentTypes, allAgencies, talentLevels, talentSkills }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [generatingProfile, setGeneratingProfile] = useState(false)
+  const [langInput, setLangInput] = useState('')
   const [logConvoOpen, setLogConvoOpen] = useState(false)
   const [editConvo, setEditConvo] = useState<Conversation | null>(null)
   const [convoSaving, setConvoSaving] = useState(false)
@@ -101,6 +104,12 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
     ig_followers: talent.ig_followers ?? '', tiktok_followers: talent.tiktok_followers ?? '',
     category: talent.category ?? '', talent_level: talent.talent_level ?? '',
     country: talent.country ?? '', email: talent.email ?? '', phone: talent.phone ?? '', notes: talent.notes ?? '',
+    city: talent.city ?? '', nationality: talent.nationality ?? '',
+    languages: talent.languages ?? [] as string[],
+    height: talent.height ?? '',
+    skills: talent.skills ?? [] as string[],
+    exclusivity: talent.exclusivity ?? '',
+    ai_profile: talent.ai_profile ?? '',
   })
 
   const categoryOpts = talentCategories.map(c => ({ value: c.name, label: c.name }))
@@ -137,9 +146,27 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
       ig_followers: form.ig_followers || null, tiktok_followers: form.tiktok_followers || null,
       category: form.category || null, talent_level: form.talent_level || null,
       country: form.country || null, email: form.email || null, phone: form.phone || null, notes: form.notes || null,
+      city: form.city || null, nationality: form.nationality || null,
+      languages: form.languages.length ? form.languages : [],
+      height: form.height || null,
+      skills: form.skills.length ? form.skills : [],
+      exclusivity: form.exclusivity || null,
+      ai_profile: form.ai_profile || null,
       updated_by: by, updated_at: new Date().toISOString(),
     }).eq('id', talent.id)
     setSaving(false); setOpen(false); router.refresh()
+  }
+
+  async function generateProfile() {
+    setGeneratingProfile(true)
+    const res = await fetch('/api/ai/generate-profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ talentId: talent.id }),
+    })
+    const data = await res.json()
+    if (data.profile) setForm(f => ({ ...f, ai_profile: data.profile }))
+    setGeneratingProfile(false)
   }
 
   function convoField(k: keyof typeof convoForm) {
@@ -262,7 +289,26 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
             <dl className="space-y-3">
               <div><dt className="text-xs text-gray-400 mb-0.5">Category</dt><dd><Badge value={talent.category} /></dd></div>
               <div><dt className="text-xs text-gray-400 mb-0.5">Talent Level</dt><dd className="text-sm text-gray-900">{talent.talent_level ?? <span className="text-gray-300">—</span>}</dd></div>
+              <div><dt className="text-xs text-gray-400 mb-0.5">Nationality</dt><dd className="text-sm text-gray-900">{talent.nationality ?? <span className="text-gray-300">—</span>}</dd></div>
+              <div><dt className="text-xs text-gray-400 mb-0.5">City</dt><dd className="text-sm text-gray-900">{talent.city ?? <span className="text-gray-300">—</span>}</dd></div>
               <div><dt className="text-xs text-gray-400 mb-0.5">Country</dt><dd className="text-sm text-gray-900">{talent.country ?? <span className="text-gray-300">—</span>}</dd></div>
+              <div><dt className="text-xs text-gray-400 mb-0.5">Height</dt><dd className="text-sm text-gray-900">{talent.height ?? <span className="text-gray-300">—</span>}</dd></div>
+              {talent.languages && talent.languages.length > 0 && (
+                <div>
+                  <dt className="text-xs text-gray-400 mb-1.5">Languages</dt>
+                  <dd className="flex flex-wrap gap-1">
+                    {talent.languages.map(l => <span key={l} className="px-2 py-0.5 text-xs rounded-full bg-blue-50 text-blue-700 font-medium">{l}</span>)}
+                  </dd>
+                </div>
+              )}
+              {talent.skills && talent.skills.length > 0 && (
+                <div>
+                  <dt className="text-xs text-gray-400 mb-1.5">Skills</dt>
+                  <dd className="flex flex-wrap gap-1">
+                    {talent.skills.map(s => <span key={s} className="px-2 py-0.5 text-xs rounded-full bg-purple-50 text-purple-700 font-medium">{s}</span>)}
+                  </dd>
+                </div>
+              )}
               <div><dt className="text-xs text-gray-400 mb-0.5">Email</dt><dd className="text-sm text-gray-900">{talent.email ? <a href={`mailto:${talent.email}`} className="hover:underline">{talent.email}</a> : <span className="text-gray-300">—</span>}</dd></div>
               <div><dt className="text-xs text-gray-400 mb-0.5">Phone</dt><dd className="text-sm text-gray-900">{talent.phone ?? <span className="text-gray-300">—</span>}</dd></div>
               <div>
@@ -341,10 +387,27 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
             </div>
           </div>
 
+          {talent.exclusivity && (
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Exclusivity</h2>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">{talent.exclusivity}</p>
+            </div>
+          )}
+
           {talent.notes && (
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Notes</h2>
               <p className="text-sm text-gray-700 whitespace-pre-wrap">{talent.notes}</p>
+            </div>
+          )}
+
+          {talent.ai_profile && (
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="w-3.5 h-3.5 text-violet-500" />
+                <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">AI Profile</h2>
+              </div>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{talent.ai_profile}</p>
             </div>
           )}
         </div>
@@ -556,6 +619,69 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
             <div className="space-y-1.5"><label className="text-xs font-medium text-gray-700">Talent Level</label><Select value={form.talent_level} onChange={field('talent_level')} options={levelOpts} placeholder="Select…" /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5"><label className="text-xs font-medium text-gray-700">Nationality</label><Input value={form.nationality} onChange={field('nationality')} placeholder="e.g. Brazilian" /></div>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-gray-700">City</label><Input value={form.city} onChange={field('city')} placeholder="e.g. Dubai" /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5"><label className="text-xs font-medium text-gray-700">Country</label><Select value={form.country} onChange={field('country')} options={COUNTRIES} placeholder="Select…" /></div>
+            <div className="space-y-1.5"><label className="text-xs font-medium text-gray-700">Height</label><Input value={form.height} onChange={field('height')} placeholder="e.g. 5'11 / 180cm" /></div>
+          </div>
+          {/* Languages tag input */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Languages</label>
+            <div className="flex flex-wrap gap-1.5 mb-1.5">
+              {form.languages.map(lang => (
+                <span key={lang} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-blue-50 text-blue-700 font-medium">
+                  {lang}
+                  <button type="button" onClick={() => setForm(f => ({ ...f, languages: f.languages.filter(l => l !== lang) }))} className="hover:text-blue-900"><X className="w-3 h-3" /></button>
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={langInput}
+                onChange={e => setLangInput(e.target.value)}
+                onKeyDown={e => {
+                  if ((e.key === 'Enter' || e.key === ',') && langInput.trim()) {
+                    e.preventDefault()
+                    const val = langInput.trim()
+                    if (!form.languages.includes(val)) setForm(f => ({ ...f, languages: [...f.languages, val] }))
+                    setLangInput('')
+                  }
+                }}
+                placeholder="Type a language and press Enter…"
+              />
+              <Button type="button" variant="secondary" onClick={() => {
+                if (langInput.trim() && !form.languages.includes(langInput.trim())) {
+                  setForm(f => ({ ...f, languages: [...f.languages, langInput.trim()] }))
+                  setLangInput('')
+                }
+              }}>Add</Button>
+            </div>
+          </div>
+          {/* Skills multi-select */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Skills</label>
+            <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2.5">
+              {talentSkills.map(skill => {
+                const checked = form.skills.includes(skill.name)
+                return (
+                  <button
+                    key={skill.id}
+                    type="button"
+                    onClick={() => setForm(f => ({
+                      ...f,
+                      skills: checked ? f.skills.filter(s => s !== skill.name) : [...f.skills, skill.name]
+                    }))}
+                    className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${checked ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300'}`}
+                  >
+                    {skill.name}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5"><label className="text-xs font-medium text-gray-700">Email</label><Input type="email" value={form.email} onChange={field('email')} placeholder="email@example.com" /></div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-gray-700">Phone</label><Input value={form.phone} onChange={field('phone')} placeholder="+1 555 000 0000" /></div>
           </div>
@@ -567,8 +693,24 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
             <div className="space-y-1.5"><label className="text-xs font-medium text-gray-700">IG Followers</label><Input value={form.ig_followers} onChange={field('ig_followers')} placeholder="e.g. 250K" /></div>
             <div className="space-y-1.5"><label className="text-xs font-medium text-gray-700">TikTok Followers</label><Input value={form.tiktok_followers} onChange={field('tiktok_followers')} placeholder="e.g. 1.2M" /></div>
           </div>
-          <div className="space-y-1.5"><label className="text-xs font-medium text-gray-700">Country</label><Select value={form.country} onChange={field('country')} options={COUNTRIES} placeholder="Select…" /></div>
+          <div className="space-y-1.5"><label className="text-xs font-medium text-gray-700">Exclusivity notes</label><Textarea value={form.exclusivity} onChange={field('exclusivity')} rows={2} placeholder="Any exclusivity restrictions or brand conflicts…" /></div>
           <div className="space-y-1.5"><label className="text-xs font-medium text-gray-700">Notes</label><Textarea value={form.notes} onChange={field('notes')} rows={3} /></div>
+          {/* AI Profile */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-gray-700 flex items-center gap-1.5"><Sparkles className="w-3 h-3 text-violet-500" /> AI Profile</label>
+              <button
+                type="button"
+                onClick={generateProfile}
+                disabled={generatingProfile}
+                className="inline-flex items-center gap-1 text-xs text-violet-600 hover:text-violet-800 disabled:opacity-50"
+              >
+                <Sparkles className="w-3 h-3" />
+                {generatingProfile ? 'Generating…' : 'Generate'}
+              </button>
+            </div>
+            <Textarea value={form.ai_profile} onChange={field('ai_profile')} rows={4} placeholder="A short paragraph describing this talent for AI-assisted brief matching…" />
+          </div>
           <div className="flex gap-3 pt-1">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)} className="flex-1">Cancel</Button>
             <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Saving…' : 'Save Changes'}</Button>

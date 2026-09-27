@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, Trash2, KeyRound, X, ChevronDown, LockKeyhole, LockKeyholeOpen, Download } from 'lucide-react'
-import { ProjectCategory, Industry, AgentType, TalentCategory, BrandCategory, TalentLevel, InvoiceSettings, UserRole, ExpenseCategory, CurrencyRate } from '@/lib/supabase/types'
+import { ProjectCategory, Industry, AgentType, TalentCategory, BrandCategory, TalentLevel, TalentSkill, InvoiceSettings, UserRole, ExpenseCategory, CurrencyRate } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Textarea } from '@/components/ui/input'
 import { createClient } from '@/lib/supabase/client'
@@ -50,6 +50,7 @@ type Props = {
   talentCategories: TalentCategory[]
   brandCategories: BrandCategory[]
   talentLevels: TalentLevel[]
+  talentSkills: TalentSkill[]
   invoiceSettings: InvoiceSettings | null
   expenseCategories: ExpenseCategory[]
   currencyRates: CurrencyRate[]
@@ -1079,7 +1080,7 @@ function DiagnosticsSection() {
   )
 }
 
-export function AdminClient({ categories, industries, agentTypes, talentCategories, brandCategories, talentLevels, invoiceSettings, expenseCategories, currencyRates, isAdmin, canViewFinance, loginAudit, recordAudit }: Props) {
+export function AdminClient({ categories, industries, agentTypes, talentCategories, brandCategories, talentLevels, talentSkills, invoiceSettings, expenseCategories, currencyRates, isAdmin, canViewFinance, loginAudit, recordAudit }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const [activeTab, setActiveTab] = useState<Tab>('users')
@@ -1118,6 +1119,8 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
   async function deleteBrandCategory(id: string) { await supabase.from('brand_categories').delete().eq('id', id); router.refresh() }
   async function addTalentLevel(name: string) { await supabase.from('talent_levels').insert({ name }); router.refresh() }
   async function deleteTalentLevel(id: string) { await supabase.from('talent_levels').delete().eq('id', id); router.refresh() }
+  async function addTalentSkill(name: string) { await supabase.from('talent_skills').insert({ name }); router.refresh() }
+  async function deleteTalentSkill(id: string) { await supabase.from('talent_skills').delete().eq('id', id); router.refresh() }
   async function addExpenseCategory(name: string) { await supabase.from('expense_categories').insert({ name }); router.refresh() }
   async function deleteExpenseCategory(id: string) { await supabase.from('expense_categories').delete().eq('id', id); router.refresh() }
 
@@ -1157,6 +1160,7 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
           <StaticList title="Talent Categories" description="Category dropdown on talents." items={talentCategories} onAdd={addTalentCategory} onDelete={deleteTalentCategory} />
           <StaticList title="Brand Categories" description="Category dropdown on brands." items={brandCategories} onAdd={addBrandCategory} onDelete={deleteBrandCategory} />
           <StaticList title="Talent Levels" description="Talent level dropdown on talents." items={talentLevels} onAdd={addTalentLevel} onDelete={deleteTalentLevel} />
+          <StaticList title="Talent Skills" description="Skills multi-select on talent profiles (used for AI brief matching)." items={talentSkills} onAdd={addTalentSkill} onDelete={deleteTalentSkill} />
           <StaticList title="Expense Categories" description="Category dropdown on expenses." items={expenseCategories} onAdd={addExpenseCategory} onDelete={deleteExpenseCategory} />
         </div>
       )}
