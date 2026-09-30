@@ -233,21 +233,30 @@ function TextCell({ value, onChange, placeholder }: {
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export function BankingClient({ transactions: initialTransactions, openingBalances: initialOpeningBalances, fxRates, rules: initialRules, categories: initialCategories, initialTab }: Props) {
+export function BankingClient({ transactions: initialTransactions, openingBalances: initialOpeningBalances, fxRates: initialFxRates, rules: initialRules, categories: initialCategories, initialTab }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>(initialTab)
   const [transactions, setTransactions] = useState<BankTransaction[]>(initialTransactions)
   const [openingBalances, setOpeningBalances] = useState<BankOpeningBalance[]>(initialOpeningBalances)
+  const [fxRates, setFxRates] = useState<MonthlyFxRate[]>(initialFxRates)
   const [rules, setRules] = useState<BankCategorisationRule[]>(initialRules)
   const [categories, setCategories] = useState<BankAccountingCategory[]>(initialCategories)
   const [newCatName, setNewCatName] = useState('')
   const [newCatType, setNewCatType] = useState<BankAccountingCategory['ledger_type']>('expense')
   const [catSaving, setCatSaving] = useState(false)
+  const [newFxYear, setNewFxYear] = useState(() => new Date().getFullYear())
+  const [newFxMonth, setNewFxMonth] = useState(() => new Date().getMonth() + 1)
+  const [newFxRate, setNewFxRate] = useState('')
+  const [fxSaving, setFxSaving] = useState(false)
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null)
   const [tbYear, setTbYear] = useState(new Date().getFullYear())
   const [rememberPrompt, setRememberPrompt] = useState<RememberPrompt | null>(null)
   const [rememberPattern, setRememberPattern] = useState('')
   const [ruleSaving, setRuleSaving] = useState(false)
+  const [newRulePattern, setNewRulePattern] = useState('')
+  const [newRuleCategory, setNewRuleCategory] = useState('')
+  const [newRuleType, setNewRuleType] = useState('')
+  const [newRuleSaving, setNewRuleSaving] = useState(false)
 
   // Upload state
   const [uploading, setUploading] = useState(false)
@@ -369,6 +378,21 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
   const eurAccounts = useMemo(() => [...new Set(transactions.filter(t => t.currency === 'EUR').map(t => t.account_number))].sort(), [transactions])
 
   const aedNeedsReviewCount = useMemo(() => transactions.filter(t => t.currency === 'AED' && !t.accounting_category).length, [transactions])
+
+  // Months that have EUR transactions but no proper FX rate (rate=1 means missing)
+  const eurMissingRateMonths = useMemo(() => {
+    const monthsWithBadRate = new Map<string, { year: number; month: number; count: number }>()
+    for (const t of transactions) {
+      if (t.currency !== 'EUR') continue
+      if (t.fx_rate_to_aed !== 1) continue
+      const key = `${t.date.slice(0, 7)}`
+      const year = Number(t.date.slice(0, 4))
+      const month = Number(t.date.slice(5, 7))
+      const existing = monthsWithBadRate.get(key)
+      monthsWithBadRate.set(key, { year, month, count: (existing?.count ?? 0) + 1 })
+    }
+    return Array.from(monthsWithBadRate.values()).sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month)
+  }, [transactions])
   const eurNeedsReviewCount = useMemo(() => transactions.filter(t => t.currency === 'EUR' && !t.accounting_category).length, [transactions])
   const aedMissingDocCount = useMemo(() => transactions.filter(t => t.currency === 'AED' && t.accounting_category && t.document_status === 'Missing').length, [transactions])
   const eurMissingDocCount = useMemo(() => transactions.filter(t => t.currency === 'EUR' && t.accounting_category && t.document_status === 'Missing').length, [transactions])
@@ -535,6 +559,29 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
     setRules(prev => prev.filter(r => r.id !== id))
   }
 
+  async function handleAddRule() {
+    const pattern = newRulePattern.trim()
+    const category = newRuleCategory.trim()
+    if (!pattern || !category) return
+    setNewRuleSaving(true)
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('bank_categorisation_rules')
+      .upsert(
+        { pattern, accounting_category: category, transaction_type: newRuleType || null, document_required: null },
+        { onConflict: 'pattern', ignoreDuplicates: false }
+      )
+      .select()
+      .single()
+    setNewRuleSaving(false)
+    if (!error && data) {
+      setRules(prev => [data as BankCategorisationRule, ...prev.filter(r => r.pattern !== pattern)])
+      setNewRulePattern('')
+      setNewRuleCategory('')
+      setNewRuleType('')
+    }
+  }
+
   async function handleAddCategory() {
     const name = newCatName.trim()
     if (!name) return
@@ -558,6 +605,33 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
     const supabase = createClient()
     await supabase.from('bank_accounting_categories').delete().eq('id', id)
     setCategories(prev => prev.filter(c => c.id !== id))
+  }
+
+  async function handleAddFxRate() {
+    const rate = parseFloat(newFxRate)
+    if (!rate || rate <= 0) return
+    if (fxRates.some(r => r.year === newFxYear && r.month === newFxMonth && r.currency === 'EUR')) return
+    setFxSaving(true)
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('monthly_fx_rates')
+      .insert({ year: newFxYear, month: newFxMonth, currency: 'EUR', rate_to_aed: rate })
+      .select()
+      .single()
+    setFxSaving(false)
+    if (!error && data) {
+      setFxRates(prev => [...prev, data as MonthlyFxRate].sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month))
+      setNewFxRate('')
+      // Auto-advance to next month for fast entry
+      if (newFxMonth === 12) { setNewFxMonth(1); setNewFxYear(y => y + 1) }
+      else setNewFxMonth(m => m + 1)
+    }
+  }
+
+  async function handleDeleteFxRate(id: string) {
+    const supabase = createClient()
+    await supabase.from('monthly_fx_rates').delete().eq('id', id)
+    setFxRates(prev => prev.filter(r => r.id !== id))
   }
 
   // ── Transaction table ──────────────────────────────────────────────────────
@@ -991,43 +1065,82 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
           )}
 
           {/* Auto-categorisation rules */}
-          {rules.length > 0 && (
-            <div className="mt-6">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Saved Categorisation Rules</p>
-              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-gray-100">
-                      <th className="px-4 py-2.5 text-left font-semibold text-gray-500">Pattern</th>
-                      <th className="px-4 py-2.5 text-left font-semibold text-gray-500">Category</th>
-                      <th className="px-4 py-2.5 text-left font-semibold text-gray-500">Type</th>
-                      <th className="px-4 py-2.5 w-10" />
+          <div className="mt-6">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Saved Categorisation Rules</p>
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="px-4 py-2.5 text-left font-semibold text-gray-500">Pattern</th>
+                    <th className="px-4 py-2.5 text-left font-semibold text-gray-500">Category</th>
+                    <th className="px-4 py-2.5 text-left font-semibold text-gray-500">Type</th>
+                    <th className="px-4 py-2.5 w-10" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {rules.map(r => (
+                    <tr key={r.id} className="hover:bg-gray-50 group">
+                      <td className="px-4 py-2 font-mono text-gray-700">{r.pattern}</td>
+                      <td className="px-4 py-2 text-gray-700">{r.accounting_category}</td>
+                      <td className="px-4 py-2 text-gray-400">{r.transaction_type ?? '—'}</td>
+                      <td className="px-4 py-2">
+                        <button
+                          onClick={() => handleDeleteRule(r.id)}
+                          className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {rules.map(r => (
-                      <tr key={r.id} className="hover:bg-gray-50 group">
-                        <td className="px-4 py-2 font-mono text-gray-700">{r.pattern}</td>
-                        <td className="px-4 py-2 text-gray-700">{r.accounting_category}</td>
-                        <td className="px-4 py-2 text-gray-400">{r.transaction_type ?? '—'}</td>
-                        <td className="px-4 py-2">
-                          <button
-                            onClick={() => handleDeleteRule(r.id)}
-                            className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <p className="px-4 py-2 text-[10px] text-gray-400 border-t border-gray-100">
-                  Rules are applied automatically when importing new bank statements.
-                </p>
-              </div>
+                  ))}
+                  <tr className="border-t border-gray-100 bg-gray-50">
+                    <td className="px-4 py-2">
+                      <input
+                        type="text"
+                        value={newRulePattern}
+                        onChange={e => setNewRulePattern(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleAddRule()}
+                        placeholder="Keyword, e.g. Uber"
+                        className="w-full text-xs bg-transparent focus:outline-none placeholder:text-gray-400 font-mono"
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <select
+                        value={newRuleCategory}
+                        onChange={e => setNewRuleCategory(e.target.value)}
+                        className="text-xs bg-white border border-gray-200 rounded px-2 py-1 focus:outline-none w-full"
+                      >
+                        <option value="">— category —</option>
+                        {categoryNames.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-4 py-2">
+                      <select
+                        value={newRuleType}
+                        onChange={e => setNewRuleType(e.target.value)}
+                        className="text-xs bg-white border border-gray-200 rounded px-2 py-1 focus:outline-none w-full"
+                      >
+                        <option value="">— type —</option>
+                        {TRANSACTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-4 py-2">
+                      <button
+                        onClick={handleAddRule}
+                        disabled={newRuleSaving || !newRulePattern.trim() || !newRuleCategory}
+                        className="text-gray-400 hover:text-green-600 disabled:opacity-30 transition-colors"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="px-4 py-2 text-[10px] text-gray-400 border-t border-gray-100">
+                Rules are applied automatically when importing new bank statements. Pattern matching is case-insensitive and checks anywhere in the description.
+              </p>
             </div>
-          )}
+          </div>
 
           {/* Accounting Categories */}
           <div className="mt-6">
@@ -1108,35 +1221,85 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
             </div>
           </div>
 
-          {/* FX Rates reference */}
-          {fxRates.length > 0 && (
-            <div className="mt-6">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">EUR → AED Monthly Rates</p>
-              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-gray-100">
-                      <th className="px-4 py-2.5 text-left font-semibold text-gray-500">Month</th>
-                      <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Rate</th>
+          {/* FX Rates */}
+          <div className="mt-6">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">EUR → AED Monthly Rates</p>
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="px-4 py-2.5 text-left font-semibold text-gray-500">Month</th>
+                    <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Rate (to AED)</th>
+                    <th className="px-4 py-2.5 w-10" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {fxRates.map(r => (
+                    <tr key={r.id} className="hover:bg-gray-50 group">
+                      <td className="px-4 py-2 text-gray-700">
+                        {new Date(r.year, r.month - 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+                      </td>
+                      <td className="px-4 py-2 text-right font-mono text-gray-700">{r.rate_to_aed}</td>
+                      <td className="px-4 py-2">
+                        <button
+                          onClick={() => handleDeleteFxRate(r.id)}
+                          className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {fxRates.map(r => (
-                      <tr key={r.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 text-gray-700">
-                          {new Date(r.year, r.month - 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
-                        </td>
-                        <td className="px-4 py-2 text-right font-mono text-gray-700">{r.rate_to_aed}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <p className="px-4 py-2 text-[10px] text-gray-400 border-t border-gray-100">
-                  Monthly average rates. Missing a month? Contact your admin to add it.
-                </p>
-              </div>
+                  ))}
+                  <tr className="border-t border-gray-100 bg-gray-50">
+                    <td className="px-4 py-2">
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          value={newFxMonth}
+                          onChange={e => setNewFxMonth(Number(e.target.value))}
+                          className="text-xs bg-white border border-gray-200 rounded px-2 py-1 focus:outline-none"
+                        >
+                          {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m, i) => (
+                            <option key={i + 1} value={i + 1}>{m}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          value={newFxYear}
+                          onChange={e => setNewFxYear(Number(e.target.value))}
+                          className="text-xs bg-white border border-gray-200 rounded px-2 py-1 w-16 focus:outline-none"
+                          min={2020}
+                          max={2040}
+                        />
+                      </div>
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="number"
+                        step="0.0001"
+                        value={newFxRate}
+                        onChange={e => setNewFxRate(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleAddFxRate()}
+                        placeholder="e.g. 3.9842"
+                        className="text-xs bg-transparent focus:outline-none placeholder:text-gray-400 text-right w-full font-mono"
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <button
+                        onClick={handleAddFxRate}
+                        disabled={fxSaving || !newFxRate.trim()}
+                        className="text-gray-400 hover:text-green-600 disabled:opacity-30 transition-colors"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="px-4 py-2 text-[10px] text-gray-400 border-t border-gray-100">
+                Monthly average EUR → AED rates. After saving, the month auto-advances for quick entry.
+              </p>
             </div>
-          )}
+          </div>
         </div>
       )}
 
@@ -1156,18 +1319,35 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
 
       {/* ── EUR Transactions tab ────────────────────────────────────────────── */}
       {tab === 'eur' && (
-        <TxTable
-          rows={eurTxFiltered}
-          showFilters
-          showBalance
-          balanceCurrency="EUR"
-          showAedEquiv={false}
-          showAedBalance
-          showAedNet
-          availableAccounts={eurAccounts}
-          needsReview={eurNeedsReviewCount}
-          missingDoc={eurMissingDocCount}
-        />
+        <div>
+          {eurMissingRateMonths.length > 0 && (
+            <div className="mb-4 bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 flex items-start gap-3">
+              <AlertCircle className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-orange-800">AED equivalents are wrong for {eurMissingRateMonths.length} month{eurMissingRateMonths.length !== 1 ? 's' : ''} — FX rate missing</p>
+                <p className="text-xs text-orange-600 mt-0.5">
+                  {eurMissingRateMonths.map(m => {
+                    const label = new Date(m.year, m.month - 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+                    return `${label} (${m.count} tx)`
+                  }).join(' · ')}
+                  {' '}— add the rate on the Upload tab, then ask Claude to backfill.
+                </p>
+              </div>
+            </div>
+          )}
+          <TxTable
+            rows={eurTxFiltered}
+            showFilters
+            showBalance
+            balanceCurrency="EUR"
+            showAedEquiv={false}
+            showAedBalance
+            showAedNet
+            availableAccounts={eurAccounts}
+            needsReview={eurNeedsReviewCount}
+            missingDoc={eurMissingDocCount}
+          />
+        </div>
       )}
 
       {/* ── Expense Ledger tab ──────────────────────────────────────────────── */}
