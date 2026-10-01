@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Scissors, Camera, Building2, Users2, Receipt, Handshake, CalendarDays, ChevronsLeft, ChevronsRight, Landmark, FileSignature } from 'lucide-react'
+import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Scissors, Camera, Building2, Users2, Receipt, Handshake, CalendarDays, ChevronsLeft, ChevronsRight, Landmark, FileSignature, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { UserRole } from '@/lib/supabase/types'
@@ -28,9 +28,10 @@ type Props = {
   onClose?: () => void
   collapsed?: boolean
   onToggle?: () => void
+  onSearch?: () => void
 }
 
-export function Sidebar({ onClose, collapsed = false, onToggle }: Props) {
+export function Sidebar({ onClose, collapsed = false, onToggle, onSearch }: Props) {
   const pathname = usePathname()
   const router = useRouter()
   const [userEmail, setUserEmail] = useState<string | null>(null)
@@ -124,6 +125,24 @@ export function Sidebar({ onClose, collapsed = false, onToggle }: Props) {
 
       {/* Nav */}
       <nav className="flex-1 px-2 py-3 overflow-y-auto">
+        {/* Search */}
+        <div className="mb-2">
+          <button
+            onClick={() => { onClose?.(); onSearch?.() }}
+            title={collapsed ? 'Search (⌘K)' : undefined}
+            className={cn(
+              'flex items-center w-full rounded-lg text-sm text-zinc-400 hover:text-white hover:bg-white/5 transition-all',
+              collapsed ? 'justify-center p-2.5' : 'gap-2.5 px-3 py-2'
+            )}
+          >
+            <Search className="w-4 h-4 shrink-0" />
+            {!collapsed && <span className="flex-1 text-left">Search</span>}
+            {!collapsed && (
+              <kbd className="text-[10px] text-zinc-600 bg-zinc-800 px-1.5 py-0.5 rounded font-mono leading-none">⌘K</kbd>
+            )}
+          </button>
+        </div>
+
         <div className="space-y-0.5">
           {primaryNav.map(item => <NavLink key={item.href} {...item} />)}
           <NavLink href="/opportunities" label="Opportunities" icon={Handshake} />

@@ -5,10 +5,12 @@ import Image from 'next/image'
 import { Menu } from 'lucide-react'
 import { Sidebar } from './sidebar'
 import { TodoFab } from './todo-fab'
+import { GlobalSearch } from './global-search'
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
 
   useEffect(() => {
     setCollapsed(localStorage.getItem('sidebar-collapsed') === 'true')
@@ -29,11 +31,22 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return () => clearInterval(id)
   }, [])
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
       {/* Desktop sidebar */}
       <div className="hidden md:flex">
-        <Sidebar collapsed={collapsed} onToggle={toggleCollapsed} />
+        <Sidebar collapsed={collapsed} onToggle={toggleCollapsed} onSearch={() => setSearchOpen(true)} />
       </div>
 
       {/* Mobile drawer overlay */}
@@ -41,10 +54,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-0 z-40 md:hidden">
           <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
           <div className="absolute left-0 top-0 h-full">
-            <Sidebar onClose={() => setOpen(false)} />
+            <Sidebar onClose={() => setOpen(false)} onSearch={() => { setOpen(false); setSearchOpen(true) }} />
           </div>
         </div>
       )}
+
+      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {/* Mobile top bar */}
