@@ -71,6 +71,7 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
   const [logConvoOpen, setLogConvoOpen] = useState(false)
   const [whatsappImportOpen, setWhatsappImportOpen] = useState(false)
   const [editConvo, setEditConvo] = useState<Conversation | null>(null)
+  const [deleteConvo, setDeleteConvo] = useState<Conversation | null>(null)
   const [convoSaving, setConvoSaving] = useState(false)
   const [convoForm, setConvoForm] = useState({ channel: 'note', content: '', follow_up: '', status: 'open' })
   const [editConvoForm, setEditConvoForm] = useState({ channel: 'note', content: '', follow_up: '', status: 'open' })
@@ -202,6 +203,12 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
     const supabase = createClient()
     await supabase.from('conversations').update({ channel: editConvoForm.channel || null, content: editConvoForm.content || null, follow_up: editConvoForm.follow_up || null, status: editConvoForm.status }).eq('id', editConvo.id)
     setConvoSaving(false); setEditConvo(null); router.refresh()
+  }
+
+  async function handleDeleteConvo() {
+    if (!deleteConvo) return
+    await createClient().from('conversations').delete().eq('id', deleteConvo.id)
+    setDeleteConvo(null); router.refresh()
   }
 
   // Agent
@@ -476,7 +483,10 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
                       <Badge value={c.status} />
                       <span className="text-xs text-gray-400 capitalize">{c.channel ?? 'note'} · {formatDate(c.created_at)}</span>
                     </div>
-                    <button onClick={() => openEditConvo(c)} className="text-gray-200 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity"><Pencil className="w-3 h-3" /></button>
+                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => openEditConvo(c)} className="text-gray-200 hover:text-gray-500"><Pencil className="w-3 h-3" /></button>
+                      <button onClick={() => setDeleteConvo(c)} className="text-gray-200 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+                    </div>
                   </div>
                   {c.content && <p className="text-sm text-gray-700">{c.content}</p>}
                   {c.follow_up && <p className="text-xs text-amber-600 mt-1">↳ {c.follow_up}</p>}
@@ -490,6 +500,17 @@ export function TalentDetailClient({ talent, talentProjects, eventDetails, conve
       <AuditStamp createdBy={talent.created_by} createdAt={talent.created_at} updatedBy={talent.updated_by} updatedAt={talent.updated_at} />
 
       <WhatsAppImportModal open={whatsappImportOpen} onClose={() => setWhatsappImportOpen(false)} entityType="talent" entityId={talent.id} />
+
+      {/* Delete Conversation Confirmation */}
+      <Modal open={!!deleteConvo} onClose={() => setDeleteConvo(null)} title="Delete Conversation">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">Are you sure you want to delete this conversation entry? This cannot be undone.</p>
+          <div className="flex gap-3">
+            <Button type="button" variant="secondary" onClick={() => setDeleteConvo(null)} className="flex-1">Cancel</Button>
+            <Button type="button" onClick={handleDeleteConvo} className="flex-1 bg-red-600 hover:bg-red-700 text-white border-red-600">Delete</Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Log Conversation */}
       <Modal open={logConvoOpen} onClose={() => setLogConvoOpen(false)} title="Log Conversation">
