@@ -443,6 +443,7 @@ export interface AnnualExpense {
   item: string
   category: string
   amount_aed: number
+  recurrence_years: number
   due_date: string | null
   notes: string | null
   document_url: string | null
@@ -473,7 +474,7 @@ export interface OperatingCost {
   updated_at: string
 }
 
-export type UserRole = 'admin' | 'finance' | 'general'
+export type UserRole = 'admin' | 'finance' | 'general' | 'super_user'
 
 export interface MonthlyFxRate {
   id: string

@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    if (!profile || (profile.role !== 'admin' && profile.role !== 'finance')) {
+    if (!profile || (profile.role !== 'admin' && profile.role !== 'finance' && profile.role !== 'super_user')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
   }

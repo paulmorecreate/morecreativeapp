@@ -55,6 +55,7 @@ type Props = {
   expenseCategories: ExpenseCategory[]
   currencyRates: CurrencyRate[]
   isAdmin: boolean
+  isSuperUser: boolean
   canViewFinance: boolean
   loginAudit: LoginAuditRow[]
   recordAudit: RecordAuditRow[]
@@ -94,12 +95,14 @@ const USER_COLORS = [
 ]
 
 const ROLE_LABELS: Record<UserRole, string> = {
+  super_user: 'Super User',
   admin: 'Admin',
   finance: 'Finance',
   general: 'General',
 }
 
 function roleBadgeClass(role: UserRole | null) {
+  if (role === 'super_user') return 'bg-violet-600 text-white'
   if (role === 'admin') return 'bg-gray-900 text-white'
   if (role === 'finance') return 'bg-blue-50 text-blue-700 border border-blue-100'
   return 'bg-gray-100 text-gray-500'
@@ -119,7 +122,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
   )
 }
 
-function UsersSection({ isAdmin }: { isAdmin: boolean }) {
+function UsersSection({ isAdmin, isSuperUser }: { isAdmin: boolean; isSuperUser: boolean }) {
   const [users, setUsers] = useState<AppUser[]>([])
   const [profiles, setProfiles] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(true)
@@ -393,12 +396,14 @@ function UsersSection({ isAdmin }: { isAdmin: boolean }) {
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-400 w-12 shrink-0">Role</span>
                       <div className="flex gap-1">
-                        {(['admin', 'finance', 'general'] as UserRole[]).map(r => (
+                        {([...(isSuperUser ? ['super_user'] : []), 'admin', 'finance', 'general'] as UserRole[]).map(r => (
                           <button
                             key={r}
                             onClick={() => setUserRole(u, r)}
                             className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
-                              role === r ? 'bg-gray-900 text-white border-gray-900' : 'text-gray-500 border-gray-200 hover:border-gray-400'
+                              role === r
+                                ? r === 'super_user' ? 'bg-violet-600 text-white border-violet-600' : 'bg-gray-900 text-white border-gray-900'
+                                : 'text-gray-500 border-gray-200 hover:border-gray-400'
                             }`}
                           >
                             {ROLE_LABELS[r]}
@@ -1080,7 +1085,7 @@ function DiagnosticsSection() {
   )
 }
 
-export function AdminClient({ categories, industries, agentTypes, talentCategories, brandCategories, talentLevels, talentSkills, invoiceSettings, expenseCategories, currencyRates, isAdmin, canViewFinance, loginAudit, recordAudit }: Props) {
+export function AdminClient({ categories, industries, agentTypes, talentCategories, brandCategories, talentLevels, talentSkills, invoiceSettings, expenseCategories, currencyRates, isAdmin, isSuperUser, canViewFinance, loginAudit, recordAudit }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const [activeTab, setActiveTab] = useState<Tab>('users')
@@ -1148,7 +1153,7 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
         ))}
       </div>
 
-      {activeTab === 'users' && <UsersSection isAdmin={isAdmin} />}
+      {activeTab === 'users' && <UsersSection isAdmin={isAdmin} isSuperUser={isSuperUser} />}
 
       {activeTab === 'reports' && <ReportsSection />}
 

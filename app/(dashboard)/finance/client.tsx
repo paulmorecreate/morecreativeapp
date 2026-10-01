@@ -73,7 +73,7 @@ type Props = {
   annualExpenses: AnnualExpense[]
   salaries: Salary[]
   operatingCosts: OperatingCost[]
-  initialTab: 'overview' | 'sales' | 'purchase' | 'annual' | 'running' | 'vat'
+  initialTab: 'overview' | 'sales' | 'purchase' | 'running' | 'vat'
 }
 
 function getQuarterKey(dateStr: string | null): string | null {
@@ -162,13 +162,13 @@ function SummaryBar({ paid, pending }: { paid: number; pending: number }) {
   )
 }
 
-const EMPTY_ANNUAL_FORM = { item: '', category: 'Licence', amount_aed: '', due_date: '', notes: '', document_url: '' }
+const EMPTY_ANNUAL_FORM = { item: '', category: 'Licence', amount_aed: '', recurrence_years: '1', due_date: '', notes: '', document_url: '' }
 const EMPTY_SALARY_FORM = { employee: '', role: '', monthly_salary_aed: '', payment_due_date: '', notes: '' }
 const EMPTY_OP_FORM = { expense_item: '', category: 'Software', frequency: 'monthly' as OperatingCost['frequency'], cost_aed: '', notes: '' }
 
 export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annualExpenses: initialAnnualExpenses, salaries: initialSalaries, operatingCosts: initialOperatingCosts, initialTab }: Props) {
   const router = useRouter()
-  const [tab, setTab] = useState<'overview' | 'sales' | 'purchase' | 'annual' | 'running' | 'vat'>(initialTab)
+  const [tab, setTab] = useState<'overview' | 'sales' | 'purchase' | 'running' | 'vat'>(initialTab)
   const [expandedVatQuarter, setExpandedVatQuarter] = useState<string | null>(null)
   const [saleFilter, setSaleFilter] = useState<'all' | 'draft' | 'sent' | 'partial' | 'received' | 'cancelled'>('all')
   const [saleSearch, setSaleSearch] = useState('')
@@ -258,9 +258,10 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
   // Annual expenses summary
   const annualSummary = useMemo(() => {
     const total = annualExpenses.reduce((s, e) => s + e.amount_aed, 0)
+    const annualisedTotal = annualExpenses.reduce((s, e) => s + e.amount_aed / (e.recurrence_years || 1), 0)
     const overdue = annualExpenses.filter(e => (daysUntil(e.due_date) ?? 1) < 0).length
     const dueSoon = annualExpenses.filter(e => { const d = daysUntil(e.due_date); return d !== null && d >= 0 && d <= 30 }).length
-    return { total, overdue, dueSoon }
+    return { total, annualisedTotal, overdue, dueSoon }
   }, [annualExpenses])
 
   // Annual expenses sorted
@@ -576,6 +577,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
       item: exp.item,
       category: exp.category,
       amount_aed: String(exp.amount_aed),
+      recurrence_years: String(exp.recurrence_years ?? 1),
       due_date: exp.due_date ?? '',
       notes: exp.notes ?? '',
       document_url: exp.document_url ?? '',
@@ -592,6 +594,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
       item: annualForm.item.trim(),
       category: annualForm.category,
       amount_aed: parseFloat(annualForm.amount_aed) || 0,
+      recurrence_years: parseInt(annualForm.recurrence_years) || 1,
       due_date: annualForm.due_date || null,
       notes: annualForm.notes.trim() || null,
       document_url: annualForm.document_url.trim() || null,
@@ -738,11 +741,6 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
             <Plus className="w-3.5 h-3.5" />
             New Purchase Invoice
           </Button>
-        ) : tab === 'annual' ? (
-          <Button onClick={openNewAnnual}>
-            <Plus className="w-3.5 h-3.5" />
-            Add Expense
-          </Button>
         ) : null}
       </div>
 
@@ -752,7 +750,6 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
           { key: 'overview', label: 'Overview' },
           { key: 'sales', label: 'Sales Invoices' },
           { key: 'purchase', label: 'Purchase Invoices' },
-          { key: 'annual', label: 'Annual Expenses' },
           { key: 'running', label: 'Running Costs' },
           { key: 'vat', label: 'VAT' },
         ] as { key: typeof tab; label: string }[]).map(({ key, label }) => (
@@ -805,7 +802,10 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
             </div>
             <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
               <p className="text-xs font-medium text-gray-400 mb-0.5">Annual Overhead</p>
-              <p className="text-base font-semibold text-gray-900">{fmtAed(annualSummary.total)}</p>
+              <p className="text-base font-semibold text-gray-900">{fmtAed(annualSummary.annualisedTotal)}</p>
+              {annualSummary.annualisedTotal !== annualSummary.total && (
+                <p className="text-xs text-gray-400 mt-0.5">Amortised — actual {fmtAedShort(annualSummary.total)}</p>
+              )}
             </div>
             <div className={cn('rounded-lg px-4 py-3', poSummary.pending > 0 ? 'bg-amber-50 border border-amber-100' : 'bg-white border border-gray-200')}>
               <p className={cn('text-xs font-medium mb-0.5', poSummary.pending > 0 ? 'text-amber-600' : 'text-gray-400')}>Purchase Outstanding</p>
@@ -846,7 +846,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
             <div className="space-y-1.5">
               {annualSummary.overdue > 0 && (
                 <button
-                  onClick={() => setTab('annual')}
+                  onClick={() => { setTab('running'); router.replace('/finance?tab=running') }}
                   className="w-full text-left bg-red-50 border border-red-100 rounded-lg px-4 py-2.5 hover:bg-red-100 transition-colors"
                 >
                   <div className="flex items-center justify-between">
@@ -859,7 +859,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
               )}
               {annualSummary.dueSoon > 0 && (
                 <button
-                  onClick={() => setTab('annual')}
+                  onClick={() => { setTab('running'); router.replace('/finance?tab=running') }}
                   className="w-full text-left bg-amber-50 border border-amber-100 rounded-lg px-4 py-2.5 hover:bg-amber-100 transition-colors"
                 >
                   <div className="flex items-center justify-between">
@@ -1333,132 +1333,6 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
         </>
       )}
 
-      {/* Annual Expenses tab */}
-      {tab === 'annual' && (
-        <>
-          {/* Summary */}
-          <div className="grid grid-cols-3 gap-3 mb-5">
-            <div className="col-span-1 bg-white border border-gray-200 rounded-xl px-5 py-3.5">
-              <p className="text-xs font-medium text-gray-400 mb-0.5">Total Annual</p>
-              <p className="text-lg font-semibold text-gray-900">{fmtAed(annualSummary.total)}</p>
-            </div>
-            <div className={cn('rounded-xl px-5 py-3.5', annualSummary.overdue > 0 ? 'bg-red-50 border border-red-100' : 'bg-white border border-gray-200')}>
-              <p className={cn('text-xs font-medium mb-0.5', annualSummary.overdue > 0 ? 'text-red-600' : 'text-gray-400')}>Overdue</p>
-              <p className={cn('text-lg font-semibold', annualSummary.overdue > 0 ? 'text-red-800' : 'text-gray-400')}>{annualSummary.overdue}</p>
-            </div>
-            <div className={cn('rounded-xl px-5 py-3.5', annualSummary.dueSoon > 0 ? 'bg-amber-50 border border-amber-100' : 'bg-white border border-gray-200')}>
-              <p className={cn('text-xs font-medium mb-0.5', annualSummary.dueSoon > 0 ? 'text-amber-600' : 'text-gray-400')}>Due Within 30 Days</p>
-              <p className={cn('text-lg font-semibold', annualSummary.dueSoon > 0 ? 'text-amber-800' : 'text-gray-400')}>{annualSummary.dueSoon}</p>
-            </div>
-          </div>
-
-          {annualExpenses.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <Receipt className="w-10 h-10 text-gray-200 mb-3" />
-              <p className="text-sm text-gray-400">No annual expenses yet.</p>
-            </div>
-          ) : (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100">
-                    {([
-                      { col: 'item', label: 'Item', align: 'left' },
-                      { col: 'category', label: 'Category', align: 'left' },
-                      { col: 'due_date', label: 'Due Date', align: 'left' },
-                      { col: null, label: 'Days', align: 'center' },
-                      { col: 'amount_aed', label: 'Amount (AED)', align: 'right' },
-                      { col: null, label: 'Status', align: 'left' },
-                      { col: null, label: 'Document', align: 'left' },
-                      { col: null, label: 'Notes', align: 'left' },
-                    ] as { col: typeof annualSortCol | null; label: string; align: string }[]).map(({ col, label, align }) => (
-                      <th
-                        key={label}
-                        className={cn(
-                          'px-5 py-3 text-xs font-semibold text-gray-500',
-                          align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left',
-                          col ? 'cursor-pointer select-none hover:text-gray-800 transition-colors' : ''
-                        )}
-                        onClick={col ? () => toggleAnnualSort(col) : undefined}
-                      >
-                        <span className="inline-flex items-center gap-1">
-                          {label}
-                          {col && annualSortCol === col && (
-                            annualSortDir === 'asc'
-                              ? <ChevronUp className="w-3 h-3" />
-                              : <ChevronDown className="w-3 h-3" />
-                          )}
-                        </span>
-                      </th>
-                    ))}
-                    <th className="px-3 py-3 w-16" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {sortedAnnualExpenses.map(exp => {
-                    const days = daysUntil(exp.due_date)
-                    return (
-                      <tr key={exp.id} className="hover:bg-gray-50 transition-colors group">
-                        <td className="px-5 py-3 font-medium text-gray-900">{exp.item}</td>
-                        <td className="px-5 py-3 text-gray-500">{exp.category}</td>
-                        <td className="px-5 py-3 text-gray-500">{formatDate(exp.due_date)}</td>
-                        <td className="px-5 py-3 text-center text-gray-500">
-                          {days !== null ? (
-                            <span className={cn('text-xs font-medium', days < 0 ? 'text-red-600' : days <= 30 ? 'text-amber-600' : 'text-gray-400')}>
-                              {days < 0 ? `${Math.abs(days)}d ago` : `${days}d`}
-                            </span>
-                          ) : '—'}
-                        </td>
-                        <td className="px-5 py-3 text-right font-medium text-gray-900">
-                          {exp.amount_aed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                        <td className="px-5 py-3"><AnnualStatusBadge dueDate={exp.due_date} /></td>
-                        <td className="px-5 py-3">
-                          {exp.document_url ? (
-                            <a
-                              href={exp.document_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={e => e.stopPropagation()}
-                              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition-colors"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                              Open
-                            </a>
-                          ) : (
-                            <span className="text-gray-300 text-xs">—</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-3 text-gray-400 text-xs max-w-[160px] truncate">{exp.notes || '—'}</td>
-                        <td className="px-3 py-3">
-                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                            <button onClick={() => openEditAnnual(exp)} className="text-gray-300 hover:text-gray-700 transition-colors">
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button onClick={() => setDeleteAnnualTarget(exp)} className="text-gray-300 hover:text-red-500 transition-colors">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t border-gray-200 bg-gray-50">
-                    <td colSpan={4} className="px-5 py-3 text-xs font-semibold text-gray-500">Total</td>
-                    <td className="px-5 py-3 text-right text-sm font-semibold text-gray-900">
-                      {annualSummary.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td colSpan={4} />
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          )}
-        </>
-      )}
-
       {/* VAT Liability Summary tab */}
       {tab === 'vat' && (
         <>
@@ -1636,6 +1510,23 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
             </div>
           </div>
           <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Recurrence</label>
+            <Select
+              value={annualForm.recurrence_years}
+              onChange={e => setAnnualForm(f => ({ ...f, recurrence_years: e.target.value }))}
+              options={[
+                { value: '1', label: 'Every year' },
+                { value: '2', label: 'Every 2 years' },
+                { value: '3', label: 'Every 3 years' },
+              ]}
+            />
+            {annualForm.recurrence_years !== '1' && annualForm.amount_aed && (
+              <p className="text-xs text-gray-400">
+                Per-year cost: AED {(parseFloat(annualForm.amount_aed) / parseInt(annualForm.recurrence_years)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            )}
+          </div>
+          <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Due Date</label>
             <Input
               type="date"
@@ -1712,8 +1603,9 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
               <p className="text-lg font-semibold text-blue-900">{fmtAed(runningSummary.totalMonthly)}</p>
             </div>
             <div className="bg-gray-50 border border-gray-200 rounded-xl px-5 py-3.5">
-              <p className="text-xs font-medium text-gray-500 mb-0.5">Total Annual</p>
-              <p className="text-lg font-semibold text-gray-900">{fmtAed(runningSummary.totalAnnual)}</p>
+              <p className="text-xs font-medium text-gray-500 mb-0.5">True Annual Total</p>
+              <p className="text-lg font-semibold text-gray-900">{fmtAed(runningSummary.totalAnnual + annualSummary.annualisedTotal)}</p>
+              <p className="text-xs text-gray-400 mt-0.5">Recurring + {fmtAedShort(annualSummary.annualisedTotal)} overhead</p>
             </div>
           </div>
 
@@ -1783,7 +1675,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
           </div>
 
           {/* Operating Costs section */}
-          <div>
+          <div className="mb-8">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-gray-900">Operating Costs</h2>
               <Button variant="secondary" onClick={openNewOp}>
@@ -1845,6 +1737,137 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                         {runningSummary.opsMonthly.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td colSpan={2} />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Annual Expenses section */}
+          <div className="mt-8">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <h2 className="text-sm font-semibold text-gray-900">Annual Expenses</h2>
+                {annualSummary.overdue > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700">
+                    {annualSummary.overdue} overdue
+                  </span>
+                )}
+                {annualSummary.dueSoon > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
+                    {annualSummary.dueSoon} due soon
+                  </span>
+                )}
+              </div>
+              <Button variant="secondary" onClick={openNewAnnual}>
+                <Plus className="w-3.5 h-3.5" />
+                Add Expense
+              </Button>
+            </div>
+            {annualExpenses.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 px-5 py-8 text-center">
+                <p className="text-sm text-gray-400">No annual expenses recorded yet.</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      {([
+                        { col: 'item', label: 'Item', align: 'left' },
+                        { col: 'category', label: 'Category', align: 'left' },
+                        { col: 'due_date', label: 'Due Date', align: 'left' },
+                        { col: null, label: 'Days', align: 'center' },
+                        { col: 'amount_aed', label: 'Amount (AED)', align: 'right' },
+                        { col: null, label: 'Per Year', align: 'right' },
+                        { col: null, label: 'Status', align: 'left' },
+                        { col: null, label: 'Document', align: 'left' },
+                        { col: null, label: 'Notes', align: 'left' },
+                      ] as { col: typeof annualSortCol | null; label: string; align: string }[]).map(({ col, label, align }) => (
+                        <th
+                          key={label}
+                          className={cn(
+                            'px-5 py-3 text-xs font-semibold text-gray-500',
+                            align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left',
+                            col ? 'cursor-pointer select-none hover:text-gray-800 transition-colors' : ''
+                          )}
+                          onClick={col ? () => toggleAnnualSort(col) : undefined}
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            {label}
+                            {col && annualSortCol === col && (
+                              annualSortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                            )}
+                          </span>
+                        </th>
+                      ))}
+                      <th className="px-3 py-3 w-16" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {sortedAnnualExpenses.map(exp => {
+                      const days = daysUntil(exp.due_date)
+                      return (
+                        <tr key={exp.id} className="hover:bg-gray-50 transition-colors group">
+                          <td className="px-5 py-3 font-medium text-gray-900">{exp.item}</td>
+                          <td className="px-5 py-3 text-gray-500">{exp.category}</td>
+                          <td className="px-5 py-3 text-gray-500">{formatDate(exp.due_date)}</td>
+                          <td className="px-5 py-3 text-center">
+                            {days !== null ? (
+                              <span className={cn('text-xs font-medium', days < 0 ? 'text-red-600' : days <= 30 ? 'text-amber-600' : 'text-gray-400')}>
+                                {days < 0 ? `${Math.abs(days)}d ago` : `${days}d`}
+                              </span>
+                            ) : '—'}
+                          </td>
+                          <td className="px-5 py-3 text-right font-medium text-gray-900">
+                            {exp.amount_aed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {(exp.recurrence_years ?? 1) > 1 && (
+                              <div className="text-xs font-normal text-gray-400">every {exp.recurrence_years}y</div>
+                            )}
+                          </td>
+                          <td className="px-5 py-3 text-right text-gray-500">
+                            {(exp.recurrence_years ?? 1) > 1
+                              ? (exp.amount_aed / exp.recurrence_years).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                              : <span className="text-gray-300">—</span>
+                            }
+                          </td>
+                          <td className="px-5 py-3"><AnnualStatusBadge dueDate={exp.due_date} /></td>
+                          <td className="px-5 py-3">
+                            {exp.document_url ? (
+                              <a href={exp.document_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition-colors">
+                                <ExternalLink className="w-3 h-3" />
+                                Open
+                              </a>
+                            ) : (
+                              <span className="text-gray-300 text-xs">—</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3 text-gray-400 text-xs max-w-[160px] truncate">{exp.notes || '—'}</td>
+                          <td className="px-3 py-3">
+                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                              <button onClick={() => openEditAnnual(exp)} className="text-gray-300 hover:text-gray-700 transition-colors">
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => setDeleteAnnualTarget(exp)} className="text-gray-300 hover:text-red-500 transition-colors">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-gray-200 bg-gray-50">
+                      <td colSpan={4} className="px-5 py-3 text-xs font-semibold text-gray-500">Total Annual Overhead</td>
+                      <td className="px-5 py-3 text-right text-sm font-semibold text-gray-900">
+                        {annualSummary.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-5 py-3 text-right text-sm font-semibold text-gray-900">
+                        {annualSummary.annualisedTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td colSpan={4} />
                     </tr>
                   </tfoot>
                 </table>

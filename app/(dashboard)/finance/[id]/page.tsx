@@ -15,7 +15,7 @@ export default async function InvoiceDetailPage({ params, searchParams }: { para
     .eq('id', user.id)
     .single()
 
-  if (!profile || (profile.role !== 'admin' && profile.role !== 'finance')) {
+  if (!profile || (profile.role !== 'admin' && profile.role !== 'finance' && profile.role !== 'super_user')) {
     redirect('/dashboard')
   }
 

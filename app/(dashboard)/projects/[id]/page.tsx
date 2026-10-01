@@ -10,7 +10,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
   const { data: profile } = user
     ? await supabase.from('user_profiles').select('role').eq('id', user.id).single()
     : { data: null }
-  const canViewFinance = profile?.role === 'admin' || profile?.role === 'finance'
+  const canViewFinance = profile?.role === 'admin' || profile?.role === 'finance' || profile?.role === 'super_user'
 
   const [
     { data: project },

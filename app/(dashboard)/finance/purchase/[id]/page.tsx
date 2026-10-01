@@ -15,7 +15,7 @@ export default async function PurchaseInvoiceDetailPage({ params }: { params: Pr
     .eq('id', user.id)
     .single()
 
-  if (!profile || (profile.role !== 'admin' && profile.role !== 'finance')) {
+  if (!profile || (profile.role !== 'admin' && profile.role !== 'finance' && profile.role !== 'super_user')) {
     redirect('/dashboard')
   }
 

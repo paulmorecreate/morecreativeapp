@@ -15,7 +15,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     .eq('id', user.id)
     .single()
 
-  if (!profile || (profile.role !== 'admin' && profile.role !== 'finance')) {
+  if (!profile || (profile.role !== 'admin' && profile.role !== 'finance' && profile.role !== 'super_user')) {
     redirect('/dashboard')
   }
 
@@ -41,8 +41,8 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     supabase.from('operating_costs').select('*').order('expense_item'),
   ])
 
-  const validTab = ['overview', 'sales', 'purchase', 'annual', 'running', 'vat'].includes(tab ?? '')
-    ? (tab as 'overview' | 'sales' | 'purchase' | 'annual' | 'running' | 'vat')
+  const validTab = ['overview', 'sales', 'purchase', 'running', 'vat'].includes(tab ?? '')
+    ? (tab as 'overview' | 'sales' | 'purchase' | 'running' | 'vat')
     : 'overview'
 
   return (

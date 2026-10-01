@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Search, ExternalLink, ChevronRight, Trash2, ChevronUp, ChevronDown, Check, Minus, FileDown, FolderInput } from 'lucide-react'
+import { Plus, Search, ExternalLink, ChevronRight, Trash2, ChevronUp, ChevronDown, Check, Minus, FileDown, FolderInput, Sparkles } from 'lucide-react'
 import { Talent, TalentCategory, TalentLevel } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -33,6 +33,7 @@ type Props = {
   allPeople: SimplePerson[]
   allProjects: SimpleProject[]
   userProfiles: UserProfile[]
+  isSuperUser: boolean
 }
 
 function SearchableProjectPicker({ projects, selected, onSelect }: {
@@ -118,7 +119,7 @@ function parseFollowers(s: string | null): number {
   return num
 }
 
-export function TalentsClient({ talents, talentCategories, allAgents, agentTypes, talentLevels, allStylists, allPeople, allProjects, userProfiles }: Props) {
+export function TalentsClient({ talents, talentCategories, allAgents, agentTypes, talentLevels, allStylists, allPeople, allProjects, userProfiles, isSuperUser }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -467,10 +468,20 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
           <h1 className="text-2xl font-semibold text-gray-900">Talents</h1>
           <p className="text-sm text-gray-500 mt-0.5">{sorted.length} of {talents.length}</p>
         </div>
-        <Button onClick={() => setOpen(true)}>
-          <Plus className="w-4 h-4" />
-          Add Talent
-        </Button>
+        <div className="flex items-center gap-2">
+          {isSuperUser && (
+            <Link href="/talents/match">
+              <Button variant="secondary">
+                <Sparkles className="w-3.5 h-3.5 text-violet-500" />
+                Match Brief
+              </Button>
+            </Link>
+          )}
+          <Button onClick={() => setOpen(true)}>
+            <Plus className="w-4 h-4" />
+            Add Talent
+          </Button>
+        </div>
       </div>
 
       <div className="flex gap-3 mb-5">

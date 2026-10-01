@@ -15,7 +15,7 @@ export default async function BankingPage({ searchParams }: { searchParams: Prom
     .eq('id', user.id)
     .single()
 
-  if (!profile || (profile.role !== 'admin' && profile.role !== 'finance')) {
+  if (!profile || (profile.role !== 'admin' && profile.role !== 'finance' && profile.role !== 'super_user')) {
     redirect('/dashboard')
   }
 

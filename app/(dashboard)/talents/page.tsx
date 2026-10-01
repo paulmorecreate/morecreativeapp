@@ -3,6 +3,12 @@ import { TalentsClient } from './client'
 
 export default async function TalentsPage() {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const { data: currentProfile } = user
+    ? await supabase.from('user_profiles').select('role').eq('id', user.id).single()
+    : { data: null }
+  const isSuperUser = currentProfile?.role === 'super_user'
+
   const [{ data: talents }, { data: talentCategories }, { data: allAgents }, { data: agentTypes }, { data: talentLevels }, { data: allStylists }, { data: allPeople }, { data: allProjects }, { data: userProfiles }] = await Promise.all([
     supabase.from('talents')
       .select('*, talent_agents(id, agent:agents(id, name))')
@@ -17,5 +23,5 @@ export default async function TalentsPage() {
     supabase.from('user_profiles').select('id, email, color, first_name, surname').order('email'),
   ])
 
-  return <TalentsClient talents={(talents ?? []) as any} talentCategories={talentCategories ?? []} allAgents={(allAgents ?? []) as any} agentTypes={agentTypes ?? []} talentLevels={talentLevels ?? []} allStylists={(allStylists ?? []) as any} allPeople={(allPeople ?? []) as any} allProjects={(allProjects ?? []) as any} userProfiles={userProfiles ?? []} />
+  return <TalentsClient talents={(talents ?? []) as any} talentCategories={talentCategories ?? []} allAgents={(allAgents ?? []) as any} agentTypes={agentTypes ?? []} talentLevels={talentLevels ?? []} allStylists={(allStylists ?? []) as any} allPeople={(allPeople ?? []) as any} allProjects={(allProjects ?? []) as any} userProfiles={userProfiles ?? []} isSuperUser={isSuperUser} />
 }
