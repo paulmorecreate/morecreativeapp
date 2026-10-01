@@ -128,10 +128,10 @@ export function Sidebar({ onClose, collapsed = false, onToggle }: Props) {
           {primaryNav.map(item => <NavLink key={item.href} {...item} />)}
           <NavLink href="/opportunities" label="Opportunities" icon={Handshake} />
 <NavLink href="/schedule" label="Schedule" icon={CalendarDays} />
-          {(userRole === 'admin' || userRole === 'finance') && (
+          {(userRole === 'admin' || userRole === 'finance' || userRole === 'super_user') && (
             <NavLink href="/finance" label="Finance" icon={Receipt} />
           )}
-          {(userRole === 'admin' || userRole === 'finance') && (
+          {(userRole === 'admin' || userRole === 'finance' || userRole === 'super_user') && (
             <NavLink href="/banking" label="Banking" icon={Landmark} />
           )}
         </div>
