@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, X, Users, Briefcase, Building2, UserCircle, Scissors, Camera, Users2, Calendar, Loader2 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 type SearchResult = {
   type: string
@@ -44,19 +45,45 @@ export function GlobalSearch({ open, onClose }: Props) {
   }, [open])
 
   useEffect(() => {
-    if (!query.trim() || query.trim().length < 2) {
+    const q = query.trim()
+    if (q.length < 2) {
       setResults([])
       return
     }
     setLoading(true)
     const timer = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`)
-        const data = await res.json()
-        setResults(data.results ?? [])
-      } finally {
-        setLoading(false)
-      }
+      const supabase = createClient()
+      const pattern = `%${q}%`
+      const [
+        { data: talents },
+        { data: brands },
+        { data: agencies },
+        { data: agents },
+        { data: stylists },
+        { data: photographers },
+        { data: people },
+        { data: projects },
+      ] = await Promise.all([
+        supabase.from('talents').select('id, name, nationality').ilike('name', pattern).limit(5),
+        supabase.from('brands').select('id, name, country').ilike('name', pattern).limit(5),
+        supabase.from('agencies').select('id, name').ilike('name', pattern).limit(5),
+        supabase.from('agents').select('id, name').ilike('name', pattern).limit(5),
+        supabase.from('stylists').select('id, name').ilike('name', pattern).limit(5),
+        supabase.from('photographers').select('id, name').ilike('name', pattern).limit(5),
+        supabase.from('people').select('id, name').ilike('name', pattern).limit(5),
+        supabase.from('events').select('id, name, location').ilike('name', pattern).limit(5),
+      ])
+      setResults([
+        ...(talents ?? []).map(r => ({ type: 'talent',       id: r.id, name: r.name, subtitle: r.nationality ?? undefined, href: `/talents/${r.id}` })),
+        ...(brands ?? []).map(r =>  ({ type: 'brand',        id: r.id, name: r.name, subtitle: r.country ?? undefined,      href: `/brands/${r.id}` })),
+        ...(agencies ?? []).map(r => ({ type: 'agency',      id: r.id, name: r.name,                                        href: `/agencies/${r.id}` })),
+        ...(agents ?? []).map(r =>  ({ type: 'agent',        id: r.id, name: r.name,                                        href: `/agents/${r.id}` })),
+        ...(stylists ?? []).map(r => ({ type: 'stylist',     id: r.id, name: r.name,                                        href: `/stylists/${r.id}` })),
+        ...(photographers ?? []).map(r => ({ type: 'photographer', id: r.id, name: r.name,                                  href: `/photographers/${r.id}` })),
+        ...(people ?? []).map(r =>  ({ type: 'person',       id: r.id, name: r.name,                                        href: `/people/${r.id}` })),
+        ...(projects ?? []).map(r => ({ type: 'project',     id: r.id, name: r.name, subtitle: r.location ?? undefined,     href: `/projects/${r.id}` })),
+      ])
+      setLoading(false)
     }, 250)
     return () => {
       clearTimeout(timer)

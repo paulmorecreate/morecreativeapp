@@ -35,7 +35,7 @@ type Step = 'upload' | 'analysing' | 'preview'
 interface Props {
   open: boolean
   onClose: () => void
-  entityType: 'brand' | 'talent'
+  entityType: 'brand' | 'talent' | 'stylist' | 'photographer' | 'person' | 'agency' | 'agent'
   entityId: string
 }
 
