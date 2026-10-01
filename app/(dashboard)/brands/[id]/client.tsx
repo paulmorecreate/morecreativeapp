@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, Star, AlertTriangle, FileSignature } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, Star, AlertTriangle, FileSignature, MessageCircle } from 'lucide-react'
 import { Brand, Conversation, Contact, Industry, BrandCategory, Contract } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,7 @@ import { createClient } from '@/lib/supabase/client'
 import { formatDate } from '@/lib/utils'
 import { AuditStamp } from '@/components/audit-stamp'
 import { COUNTRIES } from '@/lib/constants/countries'
+import { WhatsAppImportModal } from '@/components/whatsapp-import-modal'
 
 const channelOpts = [
   { value: 'email', label: 'Email' },
@@ -83,6 +84,7 @@ export function BrandDetailClient({ brand, brandProjects, conversations, contact
   const [contactSaving, setContactSaving] = useState(false)
   const [contactForm, setContactForm] = useState({ name: '', role: '', email: '', phone: '', notes: '' })
   const [logConvoOpen, setLogConvoOpen] = useState(false)
+  const [whatsappImportOpen, setWhatsappImportOpen] = useState(false)
   const [editConvo, setEditConvo] = useState<Conversation | null>(null)
   const [convoSaving, setConvoSaving] = useState(false)
   const [convoForm, setConvoForm] = useState({ channel: 'note', content: '', follow_up: '', status: 'open' })
@@ -377,9 +379,14 @@ export function BrandDetailClient({ brand, brandProjects, conversations, contact
           <div className="bg-white rounded-xl border border-gray-200">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Conversations</h2>
-              <button onClick={() => setLogConvoOpen(true)} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700">
-                <Plus className="w-3 h-3" /> Log
-              </button>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setWhatsappImportOpen(true)} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700">
+                  <MessageCircle className="w-3 h-3" /> Import WhatsApp
+                </button>
+                <button onClick={() => setLogConvoOpen(true)} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700">
+                  <Plus className="w-3 h-3" /> Log
+                </button>
+              </div>
             </div>
             <div className="divide-y divide-gray-50">
               {!conversations?.length && (
@@ -477,6 +484,8 @@ export function BrandDetailClient({ brand, brandProjects, conversations, contact
           </div>
         </form>
       </Modal>
+
+      <WhatsAppImportModal open={whatsappImportOpen} onClose={() => setWhatsappImportOpen(false)} entityType="brand" entityId={brand.id} />
 
       {/* Log Conversation Modal */}
       <Modal open={logConvoOpen} onClose={() => setLogConvoOpen(false)} title="Log Conversation">
