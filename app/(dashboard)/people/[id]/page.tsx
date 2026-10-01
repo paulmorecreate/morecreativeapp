@@ -10,7 +10,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
     { data: person }, { data: talentLinks }, { data: allTalents },
     { data: talentCategories }, { data: talentLevels },
     { data: allAgents }, { data: agentTypes },
-    { data: allStylists }, { data: allPeople },
+    { data: allStylists }, { data: allPeople }, { data: conversations },
   ] = await Promise.all([
     supabase.from('people').select('*').eq('id', id).single(),
     supabase.from('talent_people').select('id, talent_id, talent:talents(id, name)').eq('person_id', id),
@@ -21,6 +21,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
     supabase.from('agent_types').select('id, name').order('name'),
     supabase.from('stylists').select('id, name').order('name'),
     supabase.from('people').select('id, name, type').order('name'),
+    supabase.from('conversations').select('*').eq('entity_type', 'person').eq('entity_id', id).order('created_at', { ascending: false }),
   ])
 
   if (!person) notFound()
@@ -30,6 +31,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
       person={person}
       talentLinks={(talentLinks ?? []) as any}
       allTalents={allTalents ?? []}
+      conversations={conversations ?? []}
       talentCategories={talentCategories ?? []}
       talentLevels={talentLevels ?? []}
       allAgents={(allAgents ?? []) as any}

@@ -3,15 +3,30 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, AlertTriangle } from 'lucide-react'
-import { Agency, AgentType } from '@/lib/supabase/types'
+import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2, AlertTriangle, MessageCircle } from 'lucide-react'
+import { Agency, AgentType, Conversation } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
+import { formatDate } from '@/lib/utils'
+import { WhatsAppImportModal } from '@/components/whatsapp-import-modal'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 import { COUNTRIES } from '@/lib/constants/countries'
 import { AuditStamp } from '@/components/audit-stamp'
+
+const channelOpts = [
+  { value: 'email', label: 'Email' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'call', label: 'Call' },
+  { value: 'meeting', label: 'Meeting' },
+  { value: 'note', label: 'Note' },
+]
+
+const convoStatusOpts = [
+  { value: 'open', label: 'Open' },
+  { value: 'resolved', label: 'Resolved' },
+]
 
 type AgentAtAgency = {
   id: string
@@ -27,9 +42,10 @@ type Props = {
   agents: AgentAtAgency[]
   allAgents: SimpleAgent[]
   agentTypes: AgentType[]
+  conversations: Conversation[]
 }
 
-export function AgencyDetailClient({ agency, agents, allAgents, agentTypes }: Props) {
+export function AgencyDetailClient({ agency, agents, allAgents, agentTypes, conversations }: Props) {
   const router = useRouter()
 
   // Edit
@@ -45,6 +61,15 @@ export function AgencyDetailClient({ agency, agents, allAgents, agentTypes }: Pr
   // Delete
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  // Conversations
+  const [logConvoOpen, setLogConvoOpen] = useState(false)
+  const [whatsappImportOpen, setWhatsappImportOpen] = useState(false)
+  const [editConvo, setEditConvo] = useState<Conversation | null>(null)
+  const [deleteConvo, setDeleteConvo] = useState<Conversation | null>(null)
+  const [convoSaving, setConvoSaving] = useState(false)
+  const [convoForm, setConvoForm] = useState({ channel: 'note', content: '', follow_up: '', status: 'open' })
+  const [editConvoForm, setEditConvoForm] = useState({ channel: 'note', content: '', follow_up: '', status: 'open' })
 
   // Link agent
   const [linkOpen, setLinkOpen] = useState(false)
@@ -95,6 +120,38 @@ export function AgencyDetailClient({ agency, agents, allAgents, agentTypes }: Pr
     const supabase = createClient()
     await supabase.from('agencies').delete().eq('id', agency.id)
     router.push('/agencies')
+  }
+
+  function convoField(k: keyof typeof convoForm) {
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+      setConvoForm(f => ({ ...f, [k]: e.target.value }))
+  }
+  function editConvoField(k: keyof typeof editConvoForm) {
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+      setEditConvoForm(f => ({ ...f, [k]: e.target.value }))
+  }
+  async function handleLogConvo(e: React.FormEvent) {
+    e.preventDefault()
+    setConvoSaving(true)
+    const supabase = createClient()
+    await supabase.from('conversations').insert({ entity_type: 'agency', entity_id: agency.id, channel: convoForm.channel || null, content: convoForm.content || null, follow_up: convoForm.follow_up || null, status: convoForm.status })
+    setConvoSaving(false); setLogConvoOpen(false); setConvoForm({ channel: 'note', content: '', follow_up: '', status: 'open' }); router.refresh()
+  }
+  function openEditConvo(c: Conversation) {
+    setEditConvoForm({ channel: c.channel ?? 'note', content: c.content ?? '', follow_up: c.follow_up ?? '', status: c.status ?? 'open' }); setEditConvo(c)
+  }
+  async function handleEditConvo(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editConvo) return
+    setConvoSaving(true)
+    const supabase = createClient()
+    await supabase.from('conversations').update({ channel: editConvoForm.channel || null, content: editConvoForm.content || null, follow_up: editConvoForm.follow_up || null, status: editConvoForm.status }).eq('id', editConvo.id)
+    setConvoSaving(false); setEditConvo(null); router.refresh()
+  }
+  async function handleDeleteConvo() {
+    if (!deleteConvo) return
+    await createClient().from('conversations').delete().eq('id', deleteConvo.id)
+    setDeleteConvo(null); router.refresh()
   }
 
   async function handleLinkAgent(e: React.FormEvent) {
@@ -149,23 +206,32 @@ export function AgencyDetailClient({ agency, agents, allAgents, agentTypes }: Pr
       </div>
 
       <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-1">
-          {agency.notes && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Notes</h2>
-              <p className="text-sm text-gray-700 whitespace-pre-wrap">{agency.notes}</p>
-            </div>
-          )}
+        <div className="col-span-1 space-y-5">
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Details</h2>
+            <dl className="space-y-3">
+              <div>
+                <dt className="text-xs text-gray-400 mb-0.5">Country</dt>
+                <dd className="text-sm text-gray-900">{agency.country ?? <span className="text-gray-300">—</span>}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-gray-400 mb-0.5">Website</dt>
+                <dd className="text-sm">
+                  {agency.website
+                    ? <a href={agency.website} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-gray-900 hover:text-black">{agency.website.replace(/^https?:\/\//, '')} <ExternalLink className="w-3 h-3 text-gray-400" /></a>
+                    : <span className="text-gray-300">—</span>}
+                </dd>
+              </div>
+            </dl>
+            {agency.notes && <><div className="border-t border-gray-100 my-4" /><p className="text-sm text-gray-700 whitespace-pre-wrap">{agency.notes}</p></>}
+          </div>
         </div>
 
-        <div className="col-span-2">
+        <div className="col-span-2 space-y-5">
           <div className="bg-white rounded-xl border border-gray-200">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Agents</h2>
-              <button
-                onClick={() => { resetLink(); setLinkOpen(true) }}
-                className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700"
-              >
+              <button onClick={() => { resetLink(); setLinkOpen(true) }} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700">
                 <Plus className="w-3 h-3" /> Add Agent
               </button>
             </div>
@@ -182,10 +248,107 @@ export function AgencyDetailClient({ agency, agents, allAgents, agentTypes }: Pr
               ))}
             </div>
           </div>
+
+          <div className="bg-white rounded-xl border border-gray-200">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h2 className="text-sm font-semibold text-gray-900">Conversations</h2>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setWhatsappImportOpen(true)} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700"><MessageCircle className="w-3 h-3" /> Import WhatsApp</button>
+                <button onClick={() => setLogConvoOpen(true)} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700"><Plus className="w-3 h-3" /> Log</button>
+              </div>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {!conversations?.length && <p className="px-5 py-4 text-sm text-gray-400">No conversations logged.</p>}
+              {conversations?.map(c => (
+                <div key={c.id} className="px-5 py-3 group">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <Badge value={c.status} />
+                      <span className="text-xs text-gray-400 capitalize">{c.channel ?? 'note'} · {formatDate(c.created_at)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => openEditConvo(c)} className="text-gray-200 hover:text-gray-500"><Pencil className="w-3 h-3" /></button>
+                      <button onClick={() => setDeleteConvo(c)} className="text-gray-200 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+                    </div>
+                  </div>
+                  {c.content && <p className="text-sm text-gray-700">{c.content}</p>}
+                  {c.follow_up && <p className="text-xs text-amber-600 mt-1">↳ {c.follow_up}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
       <AuditStamp createdBy={agency.created_by} createdAt={agency.created_at} updatedBy={agency.updated_by} updatedAt={agency.updated_at} />
+
+      {/* Log Conversation Modal */}
+      <Modal open={logConvoOpen} onClose={() => setLogConvoOpen(false)} title="Log Conversation">
+        <form onSubmit={handleLogConvo} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Channel</label>
+            <Select value={convoForm.channel} onChange={convoField('channel')} options={channelOpts} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Notes</label>
+            <Textarea value={convoForm.content} onChange={convoField('content')} rows={4} placeholder="What was discussed?" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Follow-up required</label>
+            <Input value={convoForm.follow_up} onChange={convoField('follow_up')} placeholder="What needs to happen next?" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Status</label>
+            <Select value={convoForm.status} onChange={convoField('status')} options={convoStatusOpts} />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setLogConvoOpen(false)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={convoSaving} className="flex-1">{convoSaving ? 'Saving…' : 'Save'}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Conversation Modal */}
+      <Modal open={!!editConvo} onClose={() => setEditConvo(null)} title="Edit Conversation">
+        <form onSubmit={handleEditConvo} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Channel</label>
+            <Select value={editConvoForm.channel} onChange={editConvoField('channel')} options={channelOpts} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Notes</label>
+            <Textarea value={editConvoForm.content} onChange={editConvoField('content')} rows={4} placeholder="What was discussed?" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Follow-up required</label>
+            <Input value={editConvoForm.follow_up} onChange={editConvoField('follow_up')} placeholder="What needs to happen next?" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Status</label>
+            <Select value={editConvoForm.status} onChange={editConvoField('status')} options={convoStatusOpts} />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setEditConvo(null)} className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={convoSaving} className="flex-1">{convoSaving ? 'Saving…' : 'Save Changes'}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Delete Conversation Modal */}
+      <Modal open={!!deleteConvo} onClose={() => setDeleteConvo(null)} title="Delete Conversation">
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-4 bg-red-50 rounded-lg border border-red-100">
+            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+            <p className="text-sm text-red-700">This will permanently delete this conversation entry. This cannot be undone.</p>
+          </div>
+          <div className="flex gap-3">
+            <Button type="button" variant="secondary" onClick={() => setDeleteConvo(null)} className="flex-1">Cancel</Button>
+            <Button type="button" onClick={handleDeleteConvo} className="flex-1 bg-red-600 hover:bg-red-700 text-white border-red-600">Delete</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <WhatsAppImportModal open={whatsappImportOpen} onClose={() => setWhatsappImportOpen(false)} entityType="agency" entityId={agency.id} />
 
       {/* Link / Add Agent Modal */}
       <Modal open={linkOpen} onClose={() => { setLinkOpen(false); resetLink() }} title="Add Agent to Agency">

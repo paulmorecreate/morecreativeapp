@@ -6,7 +6,7 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
   const { id } = await params
   const supabase = await createClient()
 
-  const [{ data: agent }, { data: talentLinks }, { data: agentTypes }, { data: allTalents }, { data: agencies }] = await Promise.all([
+  const [{ data: agent }, { data: talentLinks }, { data: agentTypes }, { data: allTalents }, { data: agencies }, { data: conversations }] = await Promise.all([
     supabase.from('agents').select('*').eq('id', id).single(),
     supabase.from('talent_agents')
       .select('id, talent_id, talent:talents(id, name, category)')
@@ -15,6 +15,7 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
     supabase.from('agent_types').select('*').order('name'),
     supabase.from('talents').select('id, name').order('name'),
     supabase.from('agencies').select('id, name').order('name'),
+    supabase.from('conversations').select('*').eq('entity_type', 'agent').eq('entity_id', id).order('created_at', { ascending: false }),
   ])
 
   if (!agent) notFound()
@@ -26,6 +27,7 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
       agentTypes={agentTypes ?? []}
       allTalents={allTalents ?? []}
       agencies={agencies ?? []}
+      conversations={conversations ?? []}
     />
   )
 }
