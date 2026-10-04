@@ -1265,7 +1265,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                     return (
                     <tr
                       key={inv.id}
-                      onClick={() => router.push(`/finance/purchase/${inv.id}`)}
+                      onClick={() => router.push(`/finance/purchase/${inv.id}?from=finance`)}
                       className="hover:bg-gray-50 cursor-pointer transition-colors group"
                     >
                       <td className="px-5 py-3 text-gray-700 max-w-[180px] truncate">{inv.supplier || <span className="text-gray-300">—</span>}</td>
@@ -1297,15 +1297,27 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                         {inv.vat_amount > 0 ? formatAmount(inv.currency, inv.vat_amount) : <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-5 py-3 text-right whitespace-nowrap">
-                        <div className="text-gray-500">{fmtAed(inv.gross_amount * inv.fx_rate)}</div>
-                        <div className="mt-1">
+                        <div className="flex items-center justify-end gap-2">
                           <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', PO_STATUS_STYLES[inv.status] ?? '')}>
                             {inv.status}
                           </span>
+                          <span className="text-gray-500">{fmtAed(inv.gross_amount * inv.fx_rate)}</span>
                         </div>
                       </td>
-                      <td className="px-3 py-3 w-16">
+                      <td className="px-3 py-3 w-20">
                         <div className="flex items-center gap-1">
+                          {inv.invoice_url && (
+                            <a
+                              href={inv.invoice_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                              title="Open invoice"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          )}
                           <button
                             onClick={e => { e.stopPropagation(); handleClonePo(inv) }}
                             disabled={cloningPoId === inv.id}

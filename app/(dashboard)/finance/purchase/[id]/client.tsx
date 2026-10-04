@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, ExternalLink } from 'lucide-react'
 import { PurchaseInvoice } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
@@ -27,9 +27,10 @@ type Props = {
   invoice: PurchaseInvoice & { project: { id: string; name: string } | null }
   projects: { id: string; name: string }[]
   isNew?: boolean
+  from?: string
 }
 
-export function PurchaseInvoiceDetailClient({ invoice, projects, isNew }: Props) {
+export function PurchaseInvoiceDetailClient({ invoice, projects, isNew, from }: Props) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -46,6 +47,7 @@ export function PurchaseInvoiceDetailClient({ invoice, projects, isNew }: Props)
     status: invoice.status,
     amount_paid: invoice.amount_paid,
     notes: invoice.notes ?? '',
+    invoice_url: invoice.invoice_url ?? '',
   })
 
   const [saving, setSaving] = useState(false)
@@ -59,7 +61,7 @@ export function PurchaseInvoiceDetailClient({ invoice, projects, isNew }: Props)
   const amountRemaining = grossAmount - form.amount_paid
 
   function backTarget() {
-    if (isNew) return '/finance?tab=purchase'
+    if (isNew || from === 'finance') return '/finance?tab=purchase'
     return form.project_id ? `/projects/${form.project_id}?tab=finance` : '/finance?tab=purchase'
   }
 
@@ -81,6 +83,7 @@ export function PurchaseInvoiceDetailClient({ invoice, projects, isNew }: Props)
       status: form.status,
       amount_paid: amountPaid,
       notes: form.notes || null,
+      invoice_url: form.invoice_url || null,
     }).select().single()
     setSaving(false)
     if (error || !newInv) return
@@ -109,6 +112,7 @@ export function PurchaseInvoiceDetailClient({ invoice, projects, isNew }: Props)
       status: form.status,
       amount_paid: form.status === 'partial' ? Number(form.amount_paid) : form.status === 'paid' ? grossAmount : 0,
       notes: form.notes || null,
+      invoice_url: form.invoice_url || null,
       updated_at: new Date().toISOString(),
     }).eq('id', invoice.id)
     setSaving(false)
@@ -220,6 +224,28 @@ export function PurchaseInvoiceDetailClient({ invoice, projects, isNew }: Props)
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-600">Due Date</label>
               <Input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} />
+            </div>
+            <div className="col-span-2 space-y-1">
+              <label className="text-xs font-medium text-gray-600">Invoice Link</label>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={form.invoice_url}
+                  onChange={e => setForm(f => ({ ...f, invoice_url: e.target.value }))}
+                  placeholder="https://…"
+                  className="flex-1"
+                />
+                {form.invoice_url && (
+                  <a
+                    href={form.invoice_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:text-blue-600 hover:border-blue-300 transition-colors"
+                    title="Open invoice"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                )}
+              </div>
             </div>
           </div>
         </div>

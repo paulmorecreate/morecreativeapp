@@ -433,6 +433,7 @@ export interface PurchaseInvoice {
   status: 'pending' | 'paid' | 'partial'
   amount_paid: number
   notes: string | null
+  invoice_url: string | null
   created_at: string
   updated_at: string
   project?: { id: string; name: string } | null
