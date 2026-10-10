@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Save, ExternalLink } from 'lucide-react'
-import { PurchaseInvoice } from '@/lib/supabase/types'
+import { PurchaseInvoice, CurrencyRate } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
@@ -16,6 +16,7 @@ const STATUS_STYLES: Record<string, string> = {
   pending: 'bg-amber-50 text-amber-700',
   partial: 'bg-blue-50 text-blue-700',
   paid: 'bg-green-50 text-green-700',
+  cancelled: 'bg-red-50 text-red-600',
 }
 
 function fmt(currency: string, amount: number) {
@@ -26,11 +27,12 @@ function fmt(currency: string, amount: number) {
 type Props = {
   invoice: PurchaseInvoice & { project: { id: string; name: string } | null }
   projects: { id: string; name: string }[]
+  currencyRates: CurrencyRate[]
   isNew?: boolean
   from?: string
 }
 
-export function PurchaseInvoiceDetailClient({ invoice, projects, isNew, from }: Props) {
+export function PurchaseInvoiceDetailClient({ invoice, projects, currencyRates, isNew, from }: Props) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -201,6 +203,7 @@ export function PurchaseInvoiceDetailClient({ invoice, projects, isNew, from }: 
                 <option value="pending">Pending</option>
                 <option value="partial">Partial</option>
                 <option value="paid">Paid</option>
+                <option value="cancelled">Cancelled</option>
               </Select>
             </div>
             {form.status === 'partial' && (
@@ -256,7 +259,14 @@ export function PurchaseInvoiceDetailClient({ invoice, projects, isNew, from }: 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-600">Currency</label>
-              <Select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value as PurchaseInvoice['currency'] }))}>
+              <Select
+                value={form.currency}
+                onChange={e => {
+                  const currency = e.target.value as PurchaseInvoice['currency']
+                  const liveRate = currency === 'AED' ? 1 : (currencyRates.find(r => r.currency === currency)?.rate_to_aed ?? 1)
+                  setForm(f => ({ ...f, currency, fx_rate: liveRate }))
+                }}
+              >
                 <option value="AED">AED — UAE Dirham</option>
                 <option value="EUR">EUR — Euro (€)</option>
                 <option value="USD">USD — US Dollar ($)</option>
@@ -294,7 +304,25 @@ export function PurchaseInvoiceDetailClient({ invoice, projects, isNew, from }: 
                 value={form.fx_rate}
                 onChange={e => setForm(f => ({ ...f, fx_rate: parseFloat(e.target.value) || 1 }))}
                 placeholder="1.0000"
+                disabled={form.currency === 'AED'}
               />
+              {form.currency !== 'AED' && (() => {
+                const liveRate = currencyRates.find(r => r.currency === form.currency)?.rate_to_aed
+                return liveRate ? (
+                  <p className="text-xs text-gray-400">
+                    Live rate: 1 {form.currency} = {liveRate} AED
+                    {form.fx_rate !== liveRate && (
+                      <button
+                        type="button"
+                        onClick={() => setForm(f => ({ ...f, fx_rate: liveRate }))}
+                        className="ml-2 text-blue-500 hover:text-blue-700 underline"
+                      >
+                        Use this
+                      </button>
+                    )}
+                  </p>
+                ) : null
+              })()}
             </div>
           </div>
 

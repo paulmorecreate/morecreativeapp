@@ -22,9 +22,11 @@ export default async function PurchaseInvoiceDetailPage({ params, searchParams }
   const [
     { data: invoice },
     { data: projects },
+    { data: currencyRates },
   ] = await Promise.all([
     supabase.from('purchase_invoices').select('*, project:events(id, name)').eq('id', id).single(),
     supabase.from('events').select('id, name').order('name'),
+    supabase.from('currency_rates').select('*'),
   ])
 
   if (!invoice) notFound()
@@ -33,6 +35,7 @@ export default async function PurchaseInvoiceDetailPage({ params, searchParams }
     <PurchaseInvoiceDetailClient
       invoice={invoice as any}
       projects={projects ?? []}
+      currencyRates={currencyRates ?? []}
       from={from}
     />
   )

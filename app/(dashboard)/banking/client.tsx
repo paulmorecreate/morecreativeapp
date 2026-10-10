@@ -101,7 +101,7 @@ function shortDesc(s: string, max = 60) {
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = 'upload' | 'aed' | 'eur' | 'expenses' | 'income' | 'shareholder' | 'trial-balance'
+type Tab = 'upload' | 'aed' | 'eur' | 'expenses' | 'income' | 'shareholder' | 'monthly-pl' | 'trial-balance'
 
 type SortDir = 'asc' | 'desc'
 
@@ -250,6 +250,7 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
   const [fxSaving, setFxSaving] = useState(false)
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null)
   const [tbYear, setTbYear] = useState(new Date().getFullYear())
+  const [plYear, setPlYear] = useState(new Date().getFullYear())
   const [rememberPrompt, setRememberPrompt] = useState<RememberPrompt | null>(null)
   const [rememberPattern, setRememberPattern] = useState('')
   const [ruleSaving, setRuleSaving] = useState(false)
@@ -492,6 +493,36 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
 
     return { expenseMap, incomeCredit, shareholderDebit, shareholderCredit }
   }, [transactions, tbYear, expenseCategorySet, incomeCategorySet, shareholderCategorySet])
+
+  const monthlyPl = useMemo(() => {
+    const map = new Map<string, { income: number; expenses: number }>()
+
+    for (const t of transactions) {
+      if (!t.accounting_category) continue
+      if (t.accounting_category === 'Own-account transfer') continue
+      if (shareholderCategorySet.has(t.accounting_category)) continue
+      if (!t.date.startsWith(String(plYear))) continue
+
+      const month = t.date.slice(0, 7)
+      const entry = map.get(month) ?? { income: 0, expenses: 0 }
+      const aed = t.aed_equivalent ?? 0
+
+      if (aed > 0) entry.income += aed
+      else if (aed < 0) entry.expenses += Math.abs(aed)
+
+      map.set(month, entry)
+    }
+
+    const sorted = Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, { income, expenses }]) => ({ month, income, expenses, net: income - expenses }))
+
+    let cumulative = 0
+    return sorted.map(row => {
+      cumulative += row.net
+      return { ...row, cumulative }
+    }).reverse()
+  }, [transactions, shareholderCategorySet, plYear])
 
   function toggleSort(col: typeof txSortCol) {
     if (txSortCol === col) setTxSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -958,6 +989,7 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
           { key: 'expenses', label: 'Expense Ledger', badge: 0, count: null },
           { key: 'income', label: 'Income Ledger', badge: 0, count: null },
           { key: 'shareholder', label: 'Shareholder Account', badge: 0, count: null },
+          { key: 'monthly-pl', label: 'Monthly P&L', badge: 0, count: null },
           { key: 'trial-balance', label: 'Trial Balance', badge: 0, count: null },
         ] as { key: Tab; label: string; badge: number; count: number | null }[]).map(({ key, label, badge, count }) => (
           <button
@@ -1377,6 +1409,134 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
             Transactions categorised as Shareholder's Current Account, Director Personal Expenses, Shareholder Funding, or Salary Advances.
           </p>
           <TxTable rows={shareholderTx} />
+        </div>
+      )}
+
+      {/* ── Monthly P&L tab ─────────────────────────────────────────────────── */}
+      {tab === 'monthly-pl' && (
+        <div>
+          <div className="flex items-center gap-1 mb-5">
+            {[2025, 2026, 2027].map(y => (
+              <button
+                key={y}
+                onClick={() => setPlYear(y)}
+                className={cn('px-3 py-1.5 text-sm font-medium rounded-lg transition-colors', plYear === y ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-700 bg-white border border-gray-200')}
+              >
+                {y}
+              </button>
+            ))}
+          </div>
+
+          {(() => {
+            const uncatCount = transactions.filter(t => !t.accounting_category && t.date.startsWith(String(plYear))).length
+            return uncatCount > 0 ? (
+              <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                <p className="text-sm text-amber-800">
+                  <strong>{uncatCount} uncategorised transaction{uncatCount !== 1 ? 's' : ''}</strong> in {plYear} are excluded — categorise them in the AED or EUR tabs to include them here.
+                </p>
+              </div>
+            ) : null
+          })()}
+
+          {monthlyPl.length === 0 ? (
+            <div className="bg-white border border-gray-200 rounded-xl px-5 py-12 text-center">
+              <p className="text-sm text-gray-400">No categorised transactions for {plYear}.</p>
+            </div>
+          ) : (() => {
+            const totalIncome = monthlyPl.reduce((s, r) => s + r.income, 0)
+            const totalExpenses = monthlyPl.reduce((s, r) => s + r.expenses, 0)
+            const netPl = totalIncome - totalExpenses
+            const maxBar = Math.max(...monthlyPl.flatMap(r => [r.income, r.expenses]), 1)
+            const currentMonth = new Date().toISOString().slice(0, 7)
+
+            return (
+              <>
+                <div className="grid grid-cols-3 gap-3 mb-5">
+                  <div className="bg-green-50 border border-green-100 rounded-xl px-5 py-3.5">
+                    <p className="text-xs font-medium text-green-600 mb-0.5">Total Income</p>
+                    <p className="text-lg font-semibold text-green-800">{fmtAed(totalIncome)}</p>
+                    <p className="text-xs text-green-500 mt-0.5">{plYear} year-to-date</p>
+                  </div>
+                  <div className="bg-red-50 border border-red-100 rounded-xl px-5 py-3.5">
+                    <p className="text-xs font-medium text-red-600 mb-0.5">Total Expenses</p>
+                    <p className="text-lg font-semibold text-red-800">{fmtAed(totalExpenses)}</p>
+                    <p className="text-xs text-red-400 mt-0.5">{plYear} year-to-date</p>
+                  </div>
+                  <div className={cn('rounded-xl px-5 py-3.5 border', netPl >= 0 ? 'bg-white border-gray-200' : 'bg-red-50 border-red-100')}>
+                    <p className="text-xs font-medium text-gray-500 mb-0.5">Net P&L</p>
+                    <p className={cn('text-lg font-semibold', netPl >= 0 ? 'text-gray-900' : 'text-red-700')}>{fmtAed(Math.abs(netPl))}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{netPl >= 0 ? 'Net surplus' : 'Net deficit'}</p>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+                  <table className="w-full text-sm min-w-[700px]">
+                    <thead>
+                      <tr className="border-b border-gray-100 bg-gray-50">
+                        <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Month</th>
+                        <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Income (AED)</th>
+                        <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Expenses (AED)</th>
+                        <th className="px-3 py-3 w-28" />
+                        <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Net (AED)</th>
+                        <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Cumulative</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {monthlyPl.map(row => {
+                        const label = new Date(row.month + '-01').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+                        const isCurrent = row.month === currentMonth
+                        return (
+                          <tr key={row.month} className={cn('transition-colors', isCurrent ? 'bg-blue-50/40' : 'hover:bg-gray-50')}>
+                            <td className="px-5 py-3 font-medium text-gray-900 whitespace-nowrap">
+                              {label}
+                              {isCurrent && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">Current</span>}
+                            </td>
+                            <td className="px-5 py-3 text-right font-medium text-green-700 whitespace-nowrap">
+                              {row.income > 0 ? row.income.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="text-gray-300">—</span>}
+                            </td>
+                            <td className="px-5 py-3 text-right font-medium text-red-700 whitespace-nowrap">
+                              {row.expenses > 0 ? row.expenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="text-gray-300">—</span>}
+                            </td>
+                            <td className="px-3 py-3 w-28">
+                              <div className="space-y-1">
+                                <div className="h-1.5 rounded-full bg-green-300" style={{ width: `${Math.max(2, Math.round((row.income / maxBar) * 96))}px` }} />
+                                <div className="h-1.5 rounded-full bg-red-300" style={{ width: `${Math.max(2, Math.round((row.expenses / maxBar) * 96))}px` }} />
+                              </div>
+                            </td>
+                            <td className={cn('px-5 py-3 text-right font-semibold whitespace-nowrap', row.net >= 0 ? 'text-gray-900' : 'text-red-700')}>
+                              {row.net >= 0 ? '+' : ''}{row.net.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className={cn('px-5 py-3 text-right font-mono text-sm whitespace-nowrap', row.cumulative >= 0 ? 'text-gray-600' : 'text-red-600')}>
+                              {row.cumulative >= 0 ? '+' : ''}{row.cumulative.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-gray-300 bg-gray-50">
+                        <td className="px-5 py-3 text-xs font-semibold text-gray-500">Total {plYear}</td>
+                        <td className="px-5 py-3 text-right text-sm font-semibold text-green-700 whitespace-nowrap">
+                          {totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-5 py-3 text-right text-sm font-semibold text-red-700 whitespace-nowrap">
+                          {totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td />
+                        <td className={cn('px-5 py-3 text-right text-sm font-semibold whitespace-nowrap', netPl >= 0 ? 'text-gray-900' : 'text-red-700')}>
+                          {netPl >= 0 ? '+' : ''}{netPl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td />
+                      </tr>
+                    </tfoot>
+                  </table>
+                  <p className="px-5 py-3 text-[10px] text-gray-400 border-t border-gray-100">
+                    Income = all bank credits · Expenses = all bank debits · Own-account transfers and shareholder movements excluded · Uncategorised transactions excluded.
+                  </p>
+                </div>
+              </>
+            )
+          })()}
         </div>
       )}
 

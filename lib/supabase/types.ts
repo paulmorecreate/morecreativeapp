@@ -430,7 +430,7 @@ export interface PurchaseInvoice {
   fx_rate: number
   issue_date: string | null
   due_date: string | null
-  status: 'pending' | 'paid' | 'partial'
+  status: 'pending' | 'paid' | 'partial' | 'cancelled'
   amount_paid: number
   notes: string | null
   invoice_url: string | null

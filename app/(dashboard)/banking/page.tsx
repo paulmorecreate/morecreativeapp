@@ -50,7 +50,7 @@ export default async function BankingPage({ searchParams }: { searchParams: Prom
       .order('sort_order'),
   ])
 
-  const validTabs = ['upload', 'aed', 'eur', 'expenses', 'income', 'shareholder', 'trial-balance']
+  const validTabs = ['upload', 'aed', 'eur', 'expenses', 'income', 'shareholder', 'monthly-pl', 'trial-balance']
   const initialTab = validTabs.includes(tab ?? '') ? tab! : 'upload'
 
   return (

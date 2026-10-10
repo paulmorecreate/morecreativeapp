@@ -18,7 +18,10 @@ export default async function NewPurchaseInvoicePage() {
     redirect('/dashboard')
   }
 
-  const { data: projects } = await supabase.from('events').select('id, name').order('name')
+  const [{ data: projects }, { data: currencyRates }] = await Promise.all([
+    supabase.from('events').select('id, name').order('name'),
+    supabase.from('currency_rates').select('*'),
+  ])
 
   const emptyInvoice = {
     id: '',
@@ -45,6 +48,7 @@ export default async function NewPurchaseInvoicePage() {
     <PurchaseInvoiceDetailClient
       invoice={emptyInvoice as any}
       projects={projects ?? []}
+      currencyRates={currencyRates ?? []}
       isNew={true}
     />
   )
