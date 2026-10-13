@@ -90,7 +90,7 @@ export function ProjectsClient({ projects, categories }: Props) {
   }
 
   const active = projects.filter(p => p.status !== 'completed' && matchesSearch(p))
-  const completed = projects.filter(p => p.status === 'completed' && matchesSearch(p))
+  const completed = projects.filter(p => p.status === 'completed' && matchesSearch(p)).reverse()
 
   return (
     <div>
