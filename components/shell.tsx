@@ -6,6 +6,7 @@ import { Menu } from 'lucide-react'
 import { Sidebar } from './sidebar'
 import { TodoFab } from './todo-fab'
 import { GlobalSearch } from './global-search'
+import { FeedbackWidget } from './feedback-widget'
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
@@ -82,6 +83,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </div>
 
       <TodoFab />
+      <FeedbackWidget />
     </div>
   )
 }
