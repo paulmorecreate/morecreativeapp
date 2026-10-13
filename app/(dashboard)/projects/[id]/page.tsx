@@ -10,7 +10,8 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
   const { data: profile } = user
     ? await supabase.from('user_profiles').select('role').eq('id', user.id).single()
     : { data: null }
-  const canViewFinance = profile?.role === 'admin' || profile?.role === 'finance' || profile?.role === 'super_user'
+  const canEditFinance = profile?.role === 'admin' || profile?.role === 'finance' || profile?.role === 'super_user'
+  const canViewFinance = canEditFinance || profile?.role === 'general'
 
   const [
     { data: project },
@@ -88,6 +89,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       expenseCategories={expenseCategories ?? []}
       currencyRates={currencyRates ?? []}
       canViewFinance={canViewFinance}
+      canEditFinance={canEditFinance}
       initialTab={tabParam === 'finance' ? 'finance' : 'overview'}
       talentCategories={talentCategories ?? []}
       talentLevels={talentLevels ?? []}

@@ -100,6 +100,7 @@ type Props = {
   expenseCategories: ExpenseCategory[]
   currencyRates: CurrencyRate[]
   canViewFinance: boolean
+  canEditFinance: boolean
   initialTab?: 'overview' | 'finance'
   talentCategories: SimpleRecord[]
   talentLevels: SimpleRecord[]
@@ -248,6 +249,7 @@ function ProjectFinanceTab({
   expenses: initialExpenses,
   expenseCategories,
   currencyRates,
+  canEdit,
 }: {
   projectId: string
   invoices: Invoice[]
@@ -256,6 +258,7 @@ function ProjectFinanceTab({
   expenses: ProjectExpense[]
   expenseCategories: ExpenseCategory[]
   currencyRates: CurrencyRate[]
+  canEdit: boolean
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -453,9 +456,11 @@ function ProjectFinanceTab({
       <div className="bg-white rounded-xl border border-gray-200">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <h3 className="text-sm font-semibold text-gray-900">Income</h3>
-          <button onClick={() => setAddIncomeOpen(true)} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700">
-            <Plus className="w-3 h-3" /> Add
-          </button>
+          {canEdit && (
+            <button onClick={() => setAddIncomeOpen(true)} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700">
+              <Plus className="w-3 h-3" /> Add
+            </button>
+          )}
         </div>
         {initialIncome.length === 0 ? (
           <p className="px-5 py-4 text-sm text-gray-400">No income recorded yet.</p>
@@ -469,7 +474,7 @@ function ProjectFinanceTab({
                 <th className="px-5 py-2.5 text-right text-xs font-medium text-gray-400">Amount</th>
                 <th className="px-5 py-2.5 text-right text-xs font-medium text-gray-400">AED equiv.</th>
                 <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-400">Status</th>
-                <th className="px-2 py-2.5 w-16" />
+                {canEdit && <th className="px-2 py-2.5 w-16" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -489,28 +494,36 @@ function ProjectFinanceTab({
                       : '—'}
                   </td>
                   <td className="px-5 py-3">
-                    <select
-                      value={inc.status}
-                      onChange={e => updateIncomeStatus(inc.id, e.target.value)}
-                      className={cn('text-xs font-medium px-2 py-0.5 rounded-full border-0 focus:outline-none cursor-pointer', INCOME_STATUS_BADGE[inc.status] ?? 'bg-gray-100 text-gray-600')}
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="invoiced">Invoiced</option>
-                    </select>
-                  </td>
-                  <td className="px-2 py-3">
-                    <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
-                      <button onClick={() => openEditIncome(inc)} className="text-gray-300 hover:text-gray-600">
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteTarget({ table: 'project_income', id: inc.id, label: inc.description, amount: fmtAmount(inc.currency, inc.amount) })}
-                        className="text-gray-300 hover:text-red-500"
+                    {canEdit ? (
+                      <select
+                        value={inc.status}
+                        onChange={e => updateIncomeStatus(inc.id, e.target.value)}
+                        className={cn('text-xs font-medium px-2 py-0.5 rounded-full border-0 focus:outline-none cursor-pointer', INCOME_STATUS_BADGE[inc.status] ?? 'bg-gray-100 text-gray-600')}
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                        <option value="pending">Pending</option>
+                        <option value="invoiced">Invoiced</option>
+                      </select>
+                    ) : (
+                      <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full capitalize', INCOME_STATUS_BADGE[inc.status] ?? 'bg-gray-100 text-gray-600')}>
+                        {inc.status}
+                      </span>
+                    )}
                   </td>
+                  {canEdit && (
+                    <td className="px-2 py-3">
+                      <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
+                        <button onClick={() => openEditIncome(inc)} className="text-gray-300 hover:text-gray-600">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setDeleteTarget({ table: 'project_income', id: inc.id, label: inc.description, amount: fmtAmount(inc.currency, inc.amount) })}
+                          className="text-gray-300 hover:text-red-500"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -522,9 +535,11 @@ function ProjectFinanceTab({
       <div className="bg-white rounded-xl border border-gray-200">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <h3 className="text-sm font-semibold text-gray-900">Expenses</h3>
-          <button onClick={() => setAddExpenseOpen(true)} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700">
-            <Plus className="w-3 h-3" /> Add
-          </button>
+          {canEdit && (
+            <button onClick={() => setAddExpenseOpen(true)} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700">
+              <Plus className="w-3 h-3" /> Add
+            </button>
+          )}
         </div>
         {initialExpenses.length === 0 ? (
           <p className="px-5 py-4 text-sm text-gray-400">No expenses recorded yet.</p>
@@ -537,7 +552,7 @@ function ProjectFinanceTab({
                 <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-400">Date</th>
                 <th className="px-5 py-2.5 text-right text-xs font-medium text-gray-400">Amount</th>
                 <th className="px-5 py-2.5 text-right text-xs font-medium text-gray-400">AED equiv.</th>
-                <th className="px-2 py-2.5 w-16" />
+                {canEdit && <th className="px-2 py-2.5 w-16" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -554,7 +569,7 @@ function ProjectFinanceTab({
                       ? `AED ${toAED(exp.amount, exp.currency, currencyRates).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
                       : '—'}
                   </td>
-                  <td className="px-2 py-3">
+                  {canEdit && <td className="px-2 py-3">
                     <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
                       <button onClick={() => openEditExpense(exp)} className="text-gray-300 hover:text-gray-600">
                         <Pencil className="w-3.5 h-3.5" />
@@ -566,7 +581,7 @@ function ProjectFinanceTab({
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                  </td>
+                  </td>}
                 </tr>
               ))}
             </tbody>
@@ -578,10 +593,12 @@ function ProjectFinanceTab({
       <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-gray-900">Sales Invoices</h3>
-          <Button variant="secondary" onClick={handleNewInvoice} disabled={creating}>
-            <Plus className="w-3.5 h-3.5" />
-            {creating ? 'Creating…' : 'New Sales Invoice'}
-          </Button>
+          {canEdit && (
+            <Button variant="secondary" onClick={handleNewInvoice} disabled={creating}>
+              <Plus className="w-3.5 h-3.5" />
+              {creating ? 'Creating…' : 'New Sales Invoice'}
+            </Button>
+          )}
         </div>
         {initialInvoices.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 px-5 py-6 text-center">
@@ -597,12 +614,12 @@ function ProjectFinanceTab({
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Due Date</th>
                   <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Amount</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
-                  <th className="px-3 py-3 w-10" />
+                  {canEdit && <th className="px-3 py-3 w-10" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {initialInvoices.map(inv => (
-                  <tr key={inv.id} onClick={() => router.push(`/finance/${inv.id}`)} className="hover:bg-gray-50 cursor-pointer transition-colors group">
+                  <tr key={inv.id} onClick={canEdit ? () => router.push(`/finance/${inv.id}`) : undefined} className={cn('transition-colors group', canEdit && 'hover:bg-gray-50 cursor-pointer')}>
                     <td className="px-5 py-3 font-medium text-gray-900">{inv.invoice_number}</td>
                     <td className="px-5 py-3 text-gray-700">
                       {inv.billed_to_name ?? <span className="text-gray-300">—</span>}
@@ -626,14 +643,16 @@ function ProjectFinanceTab({
                         {inv.status}
                       </span>
                     </td>
-                    <td className="px-3 py-3">
-                      <button
-                        onClick={e => { e.stopPropagation(); setDeleteTarget({ table: 'invoices', id: inv.id, label: inv.invoice_number, amount: inv.billed_to_name ?? '' }) }}
-                        className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
+                    {canEdit && (
+                      <td className="px-3 py-3">
+                        <button
+                          onClick={e => { e.stopPropagation(); setDeleteTarget({ table: 'invoices', id: inv.id, label: inv.invoice_number, amount: inv.billed_to_name ?? '' }) }}
+                          className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -646,10 +665,12 @@ function ProjectFinanceTab({
       <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-gray-900">Purchase Invoices</h3>
-          <Button variant="secondary" onClick={handleNewPurchaseInvoice} disabled={creating}>
-            <Plus className="w-3.5 h-3.5" />
-            {creating ? 'Creating…' : 'New Purchase Invoice'}
-          </Button>
+          {canEdit && (
+            <Button variant="secondary" onClick={handleNewPurchaseInvoice} disabled={creating}>
+              <Plus className="w-3.5 h-3.5" />
+              {creating ? 'Creating…' : 'New Purchase Invoice'}
+            </Button>
+          )}
         </div>
         {initialPurchaseInvoices.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 px-5 py-6 text-center">
@@ -665,12 +686,12 @@ function ProjectFinanceTab({
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Issue Date</th>
                   <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Gross Amount</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
-                  <th className="px-3 py-3 w-10" />
+                  {canEdit && <th className="px-3 py-3 w-10" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {initialPurchaseInvoices.map(inv => (
-                  <tr key={inv.id} onClick={() => router.push(`/finance/purchase/${inv.id}`)} className="hover:bg-gray-50 cursor-pointer transition-colors group">
+                  <tr key={inv.id} onClick={canEdit ? () => router.push(`/finance/purchase/${inv.id}`) : undefined} className={cn('transition-colors group', canEdit && 'hover:bg-gray-50 cursor-pointer')}>
                     <td className="px-5 py-3 font-medium text-gray-900">
                       {inv.invoice_number || <span className="text-gray-300">—</span>}
                     </td>
@@ -686,14 +707,16 @@ function ProjectFinanceTab({
                         {inv.status}
                       </span>
                     </td>
-                    <td className="px-3 py-3">
-                      <button
-                        onClick={e => { e.stopPropagation(); setDeleteTarget({ table: 'purchase_invoices', id: inv.id, label: inv.supplier || 'Purchase invoice', amount: `${inv.currency} ${inv.gross_amount.toFixed(2)}` }) }}
-                        className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
+                    {canEdit && (
+                      <td className="px-3 py-3">
+                        <button
+                          onClick={e => { e.stopPropagation(); setDeleteTarget({ table: 'purchase_invoices', id: inv.id, label: inv.supplier || 'Purchase invoice', amount: `${inv.currency} ${inv.gross_amount.toFixed(2)}` }) }}
+                          className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -886,7 +909,7 @@ function ProjectFinanceTab({
   )
 }
 
-export function ProjectDetailClient({ project, talents, brands, categories, brandShows, stylists, projectTalents, invoices, purchaseInvoices, income, expenses, expenseCategories, currencyRates, canViewFinance, initialTab = 'overview', talentCategories, talentLevels, agents: allAgents, agentTypes, people: allPeople, industries, brandCategories }: Props) {
+export function ProjectDetailClient({ project, talents, brands, categories, brandShows, stylists, projectTalents, invoices, purchaseInvoices, income, expenses, expenseCategories, currencyRates, canViewFinance, canEditFinance, initialTab = 'overview', talentCategories, talentLevels, agents: allAgents, agentTypes, people: allPeople, industries, brandCategories }: Props) {
   const router = useRouter()
 
   // Tab
@@ -1657,6 +1680,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
           expenses={expenses}
           expenseCategories={expenseCategories}
           currencyRates={currencyRates}
+          canEdit={canEditFinance}
         />
       )}
 
