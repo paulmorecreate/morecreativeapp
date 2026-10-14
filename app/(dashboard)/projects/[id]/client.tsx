@@ -78,6 +78,10 @@ type ProjectTalent = {
 
 type SimpleRecord = { id: string; name: string }
 
+type UserProfile = { id: string; first_name: string | null; surname: string | null; email: string; color: string | null }
+type ProfitShare = { id: string; project_id: string; mc_percentage: number }
+type ProfitShareEmployee = { id: string; project_id: string; user_profile_id: string; user_profile: UserProfile }
+
 type DeleteTarget = {
   type: 'show' | 'show-talent' | 'project-talent'
   id: string
@@ -109,6 +113,9 @@ type Props = {
   people: { id: string; name: string; type: string | null }[]
   industries: SimpleRecord[]
   brandCategories: SimpleRecord[]
+  profitShare: ProfitShare | null
+  profitShareEmployees: ProfitShareEmployee[]
+  allUsers: UserProfile[]
 }
 
 const EMPTY_NEW_TALENT = {
@@ -185,7 +192,7 @@ const INCOME_TYPES = [
 const CURRENCIES = ['AED', 'EUR', 'USD', 'GBP']
 
 function fmtAmount(currency: string, amount: number) {
-  return `${CURRENCY_SYMBOL[currency] ?? ''}${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+  return `${CURRENCY_SYMBOL[currency] ?? ''}${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function toAED(amount: number, currency: string, rates: CurrencyRate[]): number {
@@ -216,19 +223,15 @@ function PLSummary({
   const totalExpensesAED = expensesFromEntries + expensesFromPurchases
 
   const grossProfit = totalIncomeAED - totalExpensesAED
-  const commissionAED = income
-    .filter(i => i.type === 'commission')
-    .reduce((s, i) => s + toAED(i.amount, i.currency, rates), 0)
 
   const cards = [
     { label: 'Total Income', value: totalIncomeAED, color: 'text-gray-900' },
     { label: 'Total Expenses', value: totalExpensesAED, color: 'text-gray-900' },
     { label: 'Gross Profit', value: grossProfit, color: grossProfit >= 0 ? 'text-green-600' : 'text-red-600' },
-    { label: 'MC Commission', value: commissionAED, color: 'text-gray-900' },
   ]
 
   return (
-    <div className="grid grid-cols-4 gap-3 mb-6">
+    <div className="grid grid-cols-3 gap-3 mb-6">
       {cards.map(c => (
         <div key={c.label} className="bg-white rounded-xl border border-gray-200 px-4 py-3">
           <p className="text-xs text-gray-400 mb-1">{c.label}</p>
@@ -237,6 +240,154 @@ function PLSummary({
           </p>
         </div>
       ))}
+    </div>
+  )
+}
+
+function psUserName(u: UserProfile) {
+  return [u.first_name, u.surname].filter(Boolean).join(' ') || u.email
+}
+
+function ProfitShareSection({
+  projectId, grossProfit, profitShare, employees, allUsers, canEdit,
+}: {
+  projectId: string
+  grossProfit: number
+  profitShare: ProfitShare | null
+  employees: ProfitShareEmployee[]
+  allUsers: UserProfile[]
+  canEdit: boolean
+}) {
+  const supabase = createClient()
+  const router = useRouter()
+  const [editing, setEditing] = useState(false)
+  const [mcPct, setMcPct] = useState('')
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [saving, setSaving] = useState(false)
+
+  function startEditing() {
+    setMcPct(String(profitShare?.mc_percentage ?? 100))
+    setSelectedIds(employees.map(e => e.user_profile_id))
+    setEditing(true)
+  }
+
+  const mcPctEdit = Math.min(100, Math.max(0, parseFloat(mcPct) || 0))
+  const empPctEdit = 100 - mcPctEdit
+
+  async function handleSave() {
+    setSaving(true)
+    await supabase
+      .from('project_profit_share')
+      .upsert({ project_id: projectId, mc_percentage: mcPctEdit }, { onConflict: 'project_id' })
+    await supabase.from('project_profit_share_employees').delete().eq('project_id', projectId)
+    if (selectedIds.length > 0) {
+      await supabase.from('project_profit_share_employees').insert(
+        selectedIds.map(uid => ({ project_id: projectId, user_profile_id: uid }))
+      )
+    }
+    router.refresh()
+    setEditing(false)
+    setSaving(false)
+  }
+
+  const mcPctDisplay = profitShare?.mc_percentage ?? 100
+  const empPctDisplay = 100 - mcPctDisplay
+  const isPositive = grossProfit > 0
+  const mcAmount = profitShare
+    ? isPositive ? (mcPctDisplay / 100) * grossProfit : grossProfit
+    : grossProfit
+  const empTotal = isPositive ? (empPctDisplay / 100) * grossProfit : 0
+  const perEmployee = employees.length > 0 ? empTotal / employees.length : 0
+  const fmtAED = (v: number) => `AED ${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const userPickerItems = allUsers.map(u => ({ id: u.id, name: psUserName(u) }))
+  const isConfigured = profitShare !== null
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <h3 className="text-sm font-semibold text-gray-900">Profit Share</h3>
+        {canEdit && !editing && (
+          <button onClick={startEditing} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700">
+            <Pencil className="w-3 h-3" /> {isConfigured ? 'Edit' : 'Set Up'}
+          </button>
+        )}
+      </div>
+
+      {editing ? (
+        <div className="px-5 py-4 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">MORECREATIVE %</label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={mcPct}
+                  onChange={e => setMcPct(e.target.value)}
+                />
+                <span className="text-xs text-gray-400">%</span>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Team %</label>
+              <p className="text-sm font-semibold text-gray-900 pt-1.5">{empPctEdit.toFixed(0)}%</p>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Team</label>
+            <MultiSelectList
+              items={userPickerItems}
+              selected={selectedIds}
+              onToggle={id => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+              emptyMsg="No users found."
+            />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setEditing(false)} className="flex-1">Cancel</Button>
+            <Button type="button" onClick={handleSave} disabled={saving} className="flex-1">{saving ? 'Saving…' : 'Save'}</Button>
+          </div>
+        </div>
+      ) : !isConfigured ? (
+        <p className="px-5 py-4 text-sm text-gray-400">Profit share not configured for this project.</p>
+      ) : (
+        <div className="divide-y divide-gray-50">
+          <div className="px-5 py-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-900">MORECREATIVE</p>
+              <p className="text-xs text-gray-400">{mcPctDisplay.toFixed(0)}%</p>
+            </div>
+            <p className={cn('text-sm font-semibold', mcAmount < 0 ? 'text-red-600' : 'text-gray-900')}>{fmtAED(mcAmount)}</p>
+          </div>
+          {empPctDisplay > 0 && (
+            <div className="px-5 py-3">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Team</p>
+                  <p className="text-xs text-gray-400">
+                    {empPctDisplay.toFixed(0)}%
+                    {employees.length > 0 && ` · ${employees.length} ${employees.length === 1 ? 'person' : 'people'}`}
+                  </p>
+                </div>
+                <p className="text-sm font-semibold text-gray-900">{fmtAED(empTotal)}</p>
+              </div>
+              {employees.length > 0 && (
+                <div className="space-y-1.5 pl-3 border-l-2 border-gray-100 mt-2">
+                  {employees.map(emp => (
+                    <div key={emp.id} className="flex items-center justify-between">
+                      <p className="text-xs text-gray-600">{psUserName(emp.user_profile)}</p>
+                      <p className="text-xs font-medium text-gray-900">{fmtAED(perEmployee)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {employees.length === 0 && (
+                <p className="text-xs text-gray-400 pl-3">No employees assigned.</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -250,6 +401,9 @@ function ProjectFinanceTab({
   expenseCategories,
   currencyRates,
   canEdit,
+  profitShare,
+  profitShareEmployees,
+  allUsers,
 }: {
   projectId: string
   invoices: Invoice[]
@@ -259,6 +413,9 @@ function ProjectFinanceTab({
   expenseCategories: ExpenseCategory[]
   currencyRates: CurrencyRate[]
   canEdit: boolean
+  profitShare: ProfitShare | null
+  profitShareEmployees: ProfitShareEmployee[]
+  allUsers: UserProfile[]
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -442,6 +599,16 @@ function ProjectFinanceTab({
     { value: '__new__', label: '+ Add new category…' },
   ]
 
+  const grossProfit = (() => {
+    const totalIncome =
+      initialIncome.reduce((s, i) => s + toAED(i.amount, i.currency, currencyRates), 0) +
+      initialInvoices.reduce((s, inv) => s + toAED(invoiceLineTotal(inv), inv.currency, currencyRates), 0)
+    const totalExpenses =
+      initialExpenses.reduce((s, e) => s + toAED(e.amount, e.currency, currencyRates), 0) +
+      initialPurchaseInvoices.reduce((s, inv) => s + inv.gross_amount * inv.fx_rate, 0)
+    return totalIncome - totalExpenses
+  })()
+
   return (
     <div className="space-y-6">
       <PLSummary
@@ -450,6 +617,15 @@ function ProjectFinanceTab({
         rates={currencyRates}
         invoices={initialInvoices}
         purchaseInvoices={initialPurchaseInvoices}
+      />
+
+      <ProfitShareSection
+        projectId={projectId}
+        grossProfit={grossProfit}
+        profitShare={profitShare}
+        employees={profitShareEmployees}
+        allUsers={allUsers}
+        canEdit={canEdit}
       />
 
       {/* Income */}
@@ -909,7 +1085,7 @@ function ProjectFinanceTab({
   )
 }
 
-export function ProjectDetailClient({ project, talents, brands, categories, brandShows, stylists, projectTalents, invoices, purchaseInvoices, income, expenses, expenseCategories, currencyRates, canViewFinance, canEditFinance, initialTab = 'overview', talentCategories, talentLevels, agents: allAgents, agentTypes, people: allPeople, industries, brandCategories }: Props) {
+export function ProjectDetailClient({ project, talents, brands, categories, brandShows, stylists, projectTalents, invoices, purchaseInvoices, income, expenses, expenseCategories, currencyRates, canViewFinance, canEditFinance, initialTab = 'overview', talentCategories, talentLevels, agents: allAgents, agentTypes, people: allPeople, industries, brandCategories, profitShare, profitShareEmployees, allUsers }: Props) {
   const router = useRouter()
 
   // Tab
@@ -1681,6 +1857,9 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
           expenseCategories={expenseCategories}
           currencyRates={currencyRates}
           canEdit={canEditFinance}
+          profitShare={profitShare}
+          profitShareEmployees={profitShareEmployees}
+          allUsers={allUsers}
         />
       )}
 

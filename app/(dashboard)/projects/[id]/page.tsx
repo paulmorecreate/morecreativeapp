@@ -34,6 +34,9 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     { data: people },
     { data: industries },
     { data: brandCategories },
+    { data: profitShare },
+    { data: profitShareEmployees },
+    { data: allUsers },
   ] = await Promise.all([
     supabase.from('events').select('*').eq('id', id).single(),
     supabase.from('talents').select('id, name').order('name'),
@@ -69,6 +72,13 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     supabase.from('people').select('id, name, type').order('name'),
     supabase.from('industries').select('id, name').order('name'),
     supabase.from('brand_categories').select('id, name').order('name'),
+    canViewFinance
+      ? supabase.from('project_profit_share').select('*').eq('project_id', id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    canViewFinance
+      ? supabase.from('project_profit_share_employees').select('*, user_profile:user_profiles(id, first_name, surname, email, color)').eq('project_id', id)
+      : Promise.resolve({ data: [] }),
+    supabase.from('user_profiles').select('id, first_name, surname, email, color').order('first_name'),
   ])
 
   if (!project) notFound()
@@ -98,6 +108,9 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       people={people ?? []}
       industries={industries ?? []}
       brandCategories={brandCategories ?? []}
+      profitShare={profitShare ?? null}
+      profitShareEmployees={(profitShareEmployees ?? []) as any}
+      allUsers={allUsers ?? []}
     />
   )
 }
