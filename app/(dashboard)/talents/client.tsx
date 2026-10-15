@@ -153,6 +153,7 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
   const [talentTypes, setTalentTypes] = useState<Record<string, 'Placement' | 'Organic'>>({})
   const [generating, setGenerating] = useState(false)
   const [exportingList, setExportingList] = useState(false)
+  const [exportingListExcel, setExportingListExcel] = useState(false)
 
   async function handleExportList() {
     setExportingList(true)
@@ -181,6 +182,95 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
       URL.revokeObjectURL(url)
     } finally {
       setExportingList(false)
+    }
+  }
+
+  async function handleExportListExcel() {
+    setExportingListExcel(true)
+    try {
+      const { Workbook } = await import('exceljs')
+      const wb = new Workbook()
+      const ws = wb.addWorksheet('Talents')
+
+      ws.columns = [
+        { key: 'num', width: 5 },
+        { key: 'name', width: 30 },
+        { key: 'field', width: 22 },
+        { key: 'instagram', width: 42 },
+      ]
+
+      // Fetch and embed logo
+      const logoRes = await fetch('/mc-logo.jpg')
+      const logoBuffer = await logoRes.arrayBuffer()
+      const imageId = wb.addImage({ buffer: logoBuffer, extension: 'jpeg' })
+
+      // Top section — 3 rows to house the logo + title
+      const pad1 = ws.addRow([])
+      const titleRow = ws.addRow([])
+      const subtitleRow = ws.addRow([])
+      const pad2 = ws.addRow([])
+      pad1.height = 8
+      titleRow.height = 28
+      subtitleRow.height = 16
+      pad2.height = 10
+
+      // Logo anchored at top-left (tl is 0-based col/row fraction)
+      ws.addImage(imageId, {
+        tl: { col: 0.25, row: 0.3 },
+        ext: { width: 88, height: 46 },
+      } as Parameters<typeof ws.addImage>[1])
+
+      // Title + subtitle cells (column C = index 3, field column)
+      const titleCell = ws.getCell('C2')
+      titleCell.value = 'Talent List'
+      titleCell.font = { size: 16, bold: true, color: { argb: 'FF111111' } }
+      titleCell.alignment = { vertical: 'middle' }
+
+      const subtitleCell = ws.getCell('C3')
+      subtitleCell.value = 'The MoreCreative'
+      subtitleCell.font = { size: 8.5, color: { argb: 'FF888888' } }
+      subtitleCell.alignment = { vertical: 'middle' }
+
+      // Column header row — black fill, white text
+      const headerRow = ws.addRow({ num: '#', name: 'NAME', field: 'FIELD', instagram: 'INSTAGRAM' })
+      headerRow.height = 15
+      headerRow.eachCell((cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF111111' } }
+        cell.font = { size: 8, bold: true, color: { argb: 'FFFFFFFF' } }
+        cell.alignment = { vertical: 'middle' }
+      })
+
+      // Data rows — alternating very subtle tint, bold name
+      sorted.filter(t => selected.has(t.id)).forEach((t, i) => {
+        const row = ws.addRow({
+          num: i + 1,
+          name: t.name,
+          field: t.category ?? '',
+          instagram: t.ig_link ?? '',
+        })
+        row.height = 15
+        const altFill = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFF7F7F7' } }
+        row.getCell('num').font = { size: 9.5, color: { argb: 'FFAAAAAA' } }
+        row.getCell('name').font = { size: 9.5, bold: true }
+        row.getCell('field').font = { size: 9.5 }
+        row.getCell('instagram').font = { size: 9.5 }
+        row.eachCell({ includeEmpty: true }, (cell) => {
+          cell.alignment = { vertical: 'middle' }
+          if (i % 2 === 1) cell.fill = altFill
+          cell.border = { bottom: { style: 'thin', color: { argb: 'FFEEEEEE' } } }
+        })
+      })
+
+      const buffer = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'talents-list.xlsx'
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setExportingListExcel(false)
     }
   }
 
@@ -631,7 +721,12 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
           <button onClick={handleExportList} disabled={exportingList}
             className="inline-flex items-center gap-1.5 text-sm bg-white/10 hover:bg-white/20 text-white rounded-lg px-3 py-1.5 font-medium transition-colors disabled:opacity-60">
             <FileDown className="w-3.5 h-3.5" />
-            {exportingList ? 'Generating…' : 'Export List'}
+            {exportingList ? 'Generating…' : 'Export PDF'}
+          </button>
+          <button onClick={handleExportListExcel} disabled={exportingListExcel}
+            className="inline-flex items-center gap-1.5 text-sm bg-white/10 hover:bg-white/20 text-white rounded-lg px-3 py-1.5 font-medium transition-colors disabled:opacity-60">
+            <FileDown className="w-3.5 h-3.5" />
+            {exportingListExcel ? 'Generating…' : 'Export Excel'}
           </button>
           <button onClick={openExport} className="inline-flex items-center gap-1.5 text-sm bg-white text-gray-900 rounded-lg px-3 py-1.5 hover:bg-gray-100 font-medium transition-colors">
             <FileDown className="w-3.5 h-3.5" />
