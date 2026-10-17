@@ -79,8 +79,8 @@ type ProjectTalent = {
 type SimpleRecord = { id: string; name: string }
 
 type UserProfile = { id: string; first_name: string | null; surname: string | null; email: string; color: string | null }
-type ProfitShare = { id: string; project_id: string; mc_percentage: number }
-type ProfitShareEmployee = { id: string; project_id: string; user_profile_id: string; user_profile: UserProfile }
+type ProfitShare = { id: string; project_id: string; mc_percentage: number; mc_paid: boolean }
+type ProfitShareEmployee = { id: string; project_id: string; user_profile_id: string; user_profile: UserProfile; paid: boolean }
 
 type DeleteTarget = {
   type: 'show' | 'show-talent' | 'project-talent'
@@ -264,6 +264,10 @@ function ProfitShareSection({
   const [mcPct, setMcPct] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
+  const [mcPaid, setMcPaid] = useState(profitShare?.mc_paid ?? false)
+  const [empPaidIds, setEmpPaidIds] = useState<Set<string>>(() =>
+    new Set(employees.filter(e => e.paid).map(e => e.id))
+  )
 
   function startEditing() {
     setMcPct(String(profitShare?.mc_percentage ?? 100))
@@ -288,6 +292,22 @@ function ProfitShareSection({
     router.refresh()
     setEditing(false)
     setSaving(false)
+  }
+
+  async function toggleMcPaid() {
+    const next = !mcPaid
+    setMcPaid(next)
+    await supabase.from('project_profit_share').update({ mc_paid: next }).eq('project_id', projectId)
+  }
+
+  async function toggleEmpPaid(emp: ProfitShareEmployee) {
+    const next = !empPaidIds.has(emp.id)
+    setEmpPaidIds(prev => {
+      const s = new Set(prev)
+      next ? s.add(emp.id) : s.delete(emp.id)
+      return s
+    })
+    await supabase.from('project_profit_share_employees').update({ paid: next }).eq('id', emp.id)
   }
 
   const mcPctDisplay = profitShare?.mc_percentage ?? 100
@@ -352,12 +372,29 @@ function ProfitShareSection({
         <p className="px-5 py-4 text-sm text-gray-400">Profit share not configured for this project.</p>
       ) : (
         <div className="divide-y divide-gray-50">
-          <div className="px-5 py-3 flex items-center justify-between">
-            <div>
+          <div className="px-5 py-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
               <p className="text-sm font-medium text-gray-900">MORECREATIVE</p>
               <p className="text-xs text-gray-400">{mcPctDisplay.toFixed(0)}%</p>
             </div>
-            <p className={cn('text-sm font-semibold', mcAmount < 0 ? 'text-red-600' : 'text-gray-900')}>{fmtAED(mcAmount)}</p>
+            <div className="flex items-center gap-3 shrink-0">
+              <p className={cn('text-sm font-semibold', mcAmount < 0 ? 'text-red-600' : mcPaid ? 'text-gray-400 line-through' : 'text-gray-900')}>{fmtAED(mcAmount)}</p>
+              {canEdit && (
+                <button
+                  onClick={toggleMcPaid}
+                  title={mcPaid ? 'Mark unpaid' : 'Mark paid'}
+                  className={cn(
+                    'inline-flex items-center gap-1 text-xs rounded-full px-2 py-0.5 border transition-colors',
+                    mcPaid
+                      ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
+                      : 'bg-white border-gray-200 text-gray-400 hover:border-gray-400 hover:text-gray-600'
+                  )}
+                >
+                  <CheckCircle2 className="w-3 h-3" />
+                  {mcPaid ? 'Paid' : 'Mark paid'}
+                </button>
+              )}
+            </div>
           </div>
           {empPctDisplay > 0 && (
             <div className="px-5 py-3">
@@ -373,12 +410,32 @@ function ProfitShareSection({
               </div>
               {employees.length > 0 && (
                 <div className="space-y-1.5 pl-3 border-l-2 border-gray-100 mt-2">
-                  {employees.map(emp => (
-                    <div key={emp.id} className="flex items-center justify-between">
-                      <p className="text-xs text-gray-600">{psUserName(emp.user_profile)}</p>
-                      <p className="text-xs font-medium text-gray-900">{fmtAED(perEmployee)}</p>
-                    </div>
-                  ))}
+                  {employees.map(emp => {
+                    const isPaid = empPaidIds.has(emp.id)
+                    return (
+                      <div key={emp.id} className="flex items-center justify-between gap-3">
+                        <p className="text-xs text-gray-600 min-w-0 truncate">{psUserName(emp.user_profile)}</p>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <p className={cn('text-xs font-medium', isPaid ? 'text-gray-400 line-through' : 'text-gray-900')}>{fmtAED(perEmployee)}</p>
+                          {canEdit && (
+                            <button
+                              onClick={() => toggleEmpPaid(emp)}
+                              title={isPaid ? 'Mark unpaid' : 'Mark paid'}
+                              className={cn(
+                                'inline-flex items-center gap-1 text-xs rounded-full px-2 py-0.5 border transition-colors',
+                                isPaid
+                                  ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
+                                  : 'bg-white border-gray-200 text-gray-400 hover:border-gray-400 hover:text-gray-600'
+                              )}
+                            >
+                              <CheckCircle2 className="w-3 h-3" />
+                              {isPaid ? 'Paid' : 'Mark paid'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
               {employees.length === 0 && (
