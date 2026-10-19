@@ -246,14 +246,20 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
           num: i + 1,
           name: t.name,
           field: t.category ?? '',
-          instagram: t.ig_link ?? '',
+          instagram: '',
         })
         row.height = 15
         const altFill = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFF7F7F7' } }
         row.getCell('num').font = { size: 9.5, color: { argb: 'FFAAAAAA' } }
         row.getCell('name').font = { size: 9.5, bold: true }
         row.getCell('field').font = { size: 9.5 }
-        row.getCell('instagram').font = { size: 9.5 }
+        if (t.ig_link) {
+          const igCell = row.getCell('instagram')
+          igCell.value = { text: t.ig_link, hyperlink: t.ig_link }
+          igCell.font = { size: 9.5, color: { argb: 'FF0563C1' }, underline: true }
+        } else {
+          row.getCell('instagram').font = { size: 9.5 }
+        }
         row.eachCell({ includeEmpty: true }, (cell) => {
           cell.alignment = { vertical: 'middle' }
           if (i % 2 === 1) cell.fill = altFill
