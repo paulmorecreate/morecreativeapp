@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Trash2, KeyRound, X, ChevronDown, LockKeyhole, LockKeyholeOpen, Download } from 'lucide-react'
+import { Plus, Trash2, KeyRound, X, ChevronDown, LockKeyhole, LockKeyholeOpen, Download, Upload, FileText, ExternalLink, AlertCircle } from 'lucide-react'
 import { ProjectCategory, Industry, AgentType, TalentCategory, BrandCategory, TalentLevel, TalentSkill, InvoiceSettings, UserRole, ExpenseCategory, CurrencyRate, McRole, OpportunityStage } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Textarea } from '@/components/ui/input'
@@ -786,7 +786,7 @@ function InvoiceSettingsPanel({ settings }: { settings: InvoiceSettings | null }
   )
 }
 
-type Tab = 'users' | 'lookups' | 'reports' | 'finance' | 'audit' | 'diagnostics'
+type Tab = 'users' | 'lookups' | 'reports' | 'finance' | 'audit' | 'diagnostics' | 'storage'
 
 type ReportTalent = { id: string; name: string; ig_link: string | null }
 type ReportBrand  = { id: string; name: string; link: string | null }
@@ -1087,6 +1087,192 @@ function DiagnosticsSection() {
   )
 }
 
+const STORAGE_BUCKET = 'test-uploads'
+const STORAGE_LIMIT_BYTES = 1 * 1024 * 1024 * 1024  // 1 GB Supabase free tier
+
+type StorageFile = {
+  name: string
+  id: string
+  created_at: string
+  metadata: { size: number; mimetype: string; lastModified?: number } | null
+}
+
+function StorageTestSection() {
+  const supabase = createClient()
+  const [files, setFiles] = useState<StorageFile[]>([])
+  const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<StorageFile | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadFiles = useCallback(async () => {
+    setLoading(true)
+    const { data, error } = await supabase.storage.from(STORAGE_BUCKET).list('', { limit: 200, sortBy: { column: 'created_at', order: 'desc' } })
+    if (error) { setError(error.message); setLoading(false); return }
+    setFiles((data ?? []) as StorageFile[])
+    setLoading(false)
+  }, [supabase])
+
+  useEffect(() => { loadFiles() }, [loadFiles])
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    setUploadProgress(`Uploading ${file.name}…`)
+    setError(null)
+    const path = `${Date.now()}-${file.name}`
+    const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(path, file)
+    if (error) {
+      setError(error.message)
+    } else {
+      await loadFiles()
+    }
+    setUploadProgress(null)
+    setUploading(false)
+    e.target.value = ''
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    const { error } = await supabase.storage.from(STORAGE_BUCKET).remove([deleteTarget.name])
+    if (error) { setError(error.message) } else { setFiles(f => f.filter(x => x.name !== deleteTarget.name)) }
+    setDeleteTarget(null)
+    setDeleting(false)
+  }
+
+  async function getDownloadUrl(name: string) {
+    const { data } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(name, 60)
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+  }
+
+  const totalBytes = files.reduce((sum, f) => sum + (f.metadata?.size ?? 0), 0)
+  const pct = Math.min((totalBytes / STORAGE_LIMIT_BYTES) * 100, 100)
+
+  return (
+    <div className="max-w-2xl space-y-5">
+      {/* Banner */}
+      <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+        <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+        <p className="text-xs text-amber-700">
+          This is a test area for evaluating Supabase file storage. Files uploaded here are private (require a signed URL to access) and count against the project's free-tier storage quota. Use this to gauge file sizes before deciding whether to upgrade.
+        </p>
+      </div>
+
+      {/* Usage bar */}
+      <div className="bg-white rounded-xl border border-gray-200 px-5 py-4">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">Storage Used</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{files.length} file{files.length !== 1 ? 's' : ''} · {formatBytes(totalBytes)} of 1 GB free tier</p>
+          </div>
+          <span className="text-xs font-medium text-gray-500">{pct.toFixed(2)}%</span>
+        </div>
+        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${pct > 80 ? 'bg-red-500' : pct > 50 ? 'bg-amber-400' : 'bg-emerald-500'}`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Upload */}
+      <div className="bg-white rounded-xl border border-gray-200 px-5 py-4">
+        <h2 className="text-sm font-semibold text-gray-900 mb-3">Upload a File</h2>
+        <label className={`flex items-center gap-3 cursor-pointer border-2 border-dashed rounded-xl px-5 py-6 transition-colors ${uploading ? 'border-gray-200 bg-gray-50 cursor-not-allowed' : 'border-gray-200 hover:border-gray-400 hover:bg-gray-50'}`}>
+          <Upload className="w-5 h-5 text-gray-400 shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-gray-700">{uploadProgress ?? 'Click to choose a file'}</p>
+            <p className="text-xs text-gray-400 mt-0.5">Any file type · max 50 MB per file</p>
+          </div>
+          <input type="file" className="hidden" disabled={uploading} onChange={handleUpload} />
+        </label>
+        {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
+      </div>
+
+      {/* File list */}
+      <div className="bg-white rounded-xl border border-gray-200">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h2 className="text-sm font-semibold text-gray-900">Uploaded Files</h2>
+        </div>
+        {loading ? (
+          <p className="px-5 py-6 text-sm text-gray-400">Loading…</p>
+        ) : files.length === 0 ? (
+          <p className="px-5 py-6 text-sm text-gray-400">No files uploaded yet.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-400">File</th>
+                <th className="text-right px-5 py-2.5 text-xs font-medium text-gray-400">Size</th>
+                <th className="text-right px-5 py-2.5 text-xs font-medium text-gray-400">Uploaded</th>
+                <th className="px-5 py-2.5" />
+              </tr>
+            </thead>
+            <tbody>
+              {files.map(f => (
+                <tr key={f.name} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                      <span className="text-gray-800 truncate max-w-xs" title={f.name.replace(/^\d+-/, '')}>
+                        {f.name.replace(/^\d+-/, '')}
+                      </span>
+                    </div>
+                    {f.metadata?.mimetype && (
+                      <p className="text-xs text-gray-400 ml-5.5 mt-0.5">{f.metadata.mimetype}</p>
+                    )}
+                  </td>
+                  <td className="px-5 py-3 text-right text-gray-500 tabular-nums whitespace-nowrap">
+                    {f.metadata?.size ? formatBytes(f.metadata.size) : '—'}
+                  </td>
+                  <td className="px-5 py-3 text-right text-gray-400 whitespace-nowrap text-xs">
+                    {new Date(f.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </td>
+                  <td className="px-5 py-3">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => getDownloadUrl(f.name)}
+                        className="p-1.5 text-gray-400 hover:text-blue-600 rounded transition-colors"
+                        title="Download"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteTarget(f)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 rounded transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Delete confirmation */}
+      {deleteTarget && (
+        <Modal title="Delete File" onClose={() => setDeleteTarget(null)}>
+          <p className="text-sm text-gray-600 mb-4">
+            Delete <span className="font-medium">{deleteTarget.name.replace(/^\d+-/, '')}</span>? This cannot be undone.
+          </p>
+          <div className="flex gap-2 justify-end">
+            <Button variant="secondary" size="sm" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button variant="danger" size="sm" disabled={deleting} onClick={handleDelete}>{deleting ? 'Deleting…' : 'Delete'}</Button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  )
+}
+
 export function AdminClient({ categories, industries, agentTypes, talentCategories, brandCategories, talentLevels, talentSkills, invoiceSettings, expenseCategories, currencyRates, mcRoles, opportunityStages, isAdmin, isSuperUser, canViewFinance, loginAudit, recordAudit }: Props) {
   const router = useRouter()
   const supabase = createClient()
@@ -1144,7 +1330,7 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
 
       {/* Tabs */}
       <div className="flex gap-0.5 mb-6 border-b border-gray-200">
-        {(['users', 'lookups', 'reports', ...(canViewFinance ? ['finance'] : []), ...(isAdmin ? ['audit', 'diagnostics'] : [])] as Tab[]).map(tab => (
+        {(['users', 'lookups', 'reports', ...(canViewFinance ? ['finance'] : []), ...(isAdmin ? ['audit', 'diagnostics'] : []), ...(isSuperUser ? ['storage'] : [])] as Tab[]).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -1186,6 +1372,8 @@ export function AdminClient({ categories, industries, agentTypes, talentCategori
       )}
 
       {activeTab === 'diagnostics' && isAdmin && <DiagnosticsSection />}
+
+      {activeTab === 'storage' && isSuperUser && <StorageTestSection />}
 
       {activeTab === 'audit' && (
         <div className="space-y-6 max-w-4xl">
