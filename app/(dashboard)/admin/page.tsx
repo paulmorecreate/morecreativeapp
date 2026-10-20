@@ -23,6 +23,8 @@ export default async function AdminPage() {
     { data: invoiceSettings },
     { data: expenseCategories },
     { data: currencyRates },
+    { data: mcRoles },
+    { data: opportunityStages },
     { data: loginAudit },
     { data: recordAudit },
   ] = await Promise.all([
@@ -36,6 +38,8 @@ export default async function AdminPage() {
     supabase.from('invoice_settings').select('*').limit(1).single(),
     supabase.from('expense_categories').select('*').order('name'),
     supabase.from('currency_rates').select('*').order('currency'),
+    supabase.from('mc_roles').select('*').order('name'),
+    supabase.from('opportunity_stages').select('*').order('name'),
     isAdmin
       ? supabase.from('login_audit').select('*').order('logged_in_at', { ascending: false }).limit(200)
       : Promise.resolve({ data: [] }),
@@ -56,6 +60,8 @@ export default async function AdminPage() {
       invoiceSettings={invoiceSettings ?? null}
       expenseCategories={expenseCategories ?? []}
       currencyRates={currencyRates ?? []}
+      mcRoles={mcRoles ?? []}
+      opportunityStages={opportunityStages ?? []}
       isAdmin={isAdmin}
       isSuperUser={isSuperUser}
       canViewFinance={canViewFinance}

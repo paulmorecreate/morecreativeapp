@@ -2,82 +2,123 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, TrendingUp, Trash2 } from 'lucide-react'
-import { Opportunity } from '@/lib/supabase/types'
+import { Plus, Search, Trash2, X, FolderOpen, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
+import { Opportunity, McRole, OpportunityStage, ProjectCategory } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
-import { cn, formatCurrency } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 
 type SimpleRecord = { id: string; name: string }
 
 type OppWithTalents = Opportunity & {
   opportunity_talents: { id: string; status: string; talent: { id: string; name: string } | null }[]
+  converted_project?: { id: string; name: string } | null
 }
 
-export const STAGES = [
-  { value: 'pitch', label: 'Pitch' },
-  { value: 'shortlisting', label: 'Shortlisting' },
-  { value: 'proposal_sent', label: 'Proposal Sent' },
-  { value: 'contract', label: 'Contract' },
-  { value: 'closed', label: 'Closed' },
-]
-
-export const MC_ROLES = [
-  { value: 'talent_broker', label: 'Talent Broker' },
-  { value: 'brand_broker', label: 'Brand Broker' },
-  { value: 'placement_service', label: 'Placement Service' },
-]
-
-export const CONSIDERATION_TYPES = [
-  { value: 'cash_commission', label: 'Cash + Commission' },
-  { value: 'flat_fee', label: 'Flat Placement Fee' },
-  { value: 'in_kind', label: 'In-Kind / Barter' },
+export const TALENT_STATUSES = [
+  { value: 'proposed', label: 'Proposed' },
+  { value: 'approached', label: 'Approached' },
+  { value: 'declined', label: 'Declined' },
+  { value: 'confirmed', label: 'Confirmed' },
 ]
 
 export const STAGE_COLORS: Record<string, string> = {
-  pitch: 'bg-zinc-100 text-zinc-600',
-  shortlisting: 'bg-blue-50 text-blue-700',
-  proposal_sent: 'bg-amber-50 text-amber-700',
-  contract: 'bg-purple-50 text-purple-700',
-  closed: 'bg-green-50 text-green-700',
+  'Pitch': 'bg-zinc-100 text-zinc-600',
+  'Shortlisting': 'bg-blue-50 text-blue-700',
+  'Proposal Sent': 'bg-amber-50 text-amber-700',
+  'Contract': 'bg-purple-50 text-purple-700',
+  'Closed': 'bg-green-50 text-green-700',
 }
 
 interface Props {
   opportunities: OppWithTalents[]
   talents: SimpleRecord[]
+  mcRoles: McRole[]
+  stages: OpportunityStage[]
+  categories: ProjectCategory[]
 }
 
 const emptyForm = {
   name: '',
-  stage: 'pitch',
-  mc_role: 'talent_broker',
-  consideration_type: 'cash_commission',
-  counterpart_name: '',
-  internal_owner: '',
-  gross_fee: '',
-  commission_pct: '20',
+  stage: '',
+  mc_role: '',
   event_date: '',
+  location: '',
+  category: '',
   notes: '',
 }
 
-export function OpportunitiesClient({ opportunities, talents }: Props) {
+type ShortlistEntry = { talent_id: string; name: string; status: string }
+
+export function OpportunitiesClient({ opportunities, talents, mcRoles, stages, categories }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [stageFilter, setStageFilter] = useState('')
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState(emptyForm)
+  const [form, setForm] = useState({ ...emptyForm })
   const [deleteTarget, setDeleteTarget] = useState<OppWithTalents | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  // MC role inline add
+  const [localMcRoles, setLocalMcRoles] = useState<McRole[]>(mcRoles)
+  const [addingRole, setAddingRole] = useState(false)
+  const [newRoleName, setNewRoleName] = useState('')
+  const [savingRole, setSavingRole] = useState(false)
+
+  // Stage inline add
+  const [localStages, setLocalStages] = useState<OpportunityStage[]>(stages)
+  const [addingStage, setAddingStage] = useState(false)
+  const [newStageName, setNewStageName] = useState('')
+  const [savingStage, setSavingStage] = useState(false)
+
+  const [shortlist, setShortlist] = useState<ShortlistEntry[]>([])
+  const [shortlistTalentId, setShortlistTalentId] = useState('')
+  const [convertTarget, setConvertTarget] = useState<OppWithTalents | null>(null)
+  const [converting, setConverting] = useState(false)
+  const [showConverted, setShowConverted] = useState(false)
 
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
   }
 
-  const filtered = opportunities.filter(o => {
+  async function handleAddRole() {
+    if (!newRoleName.trim()) return
+    setSavingRole(true)
+    const supabase = createClient()
+    const { data } = await supabase.from('mc_roles').insert({ name: newRoleName.trim() }).select().single()
+    if (data) {
+      const role = data as McRole
+      setLocalMcRoles(prev => [...prev, role].sort((a, b) => a.name.localeCompare(b.name)))
+      setForm(f => ({ ...f, mc_role: role.name }))
+    }
+    setNewRoleName('')
+    setAddingRole(false)
+    setSavingRole(false)
+  }
+
+  async function handleAddStage() {
+    if (!newStageName.trim()) return
+    setSavingStage(true)
+    const supabase = createClient()
+    const { data } = await supabase.from('opportunity_stages').insert({ name: newStageName.trim() }).select().single()
+    if (data) {
+      const stage = data as OpportunityStage
+      setLocalStages(prev => [...prev, stage].sort((a, b) => a.name.localeCompare(b.name)))
+      setForm(f => ({ ...f, stage: stage.name }))
+    }
+    setNewStageName('')
+    setAddingStage(false)
+    setSavingStage(false)
+  }
+
+  const active = opportunities.filter(o => !o.converted_project_id)
+  const converted = opportunities.filter(o => !!o.converted_project_id)
+
+  const filtered = active.filter(o => {
     const q = search.toLowerCase()
     const matchSearch = !search ||
       o.name.toLowerCase().includes(q) ||
@@ -87,9 +128,8 @@ export function OpportunitiesClient({ opportunities, talents }: Props) {
     return matchSearch && matchStage
   })
 
-  const totalFee = filtered.reduce((s, o) => s + (o.gross_fee ?? 0), 0)
-  const stageCounts = STAGES.reduce((acc, s) => {
-    acc[s.value] = opportunities.filter(o => o.stage === s.value).length
+  const stageCounts = localStages.reduce((acc, s) => {
+    acc[s.name] = active.filter(o => o.stage === s.name).length
     return acc
   }, {} as Record<string, number>)
 
@@ -112,19 +152,52 @@ export function OpportunitiesClient({ opportunities, talents }: Props) {
       name: form.name.trim(),
       stage: form.stage,
       mc_role: form.mc_role,
-      consideration_type: form.consideration_type,
-      counterpart_name: form.counterpart_name || null,
-      internal_owner: form.internal_owner || null,
-      gross_fee: form.gross_fee ? parseFloat(form.gross_fee) : null,
-      commission_pct: parseFloat(form.commission_pct) || 20,
       event_date: form.event_date || null,
+      location: form.location || null,
+      category: form.category || null,
       notes: form.notes || null,
     }).select().single()
+    if (data && shortlist.length > 0) {
+      await supabase.from('opportunity_talents').insert(
+        shortlist.map(s => ({ opportunity_id: data.id, talent_id: s.talent_id, status: s.status }))
+      )
+    }
     setSaving(false)
     setOpen(false)
-    setForm(emptyForm)
+    setForm({ ...emptyForm })
+    setShortlist([])
+    setShortlistTalentId('')
     if (data) router.push(`/opportunities/${data.id}`)
     else router.refresh()
+  }
+
+  async function handleConvert() {
+    if (!convertTarget) return
+    setConverting(true)
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: project } = await supabase.from('events').insert({
+      name: convertTarget.name,
+      location: convertTarget.location ?? null,
+      category: convertTarget.category ?? null,
+      start_date: convertTarget.event_date ?? null,
+      notes: convertTarget.notes ?? null,
+      status: 'active',
+      created_by: user?.email ?? null,
+    }).select().single()
+    if (project) {
+      if (convertTarget.opportunity_talents.length > 0) {
+        await supabase.from('project_talents').insert(
+          convertTarget.opportunity_talents
+            .filter(t => t.talent?.id)
+            .map(t => ({ project_id: project.id, talent_id: t.talent!.id }))
+        )
+      }
+      await supabase.from('opportunities').update({ converted_project_id: project.id }).eq('id', convertTarget.id)
+    }
+    setConverting(false)
+    setConvertTarget(null)
+    if (project) router.push(`/projects/${project.id}`)
   }
 
   return (
@@ -134,8 +207,7 @@ export function OpportunitiesClient({ opportunities, talents }: Props) {
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Opportunities</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {filtered.length} deal{filtered.length !== 1 ? 's' : ''}
-            {totalFee > 0 && ` · ${formatCurrency(totalFee)} gross pipeline`}
+            {filtered.length} deal{filtered.length !== 1 ? 's' : ''}{converted.length > 0 ? ` · ${converted.length} converted` : ''}
           </p>
         </div>
         <Button onClick={() => setOpen(true)}>
@@ -146,20 +218,20 @@ export function OpportunitiesClient({ opportunities, talents }: Props) {
 
       {/* Pipeline summary */}
       <div className="grid grid-cols-5 gap-2 mb-5">
-        {STAGES.map(s => (
+        {localStages.map(s => (
           <button
-            key={s.value}
-            onClick={() => setStageFilter(stageFilter === s.value ? '' : s.value)}
+            key={s.id}
+            onClick={() => setStageFilter(stageFilter === s.name ? '' : s.name)}
             className={cn(
               'rounded-lg border px-3 py-2.5 text-left transition-all',
-              stageFilter === s.value
+              stageFilter === s.name
                 ? 'border-gray-900 bg-gray-900 text-white'
                 : 'border-gray-200 bg-white hover:border-gray-300'
             )}
           >
-            <p className={cn('text-xs font-medium', stageFilter === s.value ? 'text-gray-300' : 'text-gray-500')}>{s.label}</p>
-            <p className={cn('text-xl font-semibold mt-0.5', stageFilter === s.value ? 'text-white' : 'text-gray-900')}>
-              {stageCounts[s.value] ?? 0}
+            <p className={cn('text-xs font-medium', stageFilter === s.name ? 'text-gray-300' : 'text-gray-500')}>{s.name}</p>
+            <p className={cn('text-xl font-semibold mt-0.5', stageFilter === s.name ? 'text-white' : 'text-gray-900')}>
+              {stageCounts[s.name] ?? 0}
             </p>
           </button>
         ))}
@@ -186,76 +258,110 @@ export function OpportunitiesClient({ opportunities, talents }: Props) {
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Deal</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Stage</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Role</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Counterpart</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Talents</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Event date</th>
-              <th className="text-right px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Gross fee</th>
               <th className="w-8 px-3 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-sm text-gray-400">
+                <td colSpan={6} className="px-4 py-12 text-center text-sm text-gray-400">
                   {search || stageFilter ? 'No results.' : 'No opportunities yet — add your first deal.'}
                 </td>
               </tr>
             )}
-            {filtered.map(opp => {
-              const netToTalent = opp.gross_fee != null
-                ? opp.gross_fee * (1 - opp.commission_pct / 100)
-                : null
-              return (
-                <tr
-                  key={opp.id}
-                  className="hover:bg-gray-50/50 transition-colors cursor-pointer group"
-                  onClick={() => router.push(`/opportunities/${opp.id}`)}
-                >
-                  <td className="px-4 py-3 font-medium text-gray-900">{opp.name}</td>
-                  <td className="px-4 py-3">
-                    <span className={cn('inline-flex px-2 py-0.5 rounded-full text-xs font-medium', STAGE_COLORS[opp.stage] ?? 'bg-gray-100 text-gray-600')}>
-                      {STAGES.find(s => s.value === opp.stage)?.label ?? opp.stage}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">
-                    {MC_ROLES.find(r => r.value === opp.mc_role)?.label ?? opp.mc_role}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{opp.counterpart_name ?? <span className="text-gray-300">—</span>}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">
-                    {opp.opportunity_talents.length > 0
-                      ? opp.opportunity_talents.map(t => t.talent?.name).filter(Boolean).join(', ')
-                      : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">
-                    {opp.event_date
-                      ? new Date(opp.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-                      : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {opp.gross_fee != null ? (
-                      <div>
-                        <p className="font-medium text-gray-900">{formatCurrency(opp.gross_fee)}</p>
-                        {netToTalent != null && (
-                          <p className="text-xs text-gray-400">{formatCurrency(netToTalent)} net</p>
-                        )}
-                      </div>
-                    ) : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-3 py-3 w-8">
+            {filtered.map(opp => (
+              <tr
+                key={opp.id}
+                className="hover:bg-gray-50/50 transition-colors cursor-pointer group"
+                onClick={() => router.push(`/opportunities/${opp.id}`)}
+              >
+                <td className="px-4 py-3 font-medium text-gray-900">{opp.name}</td>
+                <td className="px-4 py-3">
+                  <span className={cn('inline-flex px-2 py-0.5 rounded-full text-xs font-medium', STAGE_COLORS[opp.stage] ?? 'bg-gray-100 text-gray-600')}>
+                    {opp.stage}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-gray-500 text-xs">
+                  {opp.mc_role ?? <span className="text-gray-300">—</span>}
+                </td>
+                <td className="px-4 py-3 text-gray-500 text-xs">
+                  {opp.opportunity_talents.length > 0
+                    ? opp.opportunity_talents.map(t => t.talent?.name).filter(Boolean).join(', ')
+                    : <span className="text-gray-300">—</span>}
+                </td>
+                <td className="px-4 py-3 text-gray-500 text-xs">
+                  {opp.event_date
+                    ? new Date(opp.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : <span className="text-gray-300">—</span>}
+                </td>
+                <td className="px-3 py-3 w-16" onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center gap-1">
                     <button
-                      onClick={e => { e.stopPropagation(); setDeleteTarget(opp) }}
-                      className="text-gray-300 hover:text-red-500 hover:bg-red-50 rounded p-0.5 transition-colors"
+                      onClick={() => setConvertTarget(opp)}
+                      className="text-green-500 hover:text-green-700 hover:bg-green-50 rounded p-0.5 transition-colors"
+                      title="Convert to Project"
+                    >
+                      <FolderOpen className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setDeleteTarget(opp)}
+                      className="text-red-400 hover:text-red-600 hover:bg-red-50 rounded p-0.5 transition-colors"
                       title="Delete opportunity"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
-                  </td>
-                </tr>
-              )
-            })}
+                  </div>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
+
+      {/* Converted section */}
+      {converted.length > 0 && (
+        <div className="mt-6">
+          <button
+            onClick={() => setShowConverted(v => !v)}
+            className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-600 transition-colors mb-3"
+          >
+            {showConverted ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+            Converted to Project ({converted.length})
+          </button>
+          {showConverted && (
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden opacity-60">
+              <table className="w-full text-sm">
+                <tbody className="divide-y divide-gray-50">
+                  {converted.map(opp => (
+                    <tr key={opp.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => router.push(`/opportunities/${opp.id}`)}>
+                      <td className="px-4 py-3 font-medium text-gray-700">{opp.name}</td>
+                      <td className="px-4 py-3 text-gray-400 text-xs">{opp.stage}</td>
+                      <td className="px-4 py-3 text-gray-400 text-xs">
+                        {opp.event_date ? new Date(opp.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        {opp.converted_project && (
+                          <a
+                            href={`/projects/${opp.converted_project.id}`}
+                            onClick={e => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 text-xs text-green-600 hover:text-green-800 hover:underline"
+                          >
+                            <FolderOpen className="w-3 h-3" />
+                            {opp.converted_project.name}
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Delete confirmation */}
       <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete opportunity?">
@@ -263,12 +369,9 @@ export function OpportunitiesClient({ opportunities, talents }: Props) {
           <div className="space-y-4">
             <div className="bg-red-50 rounded-lg px-4 py-3">
               <p className="text-sm font-medium text-red-800">{deleteTarget.name}</p>
-              {deleteTarget.counterpart_name && (
-                <p className="text-sm text-red-600 mt-0.5">{deleteTarget.counterpart_name}</p>
-              )}
             </div>
             <p className="text-sm text-gray-600">
-              This will permanently delete the opportunity and all associated talents, contacts, and open items. This cannot be undone.
+              This will permanently delete the opportunity and all associated data. This cannot be undone.
             </p>
             <div className="flex gap-3 pt-1">
               <button
@@ -291,6 +394,56 @@ export function OpportunitiesClient({ opportunities, talents }: Props) {
         )}
       </Modal>
 
+      {/* Convert to Project confirmation */}
+      <Modal open={!!convertTarget} onClose={() => setConvertTarget(null)} title={convertTarget?.converted_project ? 'Already Converted' : 'Convert to Project?'}>
+        {convertTarget && (
+          <div className="space-y-4">
+            {convertTarget.converted_project ? (
+              <>
+                <p className="text-sm text-gray-600">
+                  This opportunity has already been converted to a project.
+                </p>
+                <div className="bg-green-50 rounded-lg px-4 py-3 flex items-center gap-2">
+                  <FolderOpen className="w-4 h-4 text-green-600 shrink-0" />
+                  <span className="text-sm font-medium text-green-800">{convertTarget.converted_project.name}</span>
+                </div>
+                <div className="flex gap-3 pt-1">
+                  <button type="button" onClick={() => setConvertTarget(null)} className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                    Close
+                  </button>
+                  <button type="button" onClick={() => router.push(`/projects/${convertTarget.converted_project!.id}`)} className="flex-1 px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium transition-colors">
+                    Go to Project
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-gray-600">
+                  This will create a new Project from this opportunity and move the talent shortlist across.
+                </p>
+                <div className="bg-gray-50 rounded-lg px-4 py-3 space-y-1 text-sm">
+                  <p><span className="text-gray-400">Name:</span> <span className="font-medium text-gray-900">{convertTarget.name}</span></p>
+                  {convertTarget.event_date && <p><span className="text-gray-400">Date:</span> {new Date(convertTarget.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>}
+                  {convertTarget.location && <p><span className="text-gray-400">Location:</span> {convertTarget.location}</p>}
+                  {convertTarget.category && <p><span className="text-gray-400">Category:</span> {convertTarget.category}</p>}
+                  {convertTarget.opportunity_talents.length > 0 && (
+                    <p><span className="text-gray-400">Talents:</span> {convertTarget.opportunity_talents.map(t => t.talent?.name).filter(Boolean).join(', ')}</p>
+                  )}
+                </div>
+                <div className="flex gap-3 pt-1">
+                  <button type="button" onClick={() => setConvertTarget(null)} className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                    Cancel
+                  </button>
+                  <button type="button" onClick={handleConvert} disabled={converting} className="flex-1 px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium transition-colors disabled:opacity-50">
+                    {converting ? 'Converting…' : 'Convert to Project'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </Modal>
+
       {/* Add modal */}
       <Modal open={open} onClose={() => setOpen(false)} title="Add Opportunity">
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -301,45 +454,179 @@ export function OpportunitiesClient({ opportunities, talents }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">Stage</label>
-              <Select value={form.stage} onChange={field('stage')} options={STAGES} />
+              <Select
+                value={form.stage}
+                onChange={e => {
+                  if (e.target.value === '__add_new__') {
+                    setAddingStage(true)
+                  } else {
+                    setForm(f => ({ ...f, stage: e.target.value }))
+                  }
+                }}
+                placeholder="Select stage…"
+                options={[
+                  ...localStages.map(s => ({ value: s.name, label: s.name })),
+                  { value: '__add_new__', label: '＋ Add new stage…' },
+                ]}
+              />
+              {addingStage && (
+                <div className="flex gap-1.5">
+                  <input
+                    autoFocus
+                    value={newStageName}
+                    onChange={e => setNewStageName(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.preventDefault(); handleAddStage() }
+                      if (e.key === 'Escape') { setAddingStage(false); setNewStageName('') }
+                    }}
+                    placeholder="New stage name…"
+                    className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/10"
+                  />
+                  <button
+                    type="button"
+                    disabled={savingStage || !newStageName.trim()}
+                    onClick={handleAddStage}
+                    className="px-3 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg disabled:opacity-40"
+                  >
+                    {savingStage ? '…' : 'Add'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAddingStage(false); setNewStageName('') }}
+                    className="px-3 py-2 text-sm text-gray-500 hover:text-gray-800 border border-gray-200 rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">MC role</label>
-              <Select value={form.mc_role} onChange={field('mc_role')} options={MC_ROLES} />
+              <Select
+                value={form.mc_role}
+                onChange={e => {
+                  if (e.target.value === '__add_new__') {
+                    setAddingRole(true)
+                  } else {
+                    setForm(f => ({ ...f, mc_role: e.target.value }))
+                  }
+                }}
+                placeholder="Select role…"
+                options={[
+                  ...localMcRoles.map(r => ({ value: r.name, label: r.name })),
+                  { value: '__add_new__', label: '＋ Add new role…' },
+                ]}
+              />
+              {addingRole && (
+                <div className="flex gap-1.5">
+                  <input
+                    autoFocus
+                    value={newRoleName}
+                    onChange={e => setNewRoleName(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.preventDefault(); handleAddRole() }
+                      if (e.key === 'Escape') { setAddingRole(false); setNewRoleName('') }
+                    }}
+                    placeholder="New role name…"
+                    className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/10"
+                  />
+                  <button
+                    type="button"
+                    disabled={savingRole || !newRoleName.trim()}
+                    onClick={handleAddRole}
+                    className="px-3 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg disabled:opacity-40"
+                  >
+                    {savingRole ? '…' : 'Add'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAddingRole(false); setNewRoleName('') }}
+                    className="px-3 py-2 text-sm text-gray-500 hover:text-gray-800 border border-gray-200 rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Consideration type</label>
-              <Select value={form.consideration_type} onChange={field('consideration_type')} options={CONSIDERATION_TYPES} />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Counterpart / Client</label>
-              <Input value={form.counterpart_name} onChange={field('counterpart_name')} placeholder="Brand, publisher, or talent rep" />
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Gross fee (€)</label>
-              <Input type="number" value={form.gross_fee} onChange={field('gross_fee')} placeholder="0" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Commission %</label>
-              <Input type="number" value={form.commission_pct} onChange={field('commission_pct')} placeholder="20" />
-            </div>
-            <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">Event date</label>
               <Input type="date" value={form.event_date} onChange={field('event_date')} />
             </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Location</label>
+              <Input value={form.location} onChange={field('location')} placeholder="City, Country" />
+            </div>
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Internal owner</label>
-            <Input value={form.internal_owner} onChange={field('internal_owner')} placeholder="e.g. Nima Samiee" />
+            <label className="text-xs font-medium text-gray-700">Category</label>
+            <Select
+              value={form.category}
+              onChange={field('category')}
+              options={categories.map(c => ({ value: c.name, label: c.name }))}
+              placeholder="Select…"
+            />
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-700">Notes</label>
             <Textarea value={form.notes} onChange={field('notes')} rows={2} placeholder="Context, deal background…" />
           </div>
+
+          {/* Talent shortlist */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Talent Shortlist</label>
+            <div className="flex gap-1.5">
+              <Select
+                value={shortlistTalentId}
+                onChange={e => setShortlistTalentId(e.target.value)}
+                options={talents
+                  .filter(t => !shortlist.some(s => s.talent_id === t.id))
+                  .map(t => ({ value: t.id, label: t.name }))}
+                placeholder="Add talent…"
+                className="flex-1"
+              />
+              <button
+                type="button"
+                disabled={!shortlistTalentId}
+                onClick={() => {
+                  const t = talents.find(t => t.id === shortlistTalentId)
+                  if (!t) return
+                  setShortlist(s => [...s, { talent_id: t.id, name: t.name, status: 'proposed' }])
+                  setShortlistTalentId('')
+                }}
+                className="px-3 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg disabled:opacity-30"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {shortlist.length > 0 && (
+              <div className="border border-gray-100 rounded-lg divide-y divide-gray-50">
+                {shortlist.map(s => (
+                  <div key={s.talent_id} className="flex items-center justify-between px-3 py-2">
+                    <span className="text-sm text-gray-900">{s.name}</span>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={s.status}
+                        onChange={e => setShortlist(prev => prev.map(x => x.talent_id === s.talent_id ? { ...x, status: e.target.value } : x))}
+                        className="text-xs text-gray-500 border-0 bg-transparent focus:outline-none focus:ring-1 focus:ring-black/10 rounded pr-1"
+                      >
+                        {TALENT_STATUSES.map(ts => <option key={ts.value} value={ts.value}>{ts.label}</option>)}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setShortlist(prev => prev.filter(x => x.talent_id !== s.talent_id))}
+                        className="text-gray-300 hover:text-red-400"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="flex gap-3 pt-1">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)} className="flex-1">Cancel</Button>
             <Button type="submit" disabled={saving || !form.name.trim()} className="flex-1">

@@ -106,7 +106,10 @@ export interface Opportunity {
   gross_fee: number | null
   commission_pct: number
   event_date: string | null
+  location: string | null
+  category: string | null
   notes: string | null
+  converted_project_id: string | null
   created_at: string
   updated_at: string
 }
@@ -415,6 +418,27 @@ export interface CurrencyRate {
   currency: string
   rate_to_aed: number
   updated_at: string
+}
+
+export interface McRole {
+  id: string
+  name: string
+  created_at: string
+}
+
+export interface OpportunityDocument {
+  id: string
+  opportunity_id: string
+  title: string
+  url: string
+  notes: string | null
+  created_at: string
+}
+
+export interface OpportunityStage {
+  id: string
+  name: string
+  created_at: string
 }
 
 export interface PurchaseInvoice {
