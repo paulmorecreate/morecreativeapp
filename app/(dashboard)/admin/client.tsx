@@ -1098,7 +1098,8 @@ type StorageFile = {
 }
 
 function StorageTestSection() {
-  const supabase = createClient()
+  // useState initializer runs once — gives a stable client reference across renders
+  const [supabase] = useState(() => createClient())
   const [files, setFiles] = useState<StorageFile[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
@@ -1107,15 +1108,19 @@ function StorageTestSection() {
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const loadFiles = useCallback(async () => {
+  async function loadFiles() {
     setLoading(true)
-    const { data, error } = await supabase.storage.from(STORAGE_BUCKET).list('', { limit: 200, sortBy: { column: 'created_at', order: 'desc' } })
+    setError(null)
+    const { data, error } = await supabase.storage.from(STORAGE_BUCKET).list()
     if (error) { setError(error.message); setLoading(false); return }
-    setFiles((data ?? []) as StorageFile[])
+    const sorted = (data ?? []).sort((a, b) =>
+      new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+    )
+    setFiles(sorted as StorageFile[])
     setLoading(false)
-  }, [supabase])
+  }
 
-  useEffect(() => { loadFiles() }, [loadFiles])
+  useEffect(() => { loadFiles() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -1157,9 +1162,10 @@ function StorageTestSection() {
       {/* Banner */}
       <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
         <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
-        <p className="text-xs text-amber-700">
-          This is a test area for evaluating Supabase file storage. Files uploaded here are private (require a signed URL to access) and count against the project's free-tier storage quota. Use this to gauge file sizes before deciding whether to upgrade.
-        </p>
+        <div className="text-xs text-amber-700 space-y-1">
+          <p>This is a test area for evaluating Supabase file storage. Upload sample files to gauge how much space they take before deciding whether to upgrade.</p>
+          <p><span className="font-medium">Note:</span> File storage and database storage are separate limits. Uploaded files don&apos;t affect the Database Size shown in the Diagnostics tab — that only tracks PostgreSQL rows.</p>
+        </div>
       </div>
 
       {/* Usage bar */}
