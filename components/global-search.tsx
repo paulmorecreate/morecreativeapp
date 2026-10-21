@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, X, Users, Briefcase, Building2, UserCircle, Scissors, Camera, Users2, Calendar, Loader2 } from 'lucide-react'
+import { Search, X, Users, Briefcase, Building2, UserCircle, Scissors, Camera, Users2, Calendar, Loader2, Contact } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 type SearchResult = {
@@ -22,6 +22,7 @@ const TYPE_CONFIG: Record<string, { label: string; icon: React.ElementType; colo
   photographer: { label: 'Photographers', icon: Camera,      color: 'text-orange-500' },
   person:       { label: 'People',        icon: Users2,      color: 'text-teal-500'   },
   project:      { label: 'Projects',      icon: Calendar,    color: 'text-green-500'  },
+  brand_contact: { label: 'Brand Contacts', icon: Contact,    color: 'text-blue-400'   },
 }
 
 interface Props {
@@ -63,6 +64,7 @@ export function GlobalSearch({ open, onClose }: Props) {
         { data: photographers },
         { data: people },
         { data: projects },
+        { data: brandContacts },
       ] = await Promise.all([
         supabase.from('talents').select('id, name, nationality').ilike('name', pattern).limit(5),
         supabase.from('brands').select('id, name, country').ilike('name', pattern).limit(5),
@@ -72,16 +74,22 @@ export function GlobalSearch({ open, onClose }: Props) {
         supabase.from('photographers').select('id, name').ilike('name', pattern).limit(5),
         supabase.from('people').select('id, name').ilike('name', pattern).limit(5),
         supabase.from('events').select('id, name, location').ilike('name', pattern).limit(5),
+        supabase.from('contacts').select('id, name, role, brand_id, brands(name)').ilike('name', pattern).not('brand_id', 'is', null).limit(5),
       ])
       setResults([
-        ...(talents ?? []).map(r => ({ type: 'talent',       id: r.id, name: r.name, subtitle: r.nationality ?? undefined, href: `/talents/${r.id}` })),
-        ...(brands ?? []).map(r =>  ({ type: 'brand',        id: r.id, name: r.name, subtitle: r.country ?? undefined,      href: `/brands/${r.id}` })),
-        ...(agencies ?? []).map(r => ({ type: 'agency',      id: r.id, name: r.name,                                        href: `/agencies/${r.id}` })),
-        ...(agents ?? []).map(r =>  ({ type: 'agent',        id: r.id, name: r.name,                                        href: `/agents/${r.id}` })),
-        ...(stylists ?? []).map(r => ({ type: 'stylist',     id: r.id, name: r.name,                                        href: `/stylists/${r.id}` })),
-        ...(photographers ?? []).map(r => ({ type: 'photographer', id: r.id, name: r.name,                                  href: `/photographers/${r.id}` })),
-        ...(people ?? []).map(r =>  ({ type: 'person',       id: r.id, name: r.name,                                        href: `/people/${r.id}` })),
-        ...(projects ?? []).map(r => ({ type: 'project',     id: r.id, name: r.name, subtitle: r.location ?? undefined,     href: `/projects/${r.id}` })),
+        ...(talents ?? []).map(r => ({ type: 'talent',        id: r.id, name: r.name, subtitle: r.nationality ?? undefined, href: `/talents/${r.id}` })),
+        ...(brands ?? []).map(r =>  ({ type: 'brand',         id: r.id, name: r.name, subtitle: r.country ?? undefined,      href: `/brands/${r.id}` })),
+        ...(agencies ?? []).map(r => ({ type: 'agency',       id: r.id, name: r.name,                                        href: `/agencies/${r.id}` })),
+        ...(agents ?? []).map(r =>  ({ type: 'agent',         id: r.id, name: r.name,                                        href: `/agents/${r.id}` })),
+        ...(stylists ?? []).map(r => ({ type: 'stylist',      id: r.id, name: r.name,                                        href: `/stylists/${r.id}` })),
+        ...(photographers ?? []).map(r => ({ type: 'photographer', id: r.id, name: r.name,                                   href: `/photographers/${r.id}` })),
+        ...(people ?? []).map(r =>  ({ type: 'person',        id: r.id, name: r.name,                                        href: `/people/${r.id}` })),
+        ...(projects ?? []).map(r => ({ type: 'project',      id: r.id, name: r.name, subtitle: r.location ?? undefined,     href: `/projects/${r.id}` })),
+        ...(brandContacts ?? []).map(r => {
+          const brandName = (r.brands as unknown as { name: string } | null)?.name
+          const subtitle = r.role ? `${r.role}${brandName ? ` · ${brandName}` : ''}` : (brandName ? `Contact at ${brandName}` : undefined)
+          return { type: 'brand_contact', id: r.id, name: r.name ?? '', subtitle, href: `/brands/${r.brand_id}` }
+        }),
       ])
       setLoading(false)
     }, 250)
