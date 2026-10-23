@@ -155,7 +155,7 @@ export function ProjectsClient({ projects, categories }: Props) {
                   <div className="flex items-center justify-end gap-2">
                     <button
                       onClick={e => { e.stopPropagation(); setDeleteTarget(project) }}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-500"
+                      className="text-red-300 hover:text-red-600 transition-colors"
                       title="Delete project"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -209,7 +209,7 @@ export function ProjectsClient({ projects, categories }: Props) {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={e => { e.stopPropagation(); setDeleteTarget(project) }}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-500"
+                          className="text-red-300 hover:text-red-600 transition-colors"
                           title="Delete project"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
