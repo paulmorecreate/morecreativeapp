@@ -143,7 +143,7 @@ export function ProjectsClient({ projects, categories }: Props) {
             {active.map((project, i) => (
               <tr
                 key={project.id}
-                className={`group transition-colors cursor-pointer ${i % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'} hover:bg-blue-50/40`}
+                className={`group transition-colors cursor-pointer ${i % 2 === 1 ? 'bg-red-50' : 'bg-white'} hover:bg-blue-50/40`}
                 onClick={() => router.push(`/projects/${project.id}`)}
               >
                 <td className="px-4 py-3 font-medium text-gray-900">{project.name}</td>
@@ -197,7 +197,7 @@ export function ProjectsClient({ projects, categories }: Props) {
                 {completed.map((project, i) => (
                   <tr
                     key={project.id}
-                    className={`group transition-colors cursor-pointer opacity-60 ${i % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'} hover:bg-blue-50/40 hover:opacity-80`}
+                    className={`group transition-colors cursor-pointer opacity-60 ${i % 2 === 1 ? 'bg-red-50' : 'bg-white'} hover:bg-blue-50/40 hover:opacity-80`}
                     onClick={() => router.push(`/projects/${project.id}`)}
                   >
                     <td className="px-4 py-3 font-medium text-gray-900">{project.name}</td>
