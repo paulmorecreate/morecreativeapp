@@ -271,10 +271,10 @@ export function OpportunitiesClient({ opportunities, talents, mcRoles, stages, c
                 </td>
               </tr>
             )}
-            {filtered.map(opp => (
+            {filtered.map((opp, i) => (
               <tr
                 key={opp.id}
-                className="hover:bg-gray-50/50 transition-colors cursor-pointer group"
+                className={`transition-colors cursor-pointer group ${i % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'} hover:bg-blue-50/40`}
                 onClick={() => router.push(`/opportunities/${opp.id}`)}
               >
                 <td className="px-4 py-3 font-medium text-gray-900">{opp.name}</td>

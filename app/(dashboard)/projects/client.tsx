@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Search, ChevronRight, Trash2 } from 'lucide-react'
+import { Plus, Search, ChevronRight, Trash2, ChevronDown } from 'lucide-react'
 import { Event, ProjectCategory } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
@@ -30,6 +30,7 @@ export function ProjectsClient({ projects, categories }: Props) {
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<ProjectRow | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [completedOpen, setCompletedOpen] = useState(false)
   const [form, setForm] = useState({
     name: '', location: '', category: '', start_date: '', end_date: '', notes: '',
   })
@@ -139,10 +140,10 @@ export function ProjectsClient({ projects, categories }: Props) {
                 </td>
               </tr>
             )}
-            {active.map(project => (
+            {active.map((project, i) => (
               <tr
                 key={project.id}
-                className="group hover:bg-gray-50/50 transition-colors cursor-pointer"
+                className={`group transition-colors cursor-pointer ${i % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'} hover:bg-blue-50/40`}
                 onClick={() => router.push(`/projects/${project.id}`)}
               >
                 <td className="px-4 py-3 font-medium text-gray-900">{project.name}</td>
@@ -170,7 +171,16 @@ export function ProjectsClient({ projects, categories }: Props) {
 
       {completed.length > 0 && (
         <div className="mt-8">
-          <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">Completed</h2>
+          <button
+            onClick={() => setCompletedOpen(v => !v)}
+            className="flex items-center gap-2 mb-3 group"
+          >
+            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${completedOpen ? '' : '-rotate-90'}`} />
+            <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+              Completed ({completed.length})
+            </h2>
+          </button>
+          {completedOpen && (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
@@ -184,10 +194,10 @@ export function ProjectsClient({ projects, categories }: Props) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {completed.map(project => (
+                {completed.map((project, i) => (
                   <tr
                     key={project.id}
-                    className="group hover:bg-gray-50/50 transition-colors cursor-pointer opacity-60"
+                    className={`group transition-colors cursor-pointer opacity-60 ${i % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'} hover:bg-blue-50/40 hover:opacity-80`}
                     onClick={() => router.push(`/projects/${project.id}`)}
                   >
                     <td className="px-4 py-3 font-medium text-gray-900">{project.name}</td>
@@ -212,6 +222,7 @@ export function ProjectsClient({ projects, categories }: Props) {
               </tbody>
             </table>
           </div>
+          )}
         </div>
       )}
 
