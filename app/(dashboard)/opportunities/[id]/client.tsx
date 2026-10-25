@@ -4,14 +4,14 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Pencil, Plus, X, Trash2, FolderOpen, Link2, ExternalLink } from 'lucide-react'
-import { Opportunity, OpportunityTalent, Conversation, McRole, OpportunityStage, ProjectCategory, OpportunityDocument } from '@/lib/supabase/types'
+import { Opportunity, OpportunityTalent, Conversation, McRole, ProjectCategory, OpportunityDocument } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 import { cn, formatDate } from '@/lib/utils'
-import { STAGE_COLORS, TALENT_STATUSES } from '../client'
+import { TALENT_STATUSES } from '../client'
 
 type SimpleRecord = { id: string; name: string }
 
@@ -41,13 +41,12 @@ type Props = {
   conversations: Conversation[]
   talents: SimpleRecord[]
   mcRoles: McRole[]
-  stages: OpportunityStage[]
   categories: ProjectCategory[]
   convertedProject: { id: string; name: string } | null
   documents: OpportunityDocument[]
 }
 
-export function OpportunityDetailClient({ opp, oppTalents, conversations, talents, mcRoles, stages, categories, convertedProject, documents: initialDocuments }: Props) {
+export function OpportunityDetailClient({ opp, oppTalents, conversations, talents, mcRoles, categories, convertedProject, documents: initialDocuments }: Props) {
   const router = useRouter()
 
   // Delete opportunity
@@ -66,7 +65,6 @@ export function OpportunityDetailClient({ opp, oppTalents, conversations, talent
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
     name: opp.name,
-    stage: opp.stage,
     mc_role: opp.mc_role,
     event_date: opp.event_date ?? '',
     location: opp.location ?? '',
@@ -149,12 +147,6 @@ export function OpportunityDetailClient({ opp, oppTalents, conversations, talent
   const [newRoleName, setNewRoleName] = useState('')
   const [savingRole, setSavingRole] = useState(false)
 
-  // Stage inline add
-  const [localStages, setLocalStages] = useState<OpportunityStage[]>(stages)
-  const [addingStage, setAddingStage] = useState(false)
-  const [newStageName, setNewStageName] = useState('')
-  const [savingStage, setSavingStage] = useState(false)
-
   function field(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
@@ -185,21 +177,6 @@ export function OpportunityDetailClient({ opp, oppTalents, conversations, talent
     setSavingRole(false)
   }
 
-  async function handleAddStage() {
-    if (!newStageName.trim()) return
-    setSavingStage(true)
-    const supabase = createClient()
-    const { data } = await supabase.from('opportunity_stages').insert({ name: newStageName.trim() }).select().single()
-    if (data) {
-      const stage = data as OpportunityStage
-      setLocalStages(prev => [...prev, stage].sort((a, b) => a.name.localeCompare(b.name)))
-      setForm(f => ({ ...f, stage: stage.name }))
-    }
-    setNewStageName('')
-    setAddingStage(false)
-    setSavingStage(false)
-  }
-
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     if (!form.name.trim()) return
@@ -207,7 +184,6 @@ export function OpportunityDetailClient({ opp, oppTalents, conversations, talent
     const supabase = createClient()
     await supabase.from('opportunities').update({
       name: form.name.trim(),
-      stage: form.stage,
       mc_role: form.mc_role,
       event_date: form.event_date || null,
       location: form.location || null,
@@ -335,14 +311,9 @@ export function OpportunityDetailClient({ opp, oppTalents, conversations, talent
         </Link>
         <div className="flex items-start justify-between">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className={cn('inline-flex px-2 py-0.5 rounded-full text-xs font-medium', STAGE_COLORS[opp.stage] ?? 'bg-gray-100 text-gray-600')}>
-                {opp.stage}
-              </span>
-              {opp.mc_role && (
-                <span className="text-xs text-gray-400">{opp.mc_role}</span>
-              )}
-            </div>
+            {opp.mc_role && (
+              <p className="text-xs text-gray-400 mb-1">{opp.mc_role}</p>
+            )}
             <h1 className="text-2xl font-semibold text-gray-900">{opp.name}</h1>
             {opp.counterpart_name && (
               <p className="text-sm text-gray-500 mt-0.5">{opp.counterpart_name}</p>
@@ -656,46 +627,7 @@ export function OpportunityDetailClient({ opp, oppTalents, conversations, talent
             <label className="text-xs font-medium text-gray-700">Deal name *</label>
             <Input value={form.name} onChange={field('name')} required />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Stage</label>
-              <Select
-                value={form.stage}
-                onChange={e => {
-                  if (e.target.value === '__add_new__') {
-                    setAddingStage(true)
-                  } else {
-                    setForm(f => ({ ...f, stage: e.target.value }))
-                  }
-                }}
-                options={[
-                  ...localStages.map(s => ({ value: s.name, label: s.name })),
-                  { value: '__add_new__', label: '＋ Add new stage…' },
-                ]}
-              />
-              {addingStage && (
-                <div className="flex gap-1.5">
-                  <input
-                    autoFocus
-                    value={newStageName}
-                    onChange={e => setNewStageName(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') { e.preventDefault(); handleAddStage() }
-                      if (e.key === 'Escape') { setAddingStage(false); setNewStageName('') }
-                    }}
-                    placeholder="New stage name…"
-                    className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/10"
-                  />
-                  <button type="button" disabled={savingStage || !newStageName.trim()} onClick={handleAddStage} className="px-3 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg disabled:opacity-40">
-                    {savingStage ? '…' : 'Add'}
-                  </button>
-                  <button type="button" onClick={() => { setAddingStage(false); setNewStageName('') }} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-800 border border-gray-200 rounded-lg">
-                    Cancel
-                  </button>
-                </div>
-              )}
-            </div>
-            <div className="space-y-1.5">
+          <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">MC role</label>
               <Select
                 value={form.mc_role ?? ''}
@@ -732,7 +664,6 @@ export function OpportunityDetailClient({ opp, oppTalents, conversations, talent
                   </button>
                 </div>
               )}
-            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

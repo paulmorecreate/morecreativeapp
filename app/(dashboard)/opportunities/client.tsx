@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Search, Trash2, X, FolderOpen, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
-import { Opportunity, McRole, OpportunityStage, ProjectCategory } from '@/lib/supabase/types'
+import { Opportunity, McRole, ProjectCategory } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
@@ -24,25 +24,15 @@ export const TALENT_STATUSES = [
   { value: 'confirmed', label: 'Confirmed' },
 ]
 
-export const STAGE_COLORS: Record<string, string> = {
-  'Pitch': 'bg-zinc-100 text-zinc-600',
-  'Shortlisting': 'bg-blue-50 text-blue-700',
-  'Proposal Sent': 'bg-amber-50 text-amber-700',
-  'Contract': 'bg-purple-50 text-purple-700',
-  'Closed': 'bg-green-50 text-green-700',
-}
-
 interface Props {
   opportunities: OppWithTalents[]
   talents: SimpleRecord[]
   mcRoles: McRole[]
-  stages: OpportunityStage[]
   categories: ProjectCategory[]
 }
 
 const emptyForm = {
   name: '',
-  stage: '',
   mc_role: '',
   event_date: '',
   location: '',
@@ -52,10 +42,9 @@ const emptyForm = {
 
 type ShortlistEntry = { talent_id: string; name: string; status: string }
 
-export function OpportunitiesClient({ opportunities, talents, mcRoles, stages, categories }: Props) {
+export function OpportunitiesClient({ opportunities, talents, mcRoles, categories }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
-  const [stageFilter, setStageFilter] = useState('')
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ ...emptyForm })
@@ -67,12 +56,6 @@ export function OpportunitiesClient({ opportunities, talents, mcRoles, stages, c
   const [addingRole, setAddingRole] = useState(false)
   const [newRoleName, setNewRoleName] = useState('')
   const [savingRole, setSavingRole] = useState(false)
-
-  // Stage inline add
-  const [localStages, setLocalStages] = useState<OpportunityStage[]>(stages)
-  const [addingStage, setAddingStage] = useState(false)
-  const [newStageName, setNewStageName] = useState('')
-  const [savingStage, setSavingStage] = useState(false)
 
   const [shortlist, setShortlist] = useState<ShortlistEntry[]>([])
   const [shortlistTalentId, setShortlistTalentId] = useState('')
@@ -100,38 +83,16 @@ export function OpportunitiesClient({ opportunities, talents, mcRoles, stages, c
     setSavingRole(false)
   }
 
-  async function handleAddStage() {
-    if (!newStageName.trim()) return
-    setSavingStage(true)
-    const supabase = createClient()
-    const { data } = await supabase.from('opportunity_stages').insert({ name: newStageName.trim() }).select().single()
-    if (data) {
-      const stage = data as OpportunityStage
-      setLocalStages(prev => [...prev, stage].sort((a, b) => a.name.localeCompare(b.name)))
-      setForm(f => ({ ...f, stage: stage.name }))
-    }
-    setNewStageName('')
-    setAddingStage(false)
-    setSavingStage(false)
-  }
-
   const active = opportunities.filter(o => !o.converted_project_id)
   const converted = opportunities.filter(o => !!o.converted_project_id)
 
   const filtered = active.filter(o => {
     const q = search.toLowerCase()
-    const matchSearch = !search ||
+    return !search ||
       o.name.toLowerCase().includes(q) ||
       (o.counterpart_name ?? '').toLowerCase().includes(q) ||
       o.opportunity_talents.some(t => t.talent?.name.toLowerCase().includes(q))
-    const matchStage = !stageFilter || o.stage === stageFilter
-    return matchSearch && matchStage
   })
-
-  const stageCounts = localStages.reduce((acc, s) => {
-    acc[s.name] = active.filter(o => o.stage === s.name).length
-    return acc
-  }, {} as Record<string, number>)
 
   async function handleDelete() {
     if (!deleteTarget) return
@@ -150,7 +111,6 @@ export function OpportunitiesClient({ opportunities, talents, mcRoles, stages, c
     const supabase = createClient()
     const { data } = await supabase.from('opportunities').insert({
       name: form.name.trim(),
-      stage: form.stage,
       mc_role: form.mc_role,
       event_date: form.event_date || null,
       location: form.location || null,
@@ -216,27 +176,6 @@ export function OpportunitiesClient({ opportunities, talents, mcRoles, stages, c
         </Button>
       </div>
 
-      {/* Pipeline summary */}
-      <div className="grid grid-cols-5 gap-2 mb-5">
-        {localStages.map(s => (
-          <button
-            key={s.id}
-            onClick={() => setStageFilter(stageFilter === s.name ? '' : s.name)}
-            className={cn(
-              'rounded-lg border px-3 py-2.5 text-left transition-all',
-              stageFilter === s.name
-                ? 'border-gray-900 bg-gray-900 text-white'
-                : 'border-gray-200 bg-white hover:border-gray-300'
-            )}
-          >
-            <p className={cn('text-xs font-medium', stageFilter === s.name ? 'text-gray-300' : 'text-gray-500')}>{s.name}</p>
-            <p className={cn('text-xl font-semibold mt-0.5', stageFilter === s.name ? 'text-white' : 'text-gray-900')}>
-              {stageCounts[s.name] ?? 0}
-            </p>
-          </button>
-        ))}
-      </div>
-
       {/* Search */}
       <div className="flex gap-3 mb-5">
         <div className="relative flex-1 max-w-xs">
@@ -256,7 +195,6 @@ export function OpportunitiesClient({ opportunities, talents, mcRoles, stages, c
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50">
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Deal</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Stage</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Role</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Talents</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Event date</th>
@@ -267,7 +205,7 @@ export function OpportunitiesClient({ opportunities, talents, mcRoles, stages, c
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-12 text-center text-sm text-gray-400">
-                  {search || stageFilter ? 'No results.' : 'No opportunities yet — add your first deal.'}
+                  {search ? 'No results.' : 'No opportunities yet — add your first deal.'}
                 </td>
               </tr>
             )}
@@ -278,11 +216,6 @@ export function OpportunitiesClient({ opportunities, talents, mcRoles, stages, c
                 onClick={() => router.push(`/opportunities/${opp.id}`)}
               >
                 <td className="px-4 py-3 font-medium text-gray-900">{opp.name}</td>
-                <td className="px-4 py-3">
-                  <span className={cn('inline-flex px-2 py-0.5 rounded-full text-xs font-medium', STAGE_COLORS[opp.stage] ?? 'bg-gray-100 text-gray-600')}>
-                    {opp.stage}
-                  </span>
-                </td>
                 <td className="px-4 py-3 text-gray-500 text-xs">
                   {opp.mc_role ?? <span className="text-gray-300">—</span>}
                 </td>
@@ -337,7 +270,6 @@ export function OpportunitiesClient({ opportunities, talents, mcRoles, stages, c
                   {converted.map(opp => (
                     <tr key={opp.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => router.push(`/opportunities/${opp.id}`)}>
                       <td className="px-4 py-3 font-medium text-gray-700">{opp.name}</td>
-                      <td className="px-4 py-3 text-gray-400 text-xs">{opp.stage}</td>
                       <td className="px-4 py-3 text-gray-400 text-xs">
                         {opp.event_date ? new Date(opp.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : <span className="text-gray-300">—</span>}
                       </td>
@@ -451,56 +383,7 @@ export function OpportunitiesClient({ opportunities, talents, mcRoles, stages, c
             <label className="text-xs font-medium text-gray-700">Deal name *</label>
             <Input value={form.name} onChange={field('name')} placeholder="e.g. Roberto Cavalli FW26 Campaign" required />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Stage</label>
-              <Select
-                value={form.stage}
-                onChange={e => {
-                  if (e.target.value === '__add_new__') {
-                    setAddingStage(true)
-                  } else {
-                    setForm(f => ({ ...f, stage: e.target.value }))
-                  }
-                }}
-                placeholder="Select stage…"
-                options={[
-                  ...localStages.map(s => ({ value: s.name, label: s.name })),
-                  { value: '__add_new__', label: '＋ Add new stage…' },
-                ]}
-              />
-              {addingStage && (
-                <div className="flex gap-1.5">
-                  <input
-                    autoFocus
-                    value={newStageName}
-                    onChange={e => setNewStageName(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') { e.preventDefault(); handleAddStage() }
-                      if (e.key === 'Escape') { setAddingStage(false); setNewStageName('') }
-                    }}
-                    placeholder="New stage name…"
-                    className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/10"
-                  />
-                  <button
-                    type="button"
-                    disabled={savingStage || !newStageName.trim()}
-                    onClick={handleAddStage}
-                    className="px-3 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg disabled:opacity-40"
-                  >
-                    {savingStage ? '…' : 'Add'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setAddingStage(false); setNewStageName('') }}
-                    className="px-3 py-2 text-sm text-gray-500 hover:text-gray-800 border border-gray-200 rounded-lg"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
-            </div>
-            <div className="space-y-1.5">
+          <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">MC role</label>
               <Select
                 value={form.mc_role}
@@ -547,7 +430,6 @@ export function OpportunitiesClient({ opportunities, talents, mcRoles, stages, c
                   </button>
                 </div>
               )}
-            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

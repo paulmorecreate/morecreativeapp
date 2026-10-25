@@ -12,7 +12,6 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
     { data: conversations },
     { data: talents },
     { data: mcRoles },
-    { data: stages },
     { data: categories },
     { data: documents },
   ] = await Promise.all([
@@ -30,7 +29,6 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
       .order('created_at', { ascending: false }),
     supabase.from('talents').select('id, name').order('name'),
     supabase.from('mc_roles').select('*').order('name'),
-    supabase.from('opportunity_stages').select('*').order('name'),
     supabase.from('project_categories').select('*').order('name'),
     supabase.from('opportunity_documents').select('*').eq('opportunity_id', id).order('created_at'),
   ])
@@ -46,7 +44,6 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
       conversations={conversations ?? []}
       talents={talents ?? []}
       mcRoles={mcRoles ?? []}
-      stages={stages ?? []}
       categories={categories ?? []}
       convertedProject={oppData.converted_project ?? null}
       documents={documents ?? []}
