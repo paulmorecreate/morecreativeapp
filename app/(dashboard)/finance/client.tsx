@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Receipt, Trash2, X, ExternalLink, Pencil, ChevronUp, ChevronDown, Search, Copy } from 'lucide-react'
+import { Plus, Receipt, Trash2, X, ExternalLink, Pencil, ChevronUp, ChevronDown, Search, Copy, Download } from 'lucide-react'
 import { Invoice, PurchaseInvoice, CurrencyRate, AnnualExpense, Salary, OperatingCost } from '@/lib/supabase/types'
 import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
@@ -184,6 +184,84 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
   const [deleting, setDeleting] = useState(false)
   const [cloningSaleId, setCloningSaleId] = useState<string | null>(null)
   const [cloningPoId, setCloningPoId] = useState<string | null>(null)
+
+  // Multi-select + download
+  const [selectedSaleIds, setSelectedSaleIds] = useState<Set<string>>(new Set())
+  const [selectedPoIds, setSelectedPoIds] = useState<Set<string>>(new Set())
+  const [downloadingSales, setDownloadingSales] = useState(false)
+  const [downloadingPo, setDownloadingPo] = useState(false)
+
+  function toggleSaleRow(id: string) {
+    setSelectedSaleIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  }
+  function toggleAllSales(rows: InvoiceRow[]) {
+    setSelectedSaleIds(prev => prev.size === rows.length ? new Set() : new Set(rows.map(r => r.id)))
+  }
+  function togglePoRow(id: string) {
+    setSelectedPoIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  }
+  function toggleAllPo(rows: PurchaseInvoiceRow[]) {
+    setSelectedPoIds(prev => prev.size === rows.length ? new Set() : new Set(rows.map(r => r.id)))
+  }
+
+  async function downloadSelectedSales() {
+    setDownloadingSales(true)
+    const supabase = createClient()
+    const { data: settings } = await supabase.from('invoice_settings').select('*').limit(1).single()
+    if (!settings) { setDownloadingSales(false); return }
+    const { pdf } = await import('@react-pdf/renderer')
+    const { InvoiceDocument } = await import('@/components/invoice-pdf')
+    for (const id of Array.from(selectedSaleIds)) {
+      const { data: inv } = await supabase.from('invoices').select('*, line_items:invoice_line_items(*)').eq('id', id).single()
+      if (!inv) continue
+      const blob = await pdf(
+        React.createElement(InvoiceDocument, { invoice: inv as any, lineItems: (inv as any).line_items ?? [], settings }) as any
+      ).toBlob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${(inv as any).invoice_number || 'invoice'}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      await new Promise(r => setTimeout(r, 400))
+    }
+    setDownloadingSales(false)
+    setSelectedSaleIds(new Set())
+  }
+
+  function downloadSelectedPo() {
+    setDownloadingPo(true)
+    const rows = purchaseInvoices.filter(inv => selectedPoIds.has(inv.id))
+    const headers = ['Invoice #', 'Supplier', 'Project', 'Issue Date', 'Due Date', 'Currency', 'Net Amount', 'VAT', 'Gross Amount', 'FX Rate', 'AED Equiv', 'Status']
+    const csvRows = rows.map(inv => [
+      inv.invoice_number ?? '',
+      inv.supplier,
+      (inv.project as { name: string } | null)?.name ?? '',
+      inv.issue_date ?? '',
+      inv.due_date ?? '',
+      inv.currency,
+      inv.net_amount.toString(),
+      inv.vat_amount.toString(),
+      inv.gross_amount.toString(),
+      inv.fx_rate.toString(),
+      (inv.gross_amount * inv.fx_rate).toFixed(2),
+      inv.status,
+    ])
+    const csv = [headers, ...csvRows].map(r => r.map(v => `"${v.replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `purchase-invoices-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    setDownloadingPo(false)
+    setSelectedPoIds(new Set())
+  }
 
   // Annual expenses state
   const [annualExpenses, setAnnualExpenses] = useState<AnnualExpense[]>(initialAnnualExpenses)
@@ -1045,6 +1123,14 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
+                    <th className="pl-3 pr-1 py-2 w-8">
+                      <input
+                        type="checkbox"
+                        checked={filteredSales.length > 0 && selectedSaleIds.size === filteredSales.length}
+                        onChange={() => toggleAllSales(filteredSales)}
+                        className="rounded border-gray-300 cursor-pointer"
+                      />
+                    </th>
                     {([
                       { col: 'billed_to_name', label: 'Billed To', align: 'left' },
                       { col: 'project', label: 'Project', align: 'left' },
@@ -1098,8 +1184,11 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                       <tr
                         key={inv.id}
                         onClick={() => router.push(`/finance/${inv.id}?from=finance`)}
-                        className="hover:bg-gray-50 cursor-pointer transition-colors group"
+                        className={cn('cursor-pointer transition-colors group', selectedSaleIds.has(inv.id) ? 'bg-blue-50' : 'hover:bg-gray-50')}
                       >
+                        <td className="pl-3 pr-1 py-2 w-8" onClick={e => { e.stopPropagation(); toggleSaleRow(inv.id) }}>
+                          <input type="checkbox" checked={selectedSaleIds.has(inv.id)} onChange={() => toggleSaleRow(inv.id)} className="rounded border-gray-300 cursor-pointer" />
+                        </td>
                         <td className="px-3 py-2 text-gray-700 max-w-[180px]">
                           <div className="truncate">{inv.billed_to_name ?? <span className="text-gray-300">—</span>}</div>
                           {inv.billed_to_company && <div className="text-xs text-gray-400 truncate">{inv.billed_to_company}</div>}
@@ -1162,6 +1251,24 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                 </tbody>
               </table>
               </div>
+            </div>
+          )}
+
+          {/* Sales selection bar */}
+          {selectedSaleIds.size > 0 && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-gray-900 text-white rounded-2xl shadow-xl px-5 py-3">
+              <span className="text-sm font-medium">{selectedSaleIds.size} selected</span>
+              <button
+                onClick={downloadSelectedSales}
+                disabled={downloadingSales}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-900 rounded-lg text-xs font-semibold hover:bg-gray-100 disabled:opacity-50 transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                {downloadingSales ? 'Preparing…' : `Download PDF${selectedSaleIds.size > 1 ? 's' : ''}`}
+              </button>
+              <button onClick={() => setSelectedSaleIds(new Set())} className="text-gray-400 hover:text-white transition-colors">
+                <X className="w-4 h-4" />
+              </button>
             </div>
           )}
         </>
@@ -1240,6 +1347,14 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
+                    <th className="pl-3 pr-1 py-2 w-8">
+                      <input
+                        type="checkbox"
+                        checked={filteredPo.length > 0 && selectedPoIds.size === filteredPo.length}
+                        onChange={() => toggleAllPo(filteredPo)}
+                        className="rounded border-gray-300 cursor-pointer"
+                      />
+                    </th>
                     {([
                       { col: 'supplier', label: 'Supplier', align: 'left' },
                       { col: 'project', label: 'Project', align: 'left' },
@@ -1291,8 +1406,11 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                     <tr
                       key={inv.id}
                       onClick={() => router.push(`/finance/purchase/${inv.id}?from=finance`)}
-                      className="hover:bg-gray-50 cursor-pointer transition-colors group"
+                      className={cn('cursor-pointer transition-colors group', selectedPoIds.has(inv.id) ? 'bg-blue-50' : 'hover:bg-gray-50')}
                     >
+                      <td className="pl-3 pr-1 py-2 w-8" onClick={e => { e.stopPropagation(); togglePoRow(inv.id) }}>
+                        <input type="checkbox" checked={selectedPoIds.has(inv.id)} onChange={() => togglePoRow(inv.id)} className="rounded border-gray-300 cursor-pointer" />
+                      </td>
                       <td className="px-3 py-2 text-gray-700 max-w-[180px]">
                         <div className="flex items-center gap-1.5 truncate">
                           <span className="truncate">{inv.supplier || <span className="text-gray-300">—</span>}</span>
@@ -1370,6 +1488,24 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                 </tbody>
               </table>
               </div>
+            </div>
+          )}
+
+          {/* Purchase selection bar */}
+          {selectedPoIds.size > 0 && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-gray-900 text-white rounded-2xl shadow-xl px-5 py-3">
+              <span className="text-sm font-medium">{selectedPoIds.size} selected</span>
+              <button
+                onClick={downloadSelectedPo}
+                disabled={downloadingPo}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-900 rounded-lg text-xs font-semibold hover:bg-gray-100 disabled:opacity-50 transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                {downloadingPo ? 'Preparing…' : 'Download CSV'}
+              </button>
+              <button onClick={() => setSelectedPoIds(new Set())} className="text-gray-400 hover:text-white transition-colors">
+                <X className="w-4 h-4" />
+              </button>
             </div>
           )}
         </>
