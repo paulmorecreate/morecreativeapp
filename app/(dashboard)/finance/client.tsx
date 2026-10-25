@@ -1186,7 +1186,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                         onClick={() => router.push(`/finance/${inv.id}?from=finance`)}
                         className={cn('cursor-pointer transition-colors group', selectedSaleIds.has(inv.id) ? 'bg-blue-50' : 'hover:bg-gray-50')}
                       >
-                        <td className="pl-3 pr-1 py-2 w-8" onClick={e => { e.stopPropagation(); toggleSaleRow(inv.id) }}>
+                        <td className="pl-3 pr-1 py-2 w-8" onClick={e => e.stopPropagation()}>
                           <input type="checkbox" checked={selectedSaleIds.has(inv.id)} onChange={() => toggleSaleRow(inv.id)} className="rounded border-gray-300 cursor-pointer" />
                         </td>
                         <td className="px-3 py-2 text-gray-700 max-w-[180px]">
@@ -1408,7 +1408,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                       onClick={() => router.push(`/finance/purchase/${inv.id}?from=finance`)}
                       className={cn('cursor-pointer transition-colors group', selectedPoIds.has(inv.id) ? 'bg-blue-50' : 'hover:bg-gray-50')}
                     >
-                      <td className="pl-3 pr-1 py-2 w-8" onClick={e => { e.stopPropagation(); togglePoRow(inv.id) }}>
+                      <td className="pl-3 pr-1 py-2 w-8" onClick={e => e.stopPropagation()}>
                         <input type="checkbox" checked={selectedPoIds.has(inv.id)} onChange={() => togglePoRow(inv.id)} className="rounded border-gray-300 cursor-pointer" />
                       </td>
                       <td className="px-3 py-2 text-gray-700 max-w-[180px]">
