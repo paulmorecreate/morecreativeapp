@@ -318,7 +318,7 @@ export function MeetingsClient({ currentUserEmail, teamMembers, connectedEmail }
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold text-gray-900">Meetings</h1>
           {connectedEmail
-            ? <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5"><Wifi className="w-3 h-3 text-green-500" />{connectedEmail}</p>
+            ? <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5"><Wifi className="w-3 h-3 text-green-500" />{connectedEmail}<a href="/api/auth/google" className="text-blue-500 hover:text-blue-700 underline ml-1">Switch account</a></p>
             : <p className="text-xs text-amber-600 flex items-center gap-1 mt-0.5"><WifiOff className="w-3 h-3" />Not connected</p>
           }
         </div>
