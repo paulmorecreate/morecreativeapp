@@ -163,6 +163,8 @@ export function MeetingsClient({ currentUserEmail, teamMembers, connectedEmail }
   const [view, setView] = useState<View>('month')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [events, setEvents] = useState<CalendarEvent[]>([])
+  const [upcomingEvents, setUpcomingEvents] = useState<CalendarEvent[]>([])
+  const [upcomingCount, setUpcomingCount] = useState<5 | 10 | 15>(5)
   const [loading, setLoading] = useState(true)
   const [showNew, setShowNew] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -210,7 +212,24 @@ export function MeetingsClient({ currentUserEmail, teamMembers, connectedEmail }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), connectedEmail])
 
+  const loadUpcoming = useCallback(async () => {
+    if (!connectedEmail) return
+    const start = new Date()
+    const end = addDays(start, 180)
+    try {
+      const res = await fetch(`/api/meetings?start=${start.toISOString()}&end=${end.toISOString()}`)
+      const data = await res.json()
+      const sorted = (data.events ?? [] as CalendarEvent[])
+        .filter((ev: CalendarEvent) => evStart(ev) >= start)
+        .sort((a: CalendarEvent, b: CalendarEvent) => evStart(a).getTime() - evStart(b).getTime())
+      setUpcomingEvents(sorted)
+    } catch {
+      setUpcomingEvents([])
+    }
+  }, [connectedEmail])
+
   useEffect(() => { loadEvents() }, [loadEvents])
+  useEffect(() => { loadUpcoming() }, [loadUpcoming])
 
   useEffect(() => {
     if (view === 'week' && weekScrollRef.current) {
@@ -289,7 +308,7 @@ export function MeetingsClient({ currentUserEmail, teamMembers, connectedEmail }
       setShowNew(false)
       setExternalInput('')
       setForm({ title: '', description: '', date: todayStr, startTime: '10:00', duration: '60', attendees: [], externalAttendees: [] })
-      await loadEvents()
+      await Promise.all([loadEvents(), loadUpcoming()])
     }
     setSaving(false)
   }
@@ -305,7 +324,7 @@ export function MeetingsClient({ currentUserEmail, teamMembers, connectedEmail }
     setDeleteTarget(null)
     setDeleting(false)
     setSelectedEvent(null)
-    await loadEvents()
+    await Promise.all([loadEvents(), loadUpcoming()])
   }
 
   const monthGrid = getMonthGrid(currentDate.getFullYear(), currentDate.getMonth())
@@ -345,17 +364,31 @@ export function MeetingsClient({ currentUserEmail, teamMembers, connectedEmail }
         </div>
       ) : (
         <>
-          {/* Next 5 meetings strip */}
-          {(() => {
-            const now = new Date()
-            const upcoming = events
-              .filter(ev => new Date(ev.start.dateTime ?? ev.start.date ?? '') > now)
-              .sort((a, b) => evStart(a).getTime() - evStart(b).getTime())
-              .slice(0, 5)
-            if (upcoming.length === 0) return null
-            return (
-              <div className="mb-3 bg-gray-50 rounded-xl border border-gray-200 px-4 py-2.5 space-y-1">
-                {upcoming.map(ev => {
+          {/* Upcoming meetings strip — always from today, independent of calendar view */}
+          {upcomingEvents.length > 0 && (
+            <div className="mb-3 bg-gray-50 rounded-xl border border-gray-200 px-4 py-3">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <span className="text-xs font-semibold text-gray-700">Upcoming meetings</span>
+                  <span className="text-xs text-gray-400 ml-1.5">— always from today, regardless of calendar view</span>
+                </div>
+                <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
+                  {([5, 10, 15] as const).map(n => (
+                    <button
+                      key={n}
+                      onClick={() => setUpcomingCount(n)}
+                      className={cn(
+                        'px-2.5 py-1 text-xs font-medium transition-colors',
+                        upcomingCount === n ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                      )}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1">
+                {upcomingEvents.slice(0, upcomingCount).map(ev => {
                   const start = evStart(ev)
                   const dateStr = start.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
                   const timeStr = ev.start.dateTime ? fmtTime(ev.start.dateTime) : 'All day'
@@ -372,8 +405,8 @@ export function MeetingsClient({ currentUserEmail, teamMembers, connectedEmail }
                   )
                 })}
               </div>
-            )
-          })()}
+            </div>
+          )}
 
           {/* Calendar toolbar */}
           <div className="flex items-center gap-2 mb-3">
