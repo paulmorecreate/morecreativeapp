@@ -345,6 +345,36 @@ export function MeetingsClient({ currentUserEmail, teamMembers, connectedEmail }
         </div>
       ) : (
         <>
+          {/* Next 5 meetings strip */}
+          {(() => {
+            const now = new Date()
+            const upcoming = events
+              .filter(ev => new Date(ev.start.dateTime ?? ev.start.date ?? '') > now)
+              .sort((a, b) => evStart(a).getTime() - evStart(b).getTime())
+              .slice(0, 5)
+            if (upcoming.length === 0) return null
+            return (
+              <div className="mb-3 bg-gray-50 rounded-xl border border-gray-200 px-4 py-2.5 space-y-1">
+                {upcoming.map(ev => {
+                  const start = evStart(ev)
+                  const dateStr = start.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+                  const timeStr = ev.start.dateTime ? fmtTime(ev.start.dateTime) : 'All day'
+                  return (
+                    <button
+                      key={ev.id}
+                      onClick={() => setSelectedEvent(ev)}
+                      className="w-full flex items-center gap-3 text-left hover:opacity-70 transition-opacity"
+                    >
+                      <span className="text-xs text-gray-400 shrink-0 w-24">{dateStr}</span>
+                      <span className="text-xs font-medium text-gray-500 shrink-0 w-10">{timeStr}</span>
+                      <span className="text-xs font-medium text-gray-800 truncate">{ev.summary}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })()}
+
           {/* Calendar toolbar */}
           <div className="flex items-center gap-2 mb-3">
             <button
