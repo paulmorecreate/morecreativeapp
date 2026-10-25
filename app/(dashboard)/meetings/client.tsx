@@ -279,7 +279,7 @@ export function MeetingsClient({ currentUserEmail, teamMembers, connectedEmail }
         start: start.toISOString(),
         end: end.toISOString(),
         attendees: allAttendees,
-        timeZone: 'Asia/Dubai',
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       }),
     })
     if (!res.ok) {
