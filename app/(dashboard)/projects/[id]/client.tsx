@@ -2141,10 +2141,10 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
           {/* Talent pool — table with drag handles */}
           {projectTalents.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-3 border-b border-slate-300 bg-gradient-to-r from-slate-300 via-slate-100 to-slate-300">
-                <span className="text-sm font-semibold text-slate-700">Talent Pool</span>
+              <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-zinc-900 via-zinc-700 to-zinc-900">
+                <span className="text-sm font-semibold text-white tracking-wide">Talent Pool</span>
                 {brandShows.length > 0 && (
-                  <span className="text-xs text-slate-500 flex items-center gap-1">
+                  <span className="text-xs text-zinc-300 flex items-center gap-1">
                     <GripVertical className="w-3 h-3" /> Drag onto a show to assign
                   </span>
                 )}
