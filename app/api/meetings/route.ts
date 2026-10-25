@@ -39,8 +39,8 @@ async function getAuthedClient() {
   return oauth2Client
 }
 
-// GET — list upcoming meetings
-export async function GET() {
+// GET — list events for a date range
+export async function GET(req: NextRequest) {
   const supabaseAuth = await createClient()
   const { data: { user } } = await supabaseAuth.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -48,14 +48,17 @@ export async function GET() {
   const auth = await getAuthedClient()
   if (!auth) return NextResponse.json({ events: [], connected: false })
 
+  const timeMin = req.nextUrl.searchParams.get('start') ?? new Date().toISOString()
+  const timeMax = req.nextUrl.searchParams.get('end') ?? new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString()
+
   const calendar = google.calendar({ version: 'v3', auth })
   const { data } = await calendar.events.list({
     calendarId: 'primary',
-    timeMin: new Date().toISOString(),
-    maxResults: 50,
+    timeMin,
+    timeMax,
+    maxResults: 250,
     singleEvents: true,
     orderBy: 'startTime',
-    q: 'morecreative',
   })
 
   return NextResponse.json({ events: data.items ?? [], connected: true })
