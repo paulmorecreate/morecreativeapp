@@ -25,6 +25,7 @@ type CalendarEvent = {
   attendees?: { email: string; responseStatus?: string }[]
   hangoutLink?: string
   htmlLink?: string
+  recurringEventId?: string
 }
 
 type WeekEntry = {
@@ -214,15 +215,24 @@ export function MeetingsClient({ currentUserEmail, teamMembers, connectedEmail }
 
   const loadUpcoming = useCallback(async () => {
     if (!connectedEmail) return
-    const start = new Date()
-    const end = addDays(start, 180)
+    const now = new Date()
+    const todayStart = startOfDay(now)
+    const end = addDays(now, 180)
     try {
-      const res = await fetch(`/api/meetings?start=${start.toISOString()}&end=${end.toISOString()}`)
+      const res = await fetch(`/api/meetings?start=${todayStart.toISOString()}&end=${end.toISOString()}`)
       const data = await res.json()
       const sorted = (data.events ?? [] as CalendarEvent[])
-        .filter((ev: CalendarEvent) => evStart(ev) >= start)
+        .filter((ev: CalendarEvent) => evStart(ev) >= todayStart)
         .sort((a: CalendarEvent, b: CalendarEvent) => evStart(a).getTime() - evStart(b).getTime())
-      setUpcomingEvents(sorted)
+      // For recurring series, keep only the next upcoming instance
+      const seen = new Set<string>()
+      const deduped = sorted.filter((ev: CalendarEvent) => {
+        if (!ev.recurringEventId) return true
+        if (seen.has(ev.recurringEventId)) return false
+        seen.add(ev.recurringEventId)
+        return true
+      })
+      setUpcomingEvents(deduped)
     } catch {
       setUpcomingEvents([])
     }

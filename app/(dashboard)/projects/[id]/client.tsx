@@ -32,6 +32,20 @@ const talentStatusOpts = [
   { value: 'Rejected', label: 'Rejected' },
 ]
 
+const talentPoolStatusOpts = [
+  { value: 'In Conversation', label: 'In Conversation' },
+  { value: 'Confirmed', label: 'Confirmed' },
+  { value: 'Rejected', label: 'Rejected' },
+  { value: 'Cancelled', label: 'Cancelled' },
+]
+
+const POOL_STATUS_STYLES: Record<string, string> = {
+  'In Conversation': 'bg-orange-50 text-orange-600 border-orange-200',
+  'Confirmed':       'bg-green-50 text-green-700 border-green-200',
+  'Rejected':        'bg-red-50 text-red-600 border-red-200',
+  'Cancelled':       'bg-gray-100 text-gray-500 border-gray-200',
+}
+
 const dealTypeOpts = [
   { value: 'Organic', label: 'Organic' },
   { value: 'Budget', label: 'Budget' },
@@ -71,6 +85,7 @@ type BrandShow = {
 type ProjectTalent = {
   id: string
   talent_id: string
+  status: string | null
   notes: string | null
   talent: { id: string; name: string; category: string | null } | null
   project_talent_notes?: TalentNote[]
@@ -1423,7 +1438,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
     }
 
     if (talentId) {
-      await supabase.from('project_talents').insert({ project_id: project.id, talent_id: talentId })
+      await supabase.from('project_talents').insert({ project_id: project.id, talent_id: talentId, status: 'In Conversation' })
     }
     setSaving(false); setProjectTalentModal(false); router.refresh()
   }
@@ -2154,6 +2169,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                   <tr className="border-b border-gray-50">
                     <th className="w-8 px-3 py-2" />
                     <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Talent</th>
+                    <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Status</th>
                     <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Notes</th>
                     <th className="w-8 px-3 py-2" />
                   </tr>
@@ -2848,6 +2864,8 @@ function InlineProjectTalentRow({
   onRemove: () => void
 }) {
   const supabase = createClient()
+  const router = useRouter()
+  const [status, setStatus] = useState(pt.status ?? 'In Conversation')
   const [notesList, setNotesList] = useState<TalentNote[]>(
     [...(pt.project_talent_notes ?? [])].sort(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
@@ -2916,6 +2934,27 @@ function InlineProjectTalentRow({
             + note
           </button>
         </div>
+      </td>
+
+      {/* Status */}
+      <td className="px-4 py-2.5">
+        <select
+          value={status}
+          onChange={async e => {
+            const next = e.target.value
+            setStatus(next)
+            await supabase.from('project_talents').update({ status: next }).eq('id', pt.id)
+            router.refresh()
+          }}
+          className={cn(
+            'text-xs font-medium px-2.5 py-1 rounded-full border cursor-pointer focus:outline-none focus:ring-2 focus:ring-black/10',
+            POOL_STATUS_STYLES[status] ?? 'bg-gray-100 text-gray-500 border-gray-200'
+          )}
+        >
+          {talentPoolStatusOpts.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
       </td>
 
       {/* Notes */}

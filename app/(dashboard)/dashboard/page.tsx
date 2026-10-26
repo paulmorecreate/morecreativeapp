@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import Link from 'next/link'
 import { Users, Briefcase, Calendar, ExternalLink } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
@@ -7,6 +8,7 @@ import { PendingAcceptances } from '@/components/pending-acceptances'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
+  const adminSupabase = createAdminClient()
 
   const [
     { data: { user } },
@@ -17,6 +19,7 @@ export default async function DashboardPage() {
     { data: pendingRaw },
     { data: todos },
     { data: userProfiles },
+    { data: authData },
   ] = await Promise.all([
     supabase.auth.getUser(),
     supabase.from('talents').select('*', { count: 'exact', head: true }),
@@ -38,12 +41,21 @@ export default async function DashboardPage() {
       .order('completed', { ascending: true })
       .order('created_at', { ascending: true }),
     supabase.from('user_profiles').select('*'),
+    adminSupabase.auth.admin.listUsers(),
   ])
 
   // Filter out entries from completed projects
   const pending = (pendingRaw ?? []).filter((p: any) => p.project_brand?.project?.status !== 'completed')
 
-  const currentProfile = (userProfiles ?? []).find((p: any) => p.id === user?.id)
+  const now = new Date()
+  const lockedIds = new Set(
+    (authData?.users ?? [])
+      .filter(u => u.banned_until && new Date(u.banned_until) > now)
+      .map(u => u.id)
+  )
+  const activeProfiles = (userProfiles ?? []).filter((p: any) => !lockedIds.has(p.id))
+
+  const currentProfile = activeProfiles.find((p: any) => p.id === user?.id)
   const firstName = currentProfile?.first_name ?? null
 
   const stats = [
@@ -74,7 +86,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* To Do */}
-      <TodoWidget todos={todos ?? []} userProfiles={userProfiles ?? []} />
+      <TodoWidget todos={todos ?? []} userProfiles={activeProfiles} />
 
       <div className="grid grid-cols-2 gap-6">
         {/* Pending Acceptances */}
