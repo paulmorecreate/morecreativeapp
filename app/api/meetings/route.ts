@@ -107,9 +107,8 @@ export async function POST(req: NextRequest) {
           updateMask: 'config.accessType',
           requestBody: { config: { accessType: 'OPEN' } },
         })
-      } catch {
-        // Non-fatal — meeting was created, Quick access just wasn't set.
-        // This happens until Joyce re-connects to grant the meetings.space.created scope.
+      } catch (err: any) {
+        console.error('[Meet API] spaces.patch failed:', err?.message, err?.response?.data)
       }
     }
   }
