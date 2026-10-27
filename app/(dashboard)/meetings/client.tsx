@@ -462,6 +462,7 @@ export function MeetingsClient({ currentUserEmail, teamMembers, connectedEmail }
               today={today}
               onDayClick={day => openNew(day.toISOString().slice(0, 10))}
               onEventClick={setSelectedEvent}
+              onOverflowClick={day => { setCurrentDate(day); setView('week') }}
             />
           )}
           {view === 'week' && (
@@ -627,13 +628,14 @@ export function MeetingsClient({ currentUserEmail, teamMembers, connectedEmail }
 
 // ── Month view ────────────────────────────────────────────────────────────────
 
-function MonthView({ grid, currentMonth, events, today, onDayClick, onEventClick }: {
+function MonthView({ grid, currentMonth, events, today, onDayClick, onEventClick, onOverflowClick }: {
   grid: Date[]
   currentMonth: number
   events: CalendarEvent[]
   today: Date
   onDayClick: (day: Date) => void
   onEventClick: (ev: CalendarEvent) => void
+  onOverflowClick: (day: Date) => void
 }) {
   const weeks: Date[][] = []
   for (let i = 0; i < grid.length; i += 7) weeks.push(grid.slice(i, i + 7))
@@ -682,10 +684,11 @@ function MonthView({ grid, currentMonth, events, today, onDayClick, onEventClick
                     </div>
                     {overflow > 0 && (
                       <div
-                        className="text-xs text-gray-400 px-1.5 hover:text-gray-600"
+                        onClick={e => { e.stopPropagation(); onOverflowClick(day) }}
+                        className="text-xs text-blue-500 px-1.5 hover:text-blue-700 cursor-pointer font-medium"
                         style={{ marginTop: `${MAX_LANES * (EVENT_H + EVENT_GAP) + 2}px` }}
                       >
-                        {overflow} more
+                        +{overflow} more
                       </div>
                     )}
                   </div>
