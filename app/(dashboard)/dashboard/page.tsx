@@ -86,7 +86,12 @@ function buildActivityFeed(
   auditRows: ActivityRow[],
   projectTalentRows: ProjectTalentRow[],
   brandTalentRows: BrandTalentRow[],
+  profilesByEmail: Map<string, string>,
 ): UnifiedActivity[] {
+  function displayName(email: string | null | undefined): string {
+    if (!email) return 'unknown'
+    return profilesByEmail.get(email) ?? email.split('@')[0]
+  }
   const items: UnifiedActivity[] = []
 
   // For each talent that has a project/brand assignment, record its timestamp.
@@ -114,7 +119,7 @@ function buildActivityFeed(
     const at = wasUpdated ? row.updated_at! : row.created_at
     const verb = wasUpdated ? 'Updated' : 'Added'
     const by = wasUpdated ? row.updated_by : row.created_by
-    const byLabel = by ? ` by ${by.split('@')[0]}` : ''
+    const byLabel = by ? ` by ${displayName(by)}` : ''
 
     // Suppress talent-created entries that are already covered by a project assignment row
     if (row.entity_type === 'talent' && !wasUpdated) {
@@ -243,10 +248,17 @@ export default async function DashboardPage() {
 
   const connectedEmail = calendarToken?.connected_email ?? null
 
+  const profilesByEmail = new Map<string, string>(
+    (userProfiles ?? [])
+      .filter((p: any) => p.email && p.first_name)
+      .map((p: any) => [p.email as string, p.first_name as string])
+  )
+
   const activityFeed = buildActivityFeed(
     (auditActivity ?? []) as ActivityRow[],
     (projectTalents ?? []) as unknown as ProjectTalentRow[],
     (brandTalents ?? []) as unknown as BrandTalentRow[],
+    profilesByEmail,
   )
 
   return (
