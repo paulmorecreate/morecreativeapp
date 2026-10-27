@@ -88,6 +88,23 @@ function buildActivityFeed(
 ): UnifiedActivity[] {
   const items: UnifiedActivity[] = []
 
+  // For each talent that has a project/brand assignment, record its timestamp.
+  // If the audit_activity entry for that talent falls within 5 min of the assignment,
+  // suppress the bare audit entry — the richer assignment entry covers it.
+  const talentAssignmentAt = new Map<string, number>()
+  for (const row of projectTalentRows) {
+    if (!row.talent?.id) continue
+    const t = new Date(row.created_at).getTime()
+    const existing = talentAssignmentAt.get(row.talent.id)
+    if (!existing || t > existing) talentAssignmentAt.set(row.talent.id, t)
+  }
+  for (const row of brandTalentRows) {
+    if (!row.talent?.id) continue
+    const t = new Date(row.created_at).getTime()
+    const existing = talentAssignmentAt.get(row.talent.id)
+    if (!existing || t > existing) talentAssignmentAt.set(row.talent.id, t)
+  }
+
   for (const row of auditRows) {
     const wasUpdated =
       row.updated_by &&
@@ -97,6 +114,12 @@ function buildActivityFeed(
     const verb = wasUpdated ? 'Updated' : 'Added'
     const by = wasUpdated ? row.updated_by : row.created_by
     const byLabel = by ? ` by ${by.split('@')[0]}` : ''
+
+    // Suppress talent-created entries that are already covered by a project assignment row
+    if (row.entity_type === 'talent' && !wasUpdated) {
+      const assignedAt = talentAssignmentAt.get(row.id)
+      if (assignedAt && Math.abs(new Date(at).getTime() - assignedAt) < 5 * 60 * 1000) continue
+    }
 
     items.push({
       key: `audit-${row.entity_type}-${row.id}`,
