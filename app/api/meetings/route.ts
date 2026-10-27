@@ -76,6 +76,42 @@ export async function POST(req: NextRequest) {
   if (!auth) return NextResponse.json({ error: 'Google Calendar not connected' }, { status: 400 })
 
   const calendar = google.calendar({ version: 'v3', auth })
+  const meet = google.meet({ version: 'v2', auth })
+
+  // Create the Meet space first via Meet API so we own it and can set OPEN access.
+  // Falls back to letting Calendar API create it (no Quick access) if scope not granted.
+  let conferenceData: object = {
+    createRequest: {
+      requestId: `mc-meet-${Date.now()}`,
+      conferenceSolutionKey: { type: 'hangoutsMeet' },
+    },
+  }
+
+  try {
+    const { data: space } = await meet.spaces.create({
+      requestBody: { config: { accessType: 'OPEN' } },
+    })
+    const meetingUri = space.meetingUri ?? ''
+    const meetingCode = space.meetingCode ?? space.name?.split('/').pop() ?? ''
+    if (meetingCode && meetingUri) {
+      conferenceData = {
+        conferenceId: meetingCode,
+        conferenceSolution: {
+          key: { type: 'hangoutsMeet' },
+          name: 'Google Meet',
+          iconUri: 'https://fonts.gstatic.com/s/i/productlogos/meet_2020q4/v6/web-512dp/logo_meet_2020q4_color_2x_web_512dp.png',
+        },
+        entryPoints: [{
+          entryPointType: 'video',
+          uri: meetingUri,
+          label: meetingUri.replace('https://', ''),
+        }],
+      }
+    }
+  } catch (err: any) {
+    console.error('[Meet API] spaces.create failed, falling back to Calendar-generated link:', err?.message)
+  }
+
   const { data: event } = await calendar.events.insert({
     calendarId: 'primary',
     conferenceDataVersion: 1,
@@ -86,39 +122,11 @@ export async function POST(req: NextRequest) {
       start: { dateTime: start, timeZone: timeZone ?? 'Asia/Dubai' },
       end: { dateTime: end, timeZone: timeZone ?? 'Asia/Dubai' },
       attendees: (attendees ?? []).map((email: string) => ({ email })),
-      conferenceData: {
-        createRequest: {
-          requestId: `mc-meet-${Date.now()}`,
-          conferenceSolutionKey: { type: 'hangoutsMeet' },
-        },
-      },
+      conferenceData,
     },
   })
 
-  // Set Quick access = OPEN so anyone with the link can join without waiting
-  let meetPatchResult: string = 'skipped'
-  const hangoutLink = event.hangoutLink
-  if (hangoutLink) {
-    const meetingCode = hangoutLink.split('/').pop()
-    if (meetingCode) {
-      try {
-        const meet = google.meet({ version: 'v2', auth })
-        await meet.spaces.patch({
-          name: `spaces/${meetingCode}`,
-          updateMask: 'config.accessType',
-          requestBody: { config: { accessType: 'OPEN' } },
-        })
-        meetPatchResult = 'ok'
-      } catch (err: any) {
-        meetPatchResult = err?.response?.data
-          ? JSON.stringify(err.response.data)
-          : (err?.message ?? 'unknown error')
-        console.error('[Meet API] spaces.patch failed:', meetPatchResult)
-      }
-    }
-  }
-
-  return NextResponse.json({ event, meetPatchResult })
+  return NextResponse.json({ event })
 }
 
 // DELETE — cancel a meeting
