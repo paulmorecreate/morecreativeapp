@@ -40,6 +40,7 @@ type UnifiedActivity = {
   chipColor: string
   title: string
   subtitle: string
+  context: string | null  // project/brand name — rendered prominently after the subtitle
   href: string | null
   at: string
 }
@@ -127,6 +128,7 @@ function buildActivityFeed(
       chipColor: ENTITY_COLOR[row.entity_type] ?? 'bg-gray-100 text-gray-600',
       title: row.record_name ?? '—',
       subtitle: `${verb}${byLabel}`,
+      context: null,
       href: ENTITY_HREF[row.entity_type]?.(row.id) ?? null,
       at,
     })
@@ -134,14 +136,15 @@ function buildActivityFeed(
 
   for (const row of projectTalentRows) {
     if (!row.talent?.name) continue
-    const projectName = row.project?.name
+    const projectName = row.project?.name ?? null
     const projectId = row.project?.id
     items.push({
       key: `pt-${row.id}`,
-      chip: 'talent',
-      chipColor: ENTITY_COLOR.talent,
+      chip: 'pool',
+      chipColor: 'bg-emerald-100 text-emerald-700',
       title: row.talent.name,
-      subtitle: `Added to Talent Pool${projectName ? ` · ${projectName}` : ''}`,
+      subtitle: 'Added to Talent Pool',
+      context: projectName,
       href: projectId ? `/projects/${projectId}` : `/talents/${row.talent.id}`,
       at: row.created_at,
     })
@@ -149,18 +152,16 @@ function buildActivityFeed(
 
   for (const row of brandTalentRows) {
     if (!row.talent?.name) continue
-    const brandName = row.project_brand?.brand?.name
-    const projectName = row.project_brand?.project?.name
+    const brandName = row.project_brand?.brand?.name ?? null
+    const projectName = row.project_brand?.project?.name ?? null
     const projectId = row.project_brand?.project?.id
-    let subtitle = 'Added'
-    if (brandName) subtitle += ` to ${brandName}`
-    if (projectName) subtitle += ` · ${projectName}`
     items.push({
       key: `pbt-${row.id}`,
-      chip: 'talent',
-      chipColor: ENTITY_COLOR.talent,
+      chip: 'show',
+      chipColor: 'bg-violet-100 text-violet-700',
       title: row.talent.name,
-      subtitle,
+      subtitle: brandName ? `Added to ${brandName}` : 'Added to show',
+      context: projectName,
       href: projectId ? `/projects/${projectId}` : `/talents/${row.talent.id}`,
       at: row.created_at,
     })
@@ -320,7 +321,12 @@ export default async function DashboardPage() {
                       </span>
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-900 truncate">{item.title}</p>
-                        <p className="text-xs text-gray-400 mt-0.5 truncate">{item.subtitle}</p>
+                        <p className="text-xs text-gray-400 mt-0.5 truncate">
+                          {item.subtitle}
+                          {item.context && (
+                            <><span className="mx-1 text-gray-300">·</span><span className="font-medium text-gray-600">{item.context}</span></>
+                          )}
+                        </p>
                       </div>
                     </div>
                     <span className="text-xs text-gray-400 shrink-0 mt-0.5">{timeAgo(item.at)}</span>
