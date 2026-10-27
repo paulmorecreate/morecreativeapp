@@ -46,6 +46,19 @@ const POOL_STATUS_STYLES: Record<string, string> = {
   'Cancelled':       'bg-gray-100 text-gray-500 border-gray-200',
 }
 
+const STATUS_SORT_ORDER: Record<string, number> = {
+  'Confirmed':       0,
+  'In Conversation': 1,
+  'Rejected':        2,
+  'Cancelled':       3,
+}
+function byStatusThenName(a: { status?: string | null; talent?: { name: string } | null }, b: { status?: string | null; talent?: { name: string } | null }) {
+  const sa = STATUS_SORT_ORDER[a.status ?? ''] ?? 4
+  const sb = STATUS_SORT_ORDER[b.status ?? ''] ?? 4
+  if (sa !== sb) return sa - sb
+  return (a.talent?.name ?? '').localeCompare(b.talent?.name ?? '')
+}
+
 const dealTypeOpts = [
   { value: 'Organic', label: 'Organic' },
   { value: 'Budget', label: 'Budget' },
@@ -2136,7 +2149,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
-                        {[...show.project_brand_talents].sort((a, b) => (a.talent?.name ?? '').localeCompare(b.talent?.name ?? '')).map(entry => (
+                        {[...show.project_brand_talents].sort(byStatusThenName).map(entry => (
                           <InlineShowTalentRow
                             key={entry.id}
                             entry={entry}
@@ -2175,7 +2188,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {[...projectTalents].sort((a, b) => (a.talent?.name ?? '').localeCompare(b.talent?.name ?? '')).map(pt => (
+                  {[...projectTalents].sort(byStatusThenName).map(pt => (
                     <InlineProjectTalentRow
                       key={pt.id}
                       pt={pt}
