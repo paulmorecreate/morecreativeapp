@@ -2,9 +2,75 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import Link from 'next/link'
 import { Users, Briefcase, Calendar, ExternalLink } from 'lucide-react'
-import { formatDate } from '@/lib/utils'
+import { formatDate, cn } from '@/lib/utils'
 import { TodoWidget } from '@/components/todo-widget'
-import { PendingAcceptances } from '@/components/pending-acceptances'
+import { DashboardMeetingsStrip } from '@/components/dashboard-meetings-strip'
+
+type ActivityRow = {
+  entity_type: string
+  id: string
+  record_name: string | null
+  created_by: string | null
+  created_at: string
+  updated_by: string | null
+  updated_at: string | null
+}
+
+const ENTITY_HREF: Record<string, (id: string) => string> = {
+  talent: id => `/talents/${id}`,
+  brand: id => `/brands/${id}`,
+  agency: id => `/agencies/${id}`,
+  agent: id => `/agents/${id}`,
+  stylist: id => `/stylists/${id}`,
+  photographer: id => `/photographers/${id}`,
+  person: id => `/people/${id}`,
+  project: id => `/projects/${id}`,
+  opportunity: id => `/opportunities/${id}`,
+}
+
+function activityAction(row: ActivityRow): { verb: string; by: string; at: string } {
+  const wasUpdated = row.updated_by &&
+    row.updated_at &&
+    new Date(row.updated_at).getTime() > new Date(row.created_at).getTime() + 5000
+
+  if (wasUpdated) {
+    return {
+      verb: 'Updated',
+      by: row.updated_by!.split('@')[0],
+      at: row.updated_at!,
+    }
+  }
+  return {
+    verb: 'Added',
+    by: (row.created_by ?? 'unknown').split('@')[0],
+    at: row.created_at,
+  }
+}
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  if (days < 7) return `${days}d ago`
+  return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}
+
+const ENTITY_COLOR: Record<string, string> = {
+  talent: 'bg-purple-100 text-purple-700',
+  brand: 'bg-blue-100 text-blue-700',
+  project: 'bg-teal-100 text-teal-700',
+  opportunity: 'bg-amber-100 text-amber-700',
+  agency: 'bg-indigo-100 text-indigo-700',
+  agent: 'bg-indigo-100 text-indigo-700',
+  stylist: 'bg-pink-100 text-pink-700',
+  photographer: 'bg-orange-100 text-orange-700',
+  person: 'bg-gray-100 text-gray-600',
+  'schedule event': 'bg-green-100 text-green-700',
+}
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -16,10 +82,11 @@ export default async function DashboardPage() {
     { count: brandCount },
     { count: projectCount },
     { data: upcomingProjects },
-    { data: pendingRaw },
     { data: todos },
     { data: userProfiles },
     { data: authData },
+    { data: recentActivity },
+    { data: calendarToken },
   ] = await Promise.all([
     supabase.auth.getUser(),
     supabase.from('talents').select('*', { count: 'exact', head: true }),
@@ -31,21 +98,21 @@ export default async function DashboardPage() {
       .gte('start_date', new Date().toISOString().split('T')[0])
       .order('start_date')
       .limit(6),
-    supabase.from('project_brand_talents')
-      .select('id, status, talent:talents(id, name), project_brand:project_brands(id, show_date, brand:brands(id, name), project:events(id, name, status))')
-      .eq('status', 'In Conversation')
-      .order('created_at', { ascending: false })
-      .limit(30),
     supabase.from('todos')
       .select('*')
       .order('completed', { ascending: true })
       .order('created_at', { ascending: true }),
     supabase.from('user_profiles').select('*'),
     adminSupabase.auth.admin.listUsers(),
+    supabase.from('audit_activity')
+      .select('*')
+      .order('updated_at', { ascending: false, nullsFirst: false })
+      .limit(10),
+    adminSupabase.from('google_calendar_tokens')
+      .select('connected_email')
+      .eq('id', '00000000-0000-0000-0000-000000000001')
+      .single(),
   ])
-
-  // Filter out entries from completed projects
-  const pending = (pendingRaw ?? []).filter((p: any) => p.project_brand?.project?.status !== 'completed')
 
   const now = new Date()
   const lockedIds = new Set(
@@ -63,6 +130,8 @@ export default async function DashboardPage() {
     { label: 'Brands', value: brandCount ?? 0, icon: Briefcase, href: '/brands', color: 'text-blue-600' },
     { label: 'Active Projects', value: projectCount ?? 0, icon: Calendar, href: '/projects', color: 'text-teal-600' },
   ]
+
+  const connectedEmail = calendarToken?.connected_email ?? null
 
   return (
     <div className="space-y-8">
@@ -88,32 +157,69 @@ export default async function DashboardPage() {
       {/* To Do */}
       <TodoWidget todos={todos ?? []} userProfiles={activeProfiles} />
 
+      {/* Meetings + Recent Activity */}
       <div className="grid grid-cols-2 gap-6">
-        {/* Pending Acceptances */}
-        <PendingAcceptances initial={pending as any} />
+        <DashboardMeetingsStrip connectedEmail={connectedEmail} />
 
-        {/* Upcoming Projects */}
+        {/* Recent Activity */}
         <div className="bg-white rounded-xl border border-gray-200">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-900">Upcoming Projects</h2>
-            <Link href="/projects" className="text-xs text-gray-400 hover:text-gray-600">View all →</Link>
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h2 className="text-sm font-semibold text-gray-900">Recent Activity</h2>
           </div>
           <div className="divide-y divide-gray-50">
-            {!upcomingProjects?.length && (
-              <p className="px-5 py-4 text-sm text-gray-400">No upcoming projects.</p>
+            {(!recentActivity || recentActivity.length === 0) ? (
+              <p className="px-5 py-4 text-sm text-gray-400">No activity yet.</p>
+            ) : (
+              (recentActivity as ActivityRow[]).map(row => {
+                const { verb, by, at } = activityAction(row)
+                const href = ENTITY_HREF[row.entity_type]?.(row.id)
+                const chip = ENTITY_COLOR[row.entity_type] ?? 'bg-gray-100 text-gray-600'
+                const inner = (
+                  <div className="flex items-start justify-between gap-3 px-5 py-3 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <span className={cn('text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0 mt-0.5', chip)}>
+                        {row.entity_type}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{row.record_name ?? '—'}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{verb} by {by}</p>
+                      </div>
+                    </div>
+                    <span className="text-xs text-gray-400 shrink-0 mt-0.5">{timeAgo(at)}</span>
+                  </div>
+                )
+                return href ? (
+                  <Link key={`${row.entity_type}-${row.id}`} href={href}>{inner}</Link>
+                ) : (
+                  <div key={`${row.entity_type}-${row.id}`}>{inner}</div>
+                )
+              })
             )}
-            {upcomingProjects?.map(event => (
-              <Link key={event.id} href={`/projects/${event.id}`} className="flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors">
-                <div>
-                  <div className="text-sm font-medium text-gray-900">{event.name}</div>
-                  <div className="text-xs text-gray-400 mt-0.5">{event.location ?? '—'}</div>
-                </div>
-                <div className="text-xs text-gray-500 shrink-0 ml-3">
-                  {formatDate(event.start_date)}
-                </div>
-              </Link>
-            ))}
           </div>
+        </div>
+      </div>
+
+      {/* Upcoming Projects */}
+      <div className="bg-white rounded-xl border border-gray-200">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="text-sm font-semibold text-gray-900">Upcoming Projects</h2>
+          <Link href="/projects" className="text-xs text-gray-400 hover:text-gray-600">View all →</Link>
+        </div>
+        <div className="divide-y divide-gray-50">
+          {!upcomingProjects?.length && (
+            <p className="px-5 py-4 text-sm text-gray-400">No upcoming projects.</p>
+          )}
+          {upcomingProjects?.map(event => (
+            <Link key={event.id} href={`/projects/${event.id}`} className="flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors">
+              <div>
+                <div className="text-sm font-medium text-gray-900">{event.name}</div>
+                <div className="text-xs text-gray-400 mt-0.5">{event.location ?? '—'}</div>
+              </div>
+              <div className="text-xs text-gray-500 shrink-0 ml-3">
+                {formatDate(event.start_date)}
+              </div>
+            </Link>
+          ))}
         </div>
       </div>
 

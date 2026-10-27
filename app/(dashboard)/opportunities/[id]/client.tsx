@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
+import { AuditStamp } from '@/components/audit-stamp'
 import { cn, formatDate } from '@/lib/utils'
 import { TALENT_STATUSES } from '../client'
 
@@ -182,6 +183,7 @@ export function OpportunityDetailClient({ opp, oppTalents, conversations, talent
     if (!form.name.trim()) return
     setSaving(true)
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
     await supabase.from('opportunities').update({
       name: form.name.trim(),
       mc_role: form.mc_role,
@@ -189,6 +191,7 @@ export function OpportunityDetailClient({ opp, oppTalents, conversations, talent
       location: form.location || null,
       category: form.category || null,
       notes: form.notes || null,
+      updated_by: user?.email ?? null,
       updated_at: new Date().toISOString(),
     }).eq('id', opp.id)
     setSaving(false)
@@ -835,6 +838,8 @@ export function OpportunityDetailClient({ opp, oppTalents, conversations, talent
           </div>
         </form>
       </Modal>
+
+      <AuditStamp createdBy={opp.created_by ?? null} createdAt={opp.created_at} updatedBy={opp.updated_by ?? null} updatedAt={opp.updated_at} />
 
       {/* Delete Document Confirmation */}
       <Modal open={!!deleteDoc} onClose={() => setDeleteDoc(null)} title="Delete Document">
