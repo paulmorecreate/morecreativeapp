@@ -14,6 +14,7 @@ export async function GET() {
     scope: [
       'https://www.googleapis.com/auth/calendar',
       'https://www.googleapis.com/auth/userinfo.email',
+      'https://www.googleapis.com/auth/meetings.space.created',
     ],
   })
 

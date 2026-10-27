@@ -95,6 +95,25 @@ export async function POST(req: NextRequest) {
     },
   })
 
+  // Set Quick access = OPEN so anyone with the link can join without waiting
+  const hangoutLink = event.hangoutLink
+  if (hangoutLink) {
+    const meetingCode = hangoutLink.split('/').pop()
+    if (meetingCode) {
+      try {
+        const meet = google.meet({ version: 'v2', auth })
+        await meet.spaces.patch({
+          name: `spaces/${meetingCode}`,
+          updateMask: 'config.accessType',
+          requestBody: { config: { accessType: 'OPEN' } },
+        })
+      } catch {
+        // Non-fatal — meeting was created, Quick access just wasn't set.
+        // This happens until Joyce re-connects to grant the meetings.space.created scope.
+      }
+    }
+  }
+
   return NextResponse.json({ event })
 }
 
