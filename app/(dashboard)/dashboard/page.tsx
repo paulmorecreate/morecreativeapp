@@ -16,6 +16,34 @@ type ActivityRow = {
   updated_at: string | null
 }
 
+type ProjectTalentRow = {
+  id: string
+  created_at: string
+  talent: { id: string; name: string } | null
+  project: { id: string; name: string } | null
+}
+
+type BrandTalentRow = {
+  id: string
+  created_at: string
+  talent: { id: string; name: string } | null
+  project_brand: {
+    id: string
+    brand: { id: string; name: string } | null
+    project: { id: string; name: string } | null
+  } | null
+}
+
+type UnifiedActivity = {
+  key: string
+  chip: string
+  chipColor: string
+  title: string
+  subtitle: string
+  href: string | null
+  at: string
+}
+
 const ENTITY_HREF: Record<string, (id: string) => string> = {
   talent: id => `/talents/${id}`,
   brand: id => `/brands/${id}`,
@@ -26,37 +54,6 @@ const ENTITY_HREF: Record<string, (id: string) => string> = {
   person: id => `/people/${id}`,
   project: id => `/projects/${id}`,
   opportunity: id => `/opportunities/${id}`,
-}
-
-function activityAction(row: ActivityRow): { verb: string; by: string; at: string } {
-  const wasUpdated = row.updated_by &&
-    row.updated_at &&
-    new Date(row.updated_at).getTime() > new Date(row.created_at).getTime() + 5000
-
-  if (wasUpdated) {
-    return {
-      verb: 'Updated',
-      by: row.updated_by!.split('@')[0],
-      at: row.updated_at!,
-    }
-  }
-  return {
-    verb: 'Added',
-    by: (row.created_by ?? 'unknown').split('@')[0],
-    at: row.created_at,
-  }
-}
-
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  const days = Math.floor(hrs / 24)
-  if (days < 7) return `${days}d ago`
-  return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
 
 const ENTITY_COLOR: Record<string, string> = {
@@ -72,6 +69,85 @@ const ENTITY_COLOR: Record<string, string> = {
   'schedule event': 'bg-green-100 text-green-700',
 }
 
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  if (days < 7) return `${days}d ago`
+  return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}
+
+function buildActivityFeed(
+  auditRows: ActivityRow[],
+  projectTalentRows: ProjectTalentRow[],
+  brandTalentRows: BrandTalentRow[],
+): UnifiedActivity[] {
+  const items: UnifiedActivity[] = []
+
+  for (const row of auditRows) {
+    const wasUpdated =
+      row.updated_by &&
+      row.updated_at &&
+      new Date(row.updated_at).getTime() > new Date(row.created_at).getTime() + 5000
+    const at = wasUpdated ? row.updated_at! : row.created_at
+    const verb = wasUpdated ? 'Updated' : 'Added'
+    const by = wasUpdated ? row.updated_by : row.created_by
+    const byLabel = by ? ` by ${by.split('@')[0]}` : ''
+
+    items.push({
+      key: `audit-${row.entity_type}-${row.id}`,
+      chip: row.entity_type,
+      chipColor: ENTITY_COLOR[row.entity_type] ?? 'bg-gray-100 text-gray-600',
+      title: row.record_name ?? '—',
+      subtitle: `${verb}${byLabel}`,
+      href: ENTITY_HREF[row.entity_type]?.(row.id) ?? null,
+      at,
+    })
+  }
+
+  for (const row of projectTalentRows) {
+    if (!row.talent?.name) continue
+    const projectName = row.project?.name
+    const projectId = row.project?.id
+    items.push({
+      key: `pt-${row.id}`,
+      chip: 'talent',
+      chipColor: ENTITY_COLOR.talent,
+      title: row.talent.name,
+      subtitle: `Added to Talent Pool${projectName ? ` · ${projectName}` : ''}`,
+      href: projectId ? `/projects/${projectId}` : `/talents/${row.talent.id}`,
+      at: row.created_at,
+    })
+  }
+
+  for (const row of brandTalentRows) {
+    if (!row.talent?.name) continue
+    const brandName = row.project_brand?.brand?.name
+    const projectName = row.project_brand?.project?.name
+    const projectId = row.project_brand?.project?.id
+    let subtitle = 'Added'
+    if (brandName) subtitle += ` to ${brandName}`
+    if (projectName) subtitle += ` · ${projectName}`
+    items.push({
+      key: `pbt-${row.id}`,
+      chip: 'talent',
+      chipColor: ENTITY_COLOR.talent,
+      title: row.talent.name,
+      subtitle,
+      href: projectId ? `/projects/${projectId}` : `/talents/${row.talent.id}`,
+      at: row.created_at,
+    })
+  }
+
+  return items
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    .slice(0, 10)
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient()
   const adminSupabase = createAdminClient()
@@ -85,7 +161,9 @@ export default async function DashboardPage() {
     { data: todos },
     { data: userProfiles },
     { data: authData },
-    { data: recentActivity },
+    { data: auditActivity },
+    { data: projectTalents },
+    { data: brandTalents },
     { data: calendarToken },
   ] = await Promise.all([
     supabase.auth.getUser(),
@@ -107,7 +185,15 @@ export default async function DashboardPage() {
     supabase.from('audit_activity')
       .select('*')
       .order('updated_at', { ascending: false, nullsFirst: false })
-      .limit(10),
+      .limit(30),
+    supabase.from('project_talents')
+      .select('id, created_at, talent:talents(id, name), project:events(id, name)')
+      .order('created_at', { ascending: false })
+      .limit(15),
+    supabase.from('project_brand_talents')
+      .select('id, created_at, talent:talents(id, name), project_brand:project_brands(id, brand:brands(id, name), project:events(id, name))')
+      .order('created_at', { ascending: false })
+      .limit(15),
     adminSupabase.from('google_calendar_tokens')
       .select('connected_email')
       .eq('id', '00000000-0000-0000-0000-000000000001')
@@ -132,6 +218,12 @@ export default async function DashboardPage() {
   ]
 
   const connectedEmail = calendarToken?.connected_email ?? null
+
+  const activityFeed = buildActivityFeed(
+    (auditActivity ?? []) as ActivityRow[],
+    (projectTalents ?? []) as unknown as ProjectTalentRow[],
+    (brandTalents ?? []) as unknown as BrandTalentRow[],
+  )
 
   return (
     <div className="space-y-8">
@@ -193,31 +285,28 @@ export default async function DashboardPage() {
             <h2 className="text-sm font-semibold text-gray-900">Recent Activity</h2>
           </div>
           <div className="divide-y divide-gray-50">
-            {(!recentActivity || recentActivity.length === 0) ? (
+            {activityFeed.length === 0 ? (
               <p className="px-5 py-4 text-sm text-gray-400">No activity yet.</p>
             ) : (
-              (recentActivity as ActivityRow[]).map(row => {
-                const { verb, by, at } = activityAction(row)
-                const href = ENTITY_HREF[row.entity_type]?.(row.id)
-                const chip = ENTITY_COLOR[row.entity_type] ?? 'bg-gray-100 text-gray-600'
+              activityFeed.map(item => {
                 const inner = (
                   <div className="flex items-start justify-between gap-3 px-5 py-3 hover:bg-gray-50 transition-colors">
                     <div className="flex items-start gap-2.5 min-w-0">
-                      <span className={cn('text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0 mt-0.5', chip)}>
-                        {row.entity_type}
+                      <span className={cn('text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0 mt-0.5', item.chipColor)}>
+                        {item.chip}
                       </span>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{row.record_name ?? '—'}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">{verb} by {by}</p>
+                        <p className="text-sm font-medium text-gray-900 truncate">{item.title}</p>
+                        <p className="text-xs text-gray-400 mt-0.5 truncate">{item.subtitle}</p>
                       </div>
                     </div>
-                    <span className="text-xs text-gray-400 shrink-0 mt-0.5">{timeAgo(at)}</span>
+                    <span className="text-xs text-gray-400 shrink-0 mt-0.5">{timeAgo(item.at)}</span>
                   </div>
                 )
-                return href ? (
-                  <Link key={`${row.entity_type}-${row.id}`} href={href}>{inner}</Link>
+                return item.href ? (
+                  <Link key={item.key} href={item.href}>{inner}</Link>
                 ) : (
-                  <div key={`${row.entity_type}-${row.id}`}>{inner}</div>
+                  <div key={item.key}>{inner}</div>
                 )
               })
             )}
