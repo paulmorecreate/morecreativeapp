@@ -96,6 +96,7 @@ export async function POST(req: NextRequest) {
   })
 
   // Set Quick access = OPEN so anyone with the link can join without waiting
+  let meetPatchResult: string = 'skipped'
   const hangoutLink = event.hangoutLink
   if (hangoutLink) {
     const meetingCode = hangoutLink.split('/').pop()
@@ -107,13 +108,17 @@ export async function POST(req: NextRequest) {
           updateMask: 'config.accessType',
           requestBody: { config: { accessType: 'OPEN' } },
         })
+        meetPatchResult = 'ok'
       } catch (err: any) {
-        console.error('[Meet API] spaces.patch failed:', err?.message, err?.response?.data)
+        meetPatchResult = err?.response?.data
+          ? JSON.stringify(err.response.data)
+          : (err?.message ?? 'unknown error')
+        console.error('[Meet API] spaces.patch failed:', meetPatchResult)
       }
     }
   }
 
-  return NextResponse.json({ event })
+  return NextResponse.json({ event, meetPatchResult })
 }
 
 // DELETE — cancel a meeting
