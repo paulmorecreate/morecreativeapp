@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Scissors, Camera, Building2, Users2, Receipt, Handshake, CalendarDays, ChevronsLeft, ChevronsRight, Landmark, FileSignature, Search, Video } from 'lucide-react'
+import { LayoutDashboard, Users, Briefcase, Calendar, Settings, LogOut, Scissors, Camera, Building2, Users2, Receipt, Handshake, CalendarDays, ChevronsLeft, ChevronsRight, Landmark, FileSignature, Search, Video, PieChart } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { UserRole } from '@/lib/supabase/types'
@@ -153,6 +153,9 @@ export function Sidebar({ onClose, collapsed = false, onToggle, onSearch }: Prop
           )}
           {(userRole === 'admin' || userRole === 'finance' || userRole === 'super_user') && (
             <NavLink href="/banking" label="Banking" icon={Landmark} />
+          )}
+          {(userRole === 'admin' || userRole === 'super_user') && (
+            <NavLink href="/profit-share" label="Team Earnings" icon={PieChart} />
           )}
         </div>
 

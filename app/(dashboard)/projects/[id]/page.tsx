@@ -1,10 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { notFound } from 'next/navigation'
 import { ProjectDetailClient } from './client'
 
 export default async function ProjectPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> }) {
   const [{ id }, { tab: tabParam }] = await Promise.all([params, searchParams])
   const supabase = await createClient()
+  const adminSupabase = createAdminClient()
 
   const { data: { user } } = await supabase.auth.getUser()
   const { data: profile } = user
@@ -37,6 +39,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     { data: profitShare },
     { data: profitShareEmployees },
     { data: allUsers },
+    { data: authData },
   ] = await Promise.all([
     supabase.from('events').select('*').eq('id', id).single(),
     supabase.from('talents').select('id, name').order('name'),
@@ -79,9 +82,18 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       ? supabase.from('project_profit_share_employees').select('*, user_profile:user_profiles(id, first_name, surname, email, color)').eq('project_id', id)
       : Promise.resolve({ data: [] }),
     supabase.from('user_profiles').select('id, first_name, surname, email, color').order('first_name'),
+    adminSupabase.auth.admin.listUsers(),
   ])
 
   if (!project) notFound()
+
+  const now = new Date()
+  const lockedIds = new Set(
+    (authData?.users ?? [])
+      .filter(u => u.banned_until && new Date(u.banned_until) > now)
+      .map(u => u.id)
+  )
+  const activeUsers = (allUsers ?? []).filter(u => !lockedIds.has(u.id))
 
   return (
     <ProjectDetailClient
@@ -110,7 +122,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       brandCategories={brandCategories ?? []}
       profitShare={profitShare ?? null}
       profitShareEmployees={(profitShareEmployees ?? []) as any}
-      allUsers={allUsers ?? []}
+      allUsers={activeUsers}
     />
   )
 }

@@ -486,6 +486,8 @@ export interface Salary {
   payment_due_day: number | null
   payment_due_date: string | null
   notes: string | null
+  user_profile_id: string | null
+  user_profile?: { id: string; first_name: string | null; surname: string | null; email: string; color: string | null } | null
   created_at: string
   updated_at: string
 }

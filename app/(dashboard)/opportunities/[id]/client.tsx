@@ -61,9 +61,7 @@ export function OpportunityDetailClient({ opp, oppTalents, conversations, talent
     router.push('/opportunities')
   }
 
-  // Edit deal
-  const [editOpen, setEditOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
+  // Inline edit form state
   const [form, setForm] = useState({
     name: opp.name,
     mc_role: opp.mc_role,
@@ -72,6 +70,8 @@ export function OpportunityDetailClient({ opp, oppTalents, conversations, talent
     category: opp.category ?? '',
     notes: opp.notes ?? '',
   })
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
   const [convertOpen, setConvertOpen] = useState(false)
   const [converting, setConverting] = useState(false)
 
@@ -148,11 +148,6 @@ export function OpportunityDetailClient({ opp, oppTalents, conversations, talent
   const [newRoleName, setNewRoleName] = useState('')
   const [savingRole, setSavingRole] = useState(false)
 
-  function field(k: keyof typeof form) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
-      setForm(f => ({ ...f, [k]: e.target.value }))
-  }
-
   function convoField(k: keyof typeof convoForm) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setConvoForm(f => ({ ...f, [k]: e.target.value }))
@@ -178,24 +173,30 @@ export function OpportunityDetailClient({ opp, oppTalents, conversations, talent
     setSavingRole(false)
   }
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault()
-    if (!form.name.trim()) return
-    setSaving(true)
+  async function saveField(data: Record<string, unknown>) {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     await supabase.from('opportunities').update({
+      ...data,
+      updated_by: user?.email ?? null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', opp.id)
+  }
+
+  async function handleSaveAll() {
+    if (!form.name.trim()) return
+    setSaving(true)
+    await saveField({
       name: form.name.trim(),
-      mc_role: form.mc_role,
+      mc_role: form.mc_role || null,
       event_date: form.event_date || null,
       location: form.location || null,
       category: form.category || null,
       notes: form.notes || null,
-      updated_by: user?.email ?? null,
-      updated_at: new Date().toISOString(),
-    }).eq('id', opp.id)
+    })
     setSaving(false)
-    setEditOpen(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
     router.refresh()
   }
 
@@ -313,16 +314,18 @@ export function OpportunityDetailClient({ opp, oppTalents, conversations, talent
           Opportunities
         </Link>
         <div className="flex items-start justify-between">
-          <div>
-            {opp.mc_role && (
-              <p className="text-xs text-gray-400 mb-1">{opp.mc_role}</p>
-            )}
-            <h1 className="text-2xl font-semibold text-gray-900">{opp.name}</h1>
+          <div className="flex-1 min-w-0">
+            <input
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              onBlur={() => form.name.trim() && saveField({ name: form.name.trim() })}
+              className="text-2xl font-semibold text-gray-900 w-full border-b-2 border-transparent hover:border-gray-100 focus:border-gray-300 focus:outline-none bg-transparent leading-tight"
+            />
             {opp.counterpart_name && (
               <p className="text-sm text-gray-500 mt-0.5">{opp.counterpart_name}</p>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {convertedProject ? (
               <Button variant="secondary" onClick={() => router.push(`/projects/${convertedProject.id}`)} className="text-green-700 hover:text-green-800 border-green-200 hover:border-green-300">
                 <FolderOpen className="w-3.5 h-3.5" />
@@ -334,9 +337,8 @@ export function OpportunityDetailClient({ opp, oppTalents, conversations, talent
                 Convert to Project
               </Button>
             )}
-            <Button variant="secondary" onClick={() => setEditOpen(true)}>
-              <Pencil className="w-3.5 h-3.5" />
-              Edit
+            <Button onClick={handleSaveAll} disabled={saving || !form.name.trim()} className={saved ? 'bg-green-600 hover:bg-green-700 border-green-600' : ''}>
+              {saved ? 'Saved' : saving ? 'Saving…' : 'Save'}
             </Button>
             <Button variant="secondary" onClick={() => setDeleteOpen(true)} className="text-red-500 hover:text-red-700 border-red-200 hover:border-red-300">
               <Trash2 className="w-3.5 h-3.5" /> Delete
@@ -360,37 +362,84 @@ export function OpportunityDetailClient({ opp, oppTalents, conversations, talent
         <div className="space-y-4">
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Details</h2>
-            <dl className="space-y-3">
-              {opp.event_date && (
-                <div>
-                  <dt className="text-xs text-gray-400 mb-0.5">Event date</dt>
-                  <dd className="text-sm text-gray-900">
-                    {new Date(opp.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
-                  </dd>
-                </div>
-              )}
-              {opp.location && (
-                <div>
-                  <dt className="text-xs text-gray-400 mb-0.5">Location</dt>
-                  <dd className="text-sm text-gray-900">{opp.location}</dd>
-                </div>
-              )}
-              {opp.category && (
-                <div>
-                  <dt className="text-xs text-gray-400 mb-0.5">Category</dt>
-                  <dd className="text-sm text-gray-900">{opp.category}</dd>
-                </div>
-              )}
-              {opp.notes && (
-                <div>
-                  <dt className="text-xs text-gray-400 mb-0.5">Notes</dt>
-                  <dd className="text-sm text-gray-700 whitespace-pre-wrap">{opp.notes}</dd>
-                </div>
-              )}
-              {!opp.event_date && !opp.location && !opp.category && !opp.notes && (
-                <p className="text-sm text-gray-300">No details added.</p>
-              )}
-            </dl>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">MC Role</label>
+                <select
+                  value={form.mc_role ?? ''}
+                  onChange={e => {
+                    const v = e.target.value
+                    if (v === '__add_new__') { setAddingRole(true); return }
+                    setForm(f => ({ ...f, mc_role: v }))
+                    saveField({ mc_role: v || null })
+                  }}
+                  className="text-sm text-gray-900 w-full border-b border-transparent hover:border-gray-200 focus:border-gray-400 focus:outline-none bg-transparent py-0.5"
+                >
+                  <option value="">—</option>
+                  {localMcRoles.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
+                  <option value="__add_new__">＋ Add new role…</option>
+                </select>
+                {addingRole && (
+                  <div className="flex gap-1.5 mt-1">
+                    <input
+                      autoFocus
+                      value={newRoleName}
+                      onChange={e => setNewRoleName(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') { e.preventDefault(); handleAddRole() }
+                        if (e.key === 'Escape') { setAddingRole(false); setNewRoleName('') }
+                      }}
+                      placeholder="New role name…"
+                      className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none"
+                    />
+                    <button type="button" disabled={savingRole || !newRoleName.trim()} onClick={handleAddRole} className="px-2 py-1 text-xs font-medium bg-gray-900 text-white rounded disabled:opacity-40">{savingRole ? '…' : 'Add'}</button>
+                    <button type="button" onClick={() => { setAddingRole(false); setNewRoleName('') }} className="px-2 py-1 text-xs text-gray-500 border border-gray-200 rounded">Cancel</button>
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Event date</label>
+                <input
+                  type="date"
+                  value={form.event_date}
+                  onChange={e => setForm(f => ({ ...f, event_date: e.target.value }))}
+                  onBlur={() => saveField({ event_date: form.event_date || null })}
+                  className="text-sm text-gray-900 w-full border-b border-transparent hover:border-gray-200 focus:border-gray-400 focus:outline-none bg-transparent py-0.5"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Location</label>
+                <input
+                  value={form.location}
+                  onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
+                  onBlur={() => saveField({ location: form.location || null })}
+                  placeholder="City, Country"
+                  className="text-sm text-gray-900 w-full border-b border-transparent hover:border-gray-200 focus:border-gray-400 focus:outline-none bg-transparent placeholder:text-gray-300 py-0.5"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Category</label>
+                <select
+                  value={form.category}
+                  onChange={e => { const v = e.target.value; setForm(f => ({ ...f, category: v })); saveField({ category: v || null }) }}
+                  className="text-sm text-gray-900 w-full border-b border-transparent hover:border-gray-200 focus:border-gray-400 focus:outline-none bg-transparent py-0.5"
+                >
+                  <option value="">—</option>
+                  {categories.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Notes</label>
+                <textarea
+                  value={form.notes}
+                  onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                  onBlur={() => saveField({ notes: form.notes || null })}
+                  placeholder="Add notes…"
+                  rows={4}
+                  className="text-sm text-gray-900 w-full border-b border-transparent hover:border-gray-200 focus:border-gray-400 focus:outline-none bg-transparent resize-none placeholder:text-gray-300 py-0.5"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -621,83 +670,6 @@ export function OpportunityDetailClient({ opp, oppTalents, conversations, talent
             </button>
           </div>
         </div>
-      </Modal>
-
-      {/* Edit deal modal */}
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Opportunity">
-        <form onSubmit={handleSave} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Deal name *</label>
-            <Input value={form.name} onChange={field('name')} required />
-          </div>
-          <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">MC role</label>
-              <Select
-                value={form.mc_role ?? ''}
-                onChange={e => {
-                  if (e.target.value === '__add_new__') {
-                    setAddingRole(true)
-                  } else {
-                    setForm(f => ({ ...f, mc_role: e.target.value }))
-                  }
-                }}
-                options={[
-                  ...localMcRoles.map(r => ({ value: r.name, label: r.name })),
-                  { value: '__add_new__', label: '＋ Add new role…' },
-                ]}
-              />
-              {addingRole && (
-                <div className="flex gap-1.5">
-                  <input
-                    autoFocus
-                    value={newRoleName}
-                    onChange={e => setNewRoleName(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') { e.preventDefault(); handleAddRole() }
-                      if (e.key === 'Escape') { setAddingRole(false); setNewRoleName('') }
-                    }}
-                    placeholder="New role name…"
-                    className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/10"
-                  />
-                  <button type="button" disabled={savingRole || !newRoleName.trim()} onClick={handleAddRole} className="px-3 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg disabled:opacity-40">
-                    {savingRole ? '…' : 'Add'}
-                  </button>
-                  <button type="button" onClick={() => { setAddingRole(false); setNewRoleName('') }} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-800 border border-gray-200 rounded-lg">
-                    Cancel
-                  </button>
-                </div>
-              )}
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Event date</label>
-              <Input type="date" value={form.event_date} onChange={field('event_date')} />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-700">Location</label>
-              <Input value={form.location} onChange={field('location')} placeholder="City, Country" />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Category</label>
-            <Select
-              value={form.category}
-              onChange={field('category')}
-              options={categories.map(c => ({ value: c.name, label: c.name }))}
-              placeholder="Select…"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-700">Notes</label>
-            <Textarea value={form.notes} onChange={field('notes')} rows={3} />
-          </div>
-          <div className="flex gap-3 pt-1">
-            <Button type="button" variant="secondary" onClick={() => setEditOpen(false)} className="flex-1">Cancel</Button>
-            <Button type="submit" disabled={saving || !form.name.trim()} className="flex-1">
-              {saving ? 'Saving…' : 'Save Changes'}
-            </Button>
-          </div>
-        </form>
       </Modal>
 
       {/* Convert to Project confirmation */}

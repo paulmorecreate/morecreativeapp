@@ -67,6 +67,8 @@ function rateToAed(currency: string, rates: CurrencyRate[]): number {
 type InvoiceRow = Invoice & { project: { id: string; name: string } | null; line_items?: { rate: number; qty: number }[] }
 type PurchaseInvoiceRow = PurchaseInvoice & { project: { id: string; name: string } | null }
 
+type UserProfile = { id: string; first_name: string | null; surname: string | null; email: string; color: string | null }
+
 type Props = {
   invoices: InvoiceRow[]
   purchaseInvoices: PurchaseInvoiceRow[]
@@ -74,6 +76,7 @@ type Props = {
   annualExpenses: AnnualExpense[]
   salaries: Salary[]
   operatingCosts: OperatingCost[]
+  allUsers: UserProfile[]
   initialTab: 'overview' | 'sales' | 'purchase' | 'running' | 'vat'
 }
 
@@ -164,10 +167,10 @@ function SummaryBar({ paid, pending }: { paid: number; pending: number }) {
 }
 
 const EMPTY_ANNUAL_FORM = { item: '', category: 'Licence', amount_aed: '', recurrence_years: '1', due_date: '', notes: '', document_url: '' }
-const EMPTY_SALARY_FORM = { employee: '', role: '', monthly_salary_aed: '', payment_due_date: '', notes: '' }
+const EMPTY_SALARY_FORM = { employee: '', role: '', monthly_salary_aed: '', payment_due_date: '', notes: '', user_profile_id: '' }
 const EMPTY_OP_FORM = { expense_item: '', category: 'Software', frequency: 'monthly' as OperatingCost['frequency'], cost_aed: '', notes: '' }
 
-export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annualExpenses: initialAnnualExpenses, salaries: initialSalaries, operatingCosts: initialOperatingCosts, initialTab }: Props) {
+export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annualExpenses: initialAnnualExpenses, salaries: initialSalaries, operatingCosts: initialOperatingCosts, allUsers, initialTab }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<'overview' | 'sales' | 'purchase' | 'running' | 'vat'>(initialTab)
   const [expandedVatQuarter, setExpandedVatQuarter] = useState<string | null>(null)
@@ -709,7 +712,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
   }
   function openEditSalary(s: Salary) {
     setEditingSalary(s)
-    setSalaryForm({ employee: s.employee, role: s.role, monthly_salary_aed: String(s.monthly_salary_aed), payment_due_date: s.payment_due_date ?? '', notes: s.notes ?? '' })
+    setSalaryForm({ employee: s.employee, role: s.role, monthly_salary_aed: String(s.monthly_salary_aed), payment_due_date: s.payment_due_date ?? '', notes: s.notes ?? '', user_profile_id: s.user_profile_id ?? '' })
     setSalaryModalOpen(true)
   }
   async function handleSaveSalary(e: React.FormEvent) {
@@ -723,6 +726,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
       monthly_salary_aed: parseFloat(salaryForm.monthly_salary_aed) || 0,
       payment_due_date: salaryForm.payment_due_date || null,
       notes: salaryForm.notes.trim() || null,
+      user_profile_id: salaryForm.user_profile_id || null,
       updated_at: new Date().toISOString(),
     }
     if (editingSalary) {
@@ -1816,7 +1820,20 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                   <tbody className="divide-y divide-gray-50">
                     {salaries.map(s => (
                       <tr key={s.id} className="hover:bg-gray-50 transition-colors group">
-                        <td className="px-5 py-3 font-medium text-gray-900">{s.employee}</td>
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-2">
+                            {s.user_profile && (
+                              <span
+                                className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0"
+                                style={{ backgroundColor: s.user_profile.color ?? '#6b7280' }}
+                                title={s.user_profile.email}
+                              >
+                                {(s.user_profile.first_name?.[0] ?? s.user_profile.email[0]).toUpperCase()}
+                              </span>
+                            )}
+                            <span className="font-medium text-gray-900">{s.employee}</span>
+                          </div>
+                        </td>
                         <td className="px-5 py-3 text-gray-500">{s.role || '—'}</td>
                         <td className="px-5 py-3 text-gray-500">
                           {s.payment_due_date ? new Date(s.payment_due_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
@@ -2058,6 +2075,28 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
       {/* Add/Edit Salary modal */}
       <Modal open={salaryModalOpen} onClose={() => setSalaryModalOpen(false)} title={editingSalary ? 'Edit Salary' : 'Add Employee'}>
         <form onSubmit={handleSaveSalary} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">System User</label>
+            <select
+              value={salaryForm.user_profile_id}
+              onChange={e => {
+                const uid = e.target.value
+                setSalaryForm(f => {
+                  const user = allUsers.find(u => u.id === uid)
+                  const autoName = user ? [user.first_name, user.surname].filter(Boolean).join(' ') : f.employee
+                  return { ...f, user_profile_id: uid, employee: uid && !f.employee ? autoName : f.employee }
+                })
+              }}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/10 bg-white"
+            >
+              <option value="">— Not linked —</option>
+              {allUsers.map(u => (
+                <option key={u.id} value={u.id}>
+                  {[u.first_name, u.surname].filter(Boolean).join(' ') || u.email}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">Employee Name *</label>

@@ -198,13 +198,14 @@ export function OpportunitiesClient({ opportunities, talents, mcRoles, categorie
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Role</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Talents</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Event date</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Notes</th>
               <th className="w-8 px-3 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-sm text-gray-400">
+                <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-400">
                   {search ? 'No results.' : 'No opportunities yet — add your first deal.'}
                 </td>
               </tr>
@@ -227,6 +228,11 @@ export function OpportunitiesClient({ opportunities, talents, mcRoles, categorie
                 <td className="px-4 py-3 text-gray-500 text-xs">
                   {opp.event_date
                     ? new Date(opp.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : <span className="text-gray-300">—</span>}
+                </td>
+                <td className="px-4 py-3 text-xs text-gray-400 max-w-[200px]">
+                  {opp.notes
+                    ? <span className="line-clamp-2">{opp.notes}</span>
                     : <span className="text-gray-300">—</span>}
                 </td>
                 <td className="px-3 py-3 w-16" onClick={e => e.stopPropagation()}>

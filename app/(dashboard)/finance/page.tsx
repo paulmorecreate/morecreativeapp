@@ -26,6 +26,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     { data: annualExpenses },
     { data: salaries },
     { data: operatingCosts },
+    { data: allUsers },
   ] = await Promise.all([
     supabase
       .from('invoices')
@@ -37,8 +38,9 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
       .order('due_date', { ascending: true, nullsFirst: false }),
     supabase.from('currency_rates').select('*'),
     supabase.from('annual_expenses').select('*').order('due_date', { ascending: true, nullsFirst: false }),
-    supabase.from('salaries').select('*').order('employee'),
+    supabase.from('salaries').select('*, user_profile:user_profiles(id, first_name, surname, email, color)').order('employee'),
     supabase.from('operating_costs').select('*').order('expense_item'),
+    supabase.from('user_profiles').select('id, first_name, surname, email, color').order('first_name'),
   ])
 
   const validTab = ['overview', 'sales', 'purchase', 'running', 'vat'].includes(tab ?? '')
@@ -53,6 +55,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
       annualExpenses={(annualExpenses ?? []) as any}
       salaries={(salaries ?? []) as any}
       operatingCosts={(operatingCosts ?? []) as any}
+      allUsers={allUsers ?? []}
       initialTab={validTab as any}
     />
   )
