@@ -1273,6 +1273,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   const [brandStatusFilter, setBrandStatusFilter] = useState<string>('all')
   const [gridDetailShowId, setGridDetailShowId] = useState<string | null>(null)
   const [gridDetailSearchQ, setGridDetailSearchQ] = useState('')
+  const [poolStatusFilter, setPoolStatusFilter] = useState<string>('all')
 
   // Collapse state for brand show cards — all collapsed by default
   const [collapsedShows, setCollapsedShows] = useState<Set<string>>(() => new Set(brandShows.map(s => s.id)))
@@ -2368,6 +2369,29 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                 </span>
               )}
             </div>
+            {/* Pool status filter */}
+            <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-gray-100 flex-wrap">
+              {(['all', 'In Conversation', 'Confirmed', 'Rejected', 'Cancelled'] as const).map(s => {
+                const count = s === 'all'
+                  ? projectTalents.length
+                  : projectTalents.filter(pt => (pt.status ?? null) === s).length
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setPoolStatusFilter(s)}
+                    className={cn(
+                      'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-colors',
+                      poolStatusFilter === s
+                        ? 'bg-zinc-800 text-white'
+                        : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'
+                    )}
+                  >
+                    {s === 'all' ? 'All' : s}
+                    <span className={cn('text-[10px]', poolStatusFilter === s ? 'text-white/70' : 'text-zinc-400')}>{count}</span>
+                  </button>
+                )
+              })}
+            </div>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-50">
@@ -2379,18 +2403,21 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {[...projectTalents].sort(byStatusThenName).map(pt => (
-                  <InlineProjectTalentRow
-                    key={pt.id}
-                    pt={pt}
-                    isDragging={draggingTalentId === pt.talent_id}
-                    brandShows={brandShows}
-                    onDragStart={() => setDraggingTalentId(pt.talent_id ?? null)}
-                    onDragEnd={() => { setDraggingTalentId(null); setDragOverShowId(null) }}
-                    onAssignToShow={show => assignTalentToShow(show, pt.talent_id)}
-                    onRemove={() => removeProjectTalent(pt)}
-                  />
-                ))}
+                {[...projectTalents]
+                  .filter(pt => poolStatusFilter === 'all' || (pt.status ?? null) === poolStatusFilter)
+                  .sort(byStatusThenName)
+                  .map(pt => (
+                    <InlineProjectTalentRow
+                      key={pt.id}
+                      pt={pt}
+                      isDragging={draggingTalentId === pt.talent_id}
+                      brandShows={brandShows}
+                      onDragStart={() => setDraggingTalentId(pt.talent_id ?? null)}
+                      onDragEnd={() => { setDraggingTalentId(null); setDragOverShowId(null) }}
+                      onAssignToShow={show => assignTalentToShow(show, pt.talent_id)}
+                      onRemove={() => removeProjectTalent(pt)}
+                    />
+                  ))}
               </tbody>
             </table>
           </div>
