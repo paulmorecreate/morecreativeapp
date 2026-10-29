@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag, Trash2, X, CheckCircle2, Circle, CheckCheck, AlertTriangle, Receipt, GripVertical, Loader2, Search, Check, ChevronDown, FileDown } from 'lucide-react'
+import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag, Trash2, X, CheckCircle2, Circle, CheckCheck, AlertTriangle, Receipt, GripVertical, Loader2, Search, Check, ChevronDown, FileDown, LayoutList, LayoutGrid } from 'lucide-react'
 import { Event, ProjectCategory, Invoice, PurchaseInvoice, ProjectIncome, ProjectExpense, ExpenseCategory, CurrencyRate } from '@/lib/supabase/types'
 import { COUNTRIES } from '@/lib/constants/countries'
 import { createClient } from '@/lib/supabase/client'
@@ -1268,6 +1268,12 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   const [dragDuplicateShowId, setDragDuplicateShowId] = useState<string | null>(null)
   const [exportingSchedule, setExportingSchedule] = useState(false)
 
+  // Lineup view + filter
+  const [lineupView, setLineupView] = useState<'list' | 'grid'>('list')
+  const [brandStatusFilter, setBrandStatusFilter] = useState<string>('all')
+  const [gridDetailShowId, setGridDetailShowId] = useState<string | null>(null)
+  const [gridDetailSearchQ, setGridDetailSearchQ] = useState('')
+
   // Collapse state for brand show cards — all collapsed by default
   const [collapsedShows, setCollapsedShows] = useState<Set<string>>(() => new Set(brandShows.map(s => s.id)))
   function toggleShowCollapse(showId: string) {
@@ -1993,7 +1999,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             <h2 className="text-sm font-semibold text-gray-900">Lineup</h2>
-            {brandShows.length > 0 && (
+            {brandShows.length > 0 && lineupView === 'list' && (
               <div className="flex items-center gap-1.5 text-xs text-gray-400">
                 <button onClick={() => setCollapsedShows(new Set(brandShows.map(s => s.id)))} className="hover:text-gray-600 transition-colors">collapse all</button>
                 <span>·</span>
@@ -2002,6 +2008,25 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
             )}
           </div>
           <div className="flex items-center gap-2">
+            {/* View toggle */}
+            {brandShows.length > 0 && (
+              <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden">
+                <button
+                  onClick={() => setLineupView('list')}
+                  className={cn('px-2 py-1.5 transition-colors', lineupView === 'list' ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50')}
+                  title="List view"
+                >
+                  <LayoutList className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setLineupView('grid')}
+                  className={cn('px-2 py-1.5 transition-colors', lineupView === 'grid' ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50')}
+                  title="Grid view"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
             <Button variant="secondary" onClick={openAddProjectTalent}>
               <Plus className="w-3.5 h-3.5" /> Add Talent
             </Button>
@@ -2017,15 +2042,139 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
           </div>
         </div>
 
+        {/* Status filter pills */}
+        {brandShows.length > 0 && (
+          <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+            {(['all', 'In Conversation', 'Confirmed', 'Rejected', 'Cancelled'] as const).map(s => {
+              const count = s === 'all'
+                ? brandShows.length
+                : brandShows.filter(b => (showStatuses[b.id] ?? null) === s).length
+              return (
+                <button
+                  key={s}
+                  onClick={() => setBrandStatusFilter(s)}
+                  className={cn(
+                    'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-colors',
+                    brandStatusFilter === s
+                      ? 'bg-gray-900 text-white'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  )}
+                >
+                  {s === 'all' ? 'All' : s}
+                  <span className={cn('text-[10px]', brandStatusFilter === s ? 'text-white/70' : 'text-gray-400')}>{count}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         {brandShows.length === 0 && projectTalents.length === 0 && (
           <div className="bg-white rounded-xl border border-gray-200 px-5 py-8 text-center text-sm text-gray-400">
             No lineup yet. Add a brand or talent to get started.
           </div>
         )}
 
-        <div className="space-y-3">
-          {/* Brand cards — sky blue accent */}
-          {[...brandShows].sort((a, b) => (a.brand?.name ?? '').localeCompare(b.brand?.name ?? '')).map(show => {
+        {lineupView === 'grid' && brandShows.length > 0 && (() => {
+          const filteredForGrid = [...brandShows]
+            .filter(s => brandStatusFilter === 'all' || (showStatuses[s.id] ?? null) === brandStatusFilter)
+            .sort((a, b) => (a.brand?.name ?? '').localeCompare(b.brand?.name ?? ''))
+          return (
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 mb-3">
+              {filteredForGrid.length === 0 && (
+                <div className="col-span-4 bg-white rounded-xl border border-gray-200 px-5 py-8 text-center text-sm text-gray-400">
+                  No brands match this filter.
+                </div>
+              )}
+              {filteredForGrid.map(show => {
+                const status = showStatuses[show.id] ?? null
+                const talents = [...show.project_brand_talents].sort(byStatusThenName)
+                const previewTalents = talents.slice(0, 4)
+                const overflow = talents.length - previewTalents.length
+                return (
+                  <div key={show.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col">
+                    {/* Coloured header */}
+                    <div className={cn('px-3 py-2', showHeaderGradient(status))}>
+                      <div className="flex items-start justify-between gap-1">
+                        <Link href={`/brands/${show.brand?.id}`} className="text-sm font-semibold text-white hover:text-white/80 leading-tight" onClick={e => e.stopPropagation()}>
+                          {show.brand?.name ?? '—'}
+                        </Link>
+                        <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
+                          <button onClick={() => openEditShow(show)} className="text-white/70 hover:text-white hover:bg-black/20 rounded p-0.5 transition-colors">
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button onClick={() => deleteShow(show)} className="text-white/70 hover:text-white hover:bg-black/20 rounded p-0.5 transition-colors">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Body */}
+                    <div className="flex-1 px-3 py-2.5 space-y-2">
+                      {/* Status select */}
+                      <select
+                        value={status ?? ''}
+                        onChange={e => updateShowStatus(show.id, e.target.value || null)}
+                        className="w-full text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-black/10"
+                      >
+                        <option value="">— Status —</option>
+                        {BRAND_SHOW_STATUS_OPTS.map(o => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                      {(show.show_type || show.show_date) && (
+                        <div className="flex items-center gap-1.5 text-xs text-gray-500 flex-wrap">
+                          {show.show_type && <span className="bg-gray-100 px-1.5 py-0.5 rounded">{show.show_type}</span>}
+                          {show.show_date && (
+                            <span className="flex items-center gap-0.5">
+                              <Calendar className="w-3 h-3" />{formatDate(show.show_date)}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {/* Talent preview pills */}
+                      {talents.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {previewTalents.map(e => (
+                            <span key={e.id} className="inline-block text-[11px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full leading-tight">
+                              {e.talent?.name ?? '—'}
+                            </span>
+                          ))}
+                          {overflow > 0 && (
+                            <span className="inline-block text-[11px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full leading-tight">+{overflow} more</span>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-300">No talents yet</p>
+                      )}
+                    </div>
+                    {/* Footer */}
+                    <div className="border-t border-gray-100 px-3 py-2 flex items-center justify-between">
+                      <button
+                        onClick={() => exportShowToExcel(show)}
+                        className="text-gray-400 hover:text-gray-600 transition-colors"
+                        title="Export"
+                      >
+                        <FileDown className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => { setGridDetailShowId(show.id); setGridDetailSearchQ('') }}
+                        className="text-xs font-medium text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-1"
+                      >
+                        <Plus className="w-3 h-3" /> Talent
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
+
+        <div className={cn('space-y-3', lineupView === 'grid' && 'hidden')}>
+          {/* Brand cards — list view */}
+          {[...brandShows]
+            .filter(s => brandStatusFilter === 'all' || (showStatuses[s.id] ?? null) === brandStatusFilter)
+            .sort((a, b) => (a.brand?.name ?? '').localeCompare(b.brand?.name ?? '')).map(show => {
             const isCollapsed = collapsedShows.has(show.id)
             return (
             <div
@@ -2206,46 +2355,46 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
             </div>
             )
           })}
-
-          {/* Talent pool — table with drag handles */}
-          {projectTalents.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-zinc-900 via-zinc-700 to-zinc-900">
-                <span className="text-sm font-semibold text-white tracking-wide">Talent Pool</span>
-                {brandShows.length > 0 && (
-                  <span className="text-xs text-zinc-300 flex items-center gap-1">
-                    <GripVertical className="w-3 h-3" /> Drag onto a show to assign
-                  </span>
-                )}
-              </div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-50">
-                    <th className="w-8 px-3 py-2" />
-                    <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Talent</th>
-                    <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Status</th>
-                    <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Notes</th>
-                    <th className="w-8 px-3 py-2" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {[...projectTalents].sort(byStatusThenName).map(pt => (
-                    <InlineProjectTalentRow
-                      key={pt.id}
-                      pt={pt}
-                      isDragging={draggingTalentId === pt.talent_id}
-                      brandShows={brandShows}
-                      onDragStart={() => setDraggingTalentId(pt.talent_id ?? null)}
-                      onDragEnd={() => { setDraggingTalentId(null); setDragOverShowId(null) }}
-                      onAssignToShow={show => assignTalentToShow(show, pt.talent_id)}
-                      onRemove={() => removeProjectTalent(pt)}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
+
+        {/* Talent pool — always visible regardless of view mode */}
+        {projectTalents.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mt-3">
+            <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-zinc-900 via-zinc-700 to-zinc-900">
+              <span className="text-sm font-semibold text-white tracking-wide">Talent Pool</span>
+              {brandShows.length > 0 && (
+                <span className="text-xs text-zinc-300 flex items-center gap-1">
+                  <GripVertical className="w-3 h-3" /> Drag onto a show to assign
+                </span>
+              )}
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-50">
+                  <th className="w-8 px-3 py-2" />
+                  <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Talent</th>
+                  <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Status</th>
+                  <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Notes</th>
+                  <th className="w-8 px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {[...projectTalents].sort(byStatusThenName).map(pt => (
+                  <InlineProjectTalentRow
+                    key={pt.id}
+                    pt={pt}
+                    isDragging={draggingTalentId === pt.talent_id}
+                    brandShows={brandShows}
+                    onDragStart={() => setDraggingTalentId(pt.talent_id ?? null)}
+                    onDragEnd={() => { setDraggingTalentId(null); setDragOverShowId(null) }}
+                    onAssignToShow={show => assignTalentToShow(show, pt.talent_id)}
+                    onRemove={() => removeProjectTalent(pt)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
         </>
       )}
@@ -2253,6 +2402,133 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
       <AuditStamp createdBy={project.created_by} createdAt={project.created_at} updatedBy={project.updated_by} updatedAt={project.updated_at} />
 
       {/* ── Modals ── */}
+
+      {/* Grid view — brand detail modal */}
+      {gridDetailShowId && (() => {
+        const show = brandShows.find(s => s.id === gridDetailShowId)
+        if (!show) return null
+        const status = showStatuses[show.id] ?? null
+        const talents = [...show.project_brand_talents].sort(byStatusThenName)
+        const available = allTalentsForShow(show, gridDetailSearchQ)
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setGridDetailShowId(null)}>
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-4 flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className={cn('flex items-center justify-between px-5 py-3 rounded-t-2xl', showHeaderGradient(status))}>
+                <div className="flex items-center gap-2 min-w-0">
+                  <Link href={`/brands/${show.brand?.id}`} className="text-base font-semibold text-white hover:text-white/80 truncate">
+                    {show.brand?.name ?? '—'}
+                  </Link>
+                  {show.show_type && <span className="text-xs text-white/80 bg-black/20 px-2 py-0.5 rounded-full">{show.show_type}</span>}
+                  {show.show_date && <span className="text-xs text-white/70">{formatDate(show.show_date)}</span>}
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={status ?? ''}
+                    onChange={e => updateShowStatus(show.id, e.target.value || null)}
+                    className="text-xs text-white font-medium bg-black/20 border-0 rounded px-2 py-0.5 focus:outline-none"
+                  >
+                    <option value="" className="text-gray-900 bg-white">— Status —</option>
+                    {BRAND_SHOW_STATUS_OPTS.map(o => <option key={o.value} value={o.value} className="text-gray-900 bg-white">{o.label}</option>)}
+                  </select>
+                  <button onClick={() => setGridDetailShowId(null)} className="text-white/70 hover:text-white transition-colors">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Search + add */}
+              <div className="px-5 py-3 border-b border-gray-100">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                  <input
+                    autoFocus
+                    value={gridDetailSearchQ}
+                    onChange={e => setGridDetailSearchQ(e.target.value)}
+                    placeholder="Search talents to add…"
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-black/10"
+                  />
+                </div>
+                {gridDetailSearchQ && (
+                  <div className="mt-1.5 bg-white border border-gray-200 rounded-xl shadow-sm max-h-44 overflow-y-auto">
+                    {available.length === 0 ? (
+                      <p className="text-xs text-gray-400 px-3 py-2">No matches</p>
+                    ) : (
+                      available.map(t => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => { assignTalentToShow(show, t.id); setGridDetailSearchQ('') }}
+                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          {t.name}
+                        </button>
+                      ))
+                    )}
+                    <div className="border-t border-gray-100 py-1">
+                      <button
+                        type="button"
+                        onClick={() => { setGridDetailShowId(null); setGridDetailSearchQ(''); openAddProjectTalent(); setProjectTalentMode('new') }}
+                        className="w-full text-left px-3 py-2 text-xs text-gray-400 hover:text-gray-700 hover:bg-gray-50 flex items-center gap-1.5"
+                      >
+                        <Plus className="w-3 h-3" /> New talent…
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Talent list */}
+              <div className="flex-1 overflow-y-auto">
+                {assigningShowId === show.id && (
+                  <div className="px-5 py-3 flex items-center gap-2 text-sm text-gray-500">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Adding…
+                  </div>
+                )}
+                {talents.length === 0 ? (
+                  <p className="px-5 py-6 text-sm text-gray-400 text-center">No talents added yet. Search above to add one.</p>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 bg-gray-50/60">
+                        <th className="text-left px-5 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Talent</th>
+                        <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Status</th>
+                        <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Stylist</th>
+                        <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Date / Time</th>
+                        <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Notes</th>
+                        <th className="px-4 py-2 w-8" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {talents.map(entry => (
+                        <InlineShowTalentRow
+                          key={entry.id}
+                          entry={entry}
+                          stylists={stylists}
+                          onRemove={() => removeTalentFromShow(entry, show.brand?.name ?? '')}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-5 py-3 border-t border-gray-100 flex justify-between items-center">
+                <button
+                  onClick={() => exportShowToExcel(show)}
+                  className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-700 transition-colors"
+                >
+                  <FileDown className="w-3.5 h-3.5" /> Export
+                </button>
+                <button onClick={() => setGridDetailShowId(null)} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-900 transition-colors">
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Add/Edit Brand */}
       <Modal
