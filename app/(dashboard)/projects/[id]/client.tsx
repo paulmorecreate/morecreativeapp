@@ -47,6 +47,24 @@ const POOL_STATUS_STYLES: Record<string, string> = {
   'Cancelled':       'bg-gray-100 text-gray-500 border-gray-200',
 }
 
+const BRAND_SHOW_STATUS_OPTS = [
+  { value: 'In Conversation', label: 'In Conversation' },
+  { value: 'Confirmed',       label: 'Confirmed' },
+  { value: 'Rejected',        label: 'Rejected' },
+  { value: 'Cancelled',       label: 'Cancelled' },
+]
+
+// Header bar gradient per brand-show status; null = default red
+function showHeaderGradient(status: string | null): string {
+  switch (status) {
+    case 'In Conversation': return 'bg-gradient-to-r from-orange-600 via-orange-400 to-orange-600'
+    case 'Confirmed':       return 'bg-gradient-to-r from-green-700 via-green-500 to-green-700'
+    case 'Rejected':        return 'bg-gradient-to-r from-gray-700 via-gray-500 to-gray-700'
+    case 'Cancelled':       return 'bg-gradient-to-r from-gray-500 via-gray-400 to-gray-500'
+    default:                return 'bg-gradient-to-r from-[#b80024] via-[#ff3355] to-[#b80024]'
+  }
+}
+
 const STATUS_SORT_ORDER: Record<string, number> = {
   'Confirmed':       0,
   'In Conversation': 1,
@@ -92,6 +110,7 @@ type BrandShow = {
   show_time: string | null
   show_type: string | null
   notes: string | null
+  status: string | null
   brand: { id: string; name: string } | null
   project_brand_talents: ShowTalent[]
 }
@@ -1204,6 +1223,16 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   const newBrandNameExists = newBrandForm.name.trim() !== '' &&
     brands.some(b => b.name.trim().toLowerCase() === newBrandForm.name.trim().toLowerCase())
 
+  // Brand show status (optimistic local state)
+  const [showStatuses, setShowStatuses] = useState<Record<string, string | null>>(
+    () => Object.fromEntries(brandShows.map(s => [s.id, s.status ?? null]))
+  )
+  async function updateShowStatus(showId: string, status: string | null) {
+    setShowStatuses(prev => ({ ...prev, [showId]: status }))
+    const supabase = createClient()
+    await supabase.from('project_brands').update({ status: status || null }).eq('id', showId)
+  }
+
   // Quick-add talent to show
   const [quickAddShowId, setQuickAddShowId] = useState<string | null>(null)
   const [quickAddSearchQ, setQuickAddSearchQ] = useState('')
@@ -2015,7 +2044,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
               onDrop={e => { e.preventDefault(); handleDrop(show); setDragOverShowId(null) }}
             >
               {/* Thinner coloured bar */}
-              <div className="flex items-center justify-between px-3 py-1.5 bg-gradient-to-r from-[#b80024] via-[#ff3355] to-[#b80024] rounded-t-xl">
+              <div className={cn('flex items-center justify-between px-3 py-1.5 rounded-t-xl', showHeaderGradient(showStatuses[show.id] ?? null))}>
                 <div className="flex items-center gap-2 min-w-0">
                   <button
                     onClick={() => toggleShowCollapse(show.id)}
@@ -2040,6 +2069,17 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                   )}
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
+                  <select
+                    value={showStatuses[show.id] ?? ''}
+                    onChange={e => updateShowStatus(show.id, e.target.value || null)}
+                    onClick={e => e.stopPropagation()}
+                    className="text-xs text-white font-medium bg-black/20 hover:bg-black/35 border-0 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-white/30 cursor-pointer"
+                  >
+                    <option value="" className="text-gray-900 bg-white">— Status —</option>
+                    {BRAND_SHOW_STATUS_OPTS.map(o => (
+                      <option key={o.value} value={o.value} className="text-gray-900 bg-white">{o.label}</option>
+                    ))}
+                  </select>
                   <button
                     onClick={() => exportShowToExcel(show)}
                     className="inline-flex items-center gap-1 text-xs text-white font-medium px-2 py-0.5 rounded bg-black/20 hover:bg-black/35 transition-colors"
