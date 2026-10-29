@@ -39,6 +39,14 @@ export type MonthData = {
   totalPaid: number
 }
 
+export type SalaryReturn = {
+  id: string
+  user_profile_id: string
+  month_key: string
+  amount: number
+  note: string | null
+}
+
 export default async function ProfitSharePage() {
   const supabase = await createClient()
   const adminSupabase = createAdminClient()
@@ -59,6 +67,7 @@ export default async function ProfitSharePage() {
     { data: authData },
     { data: salaries },
     { data: currencyRates },
+    { data: salaryReturns },
   ] = await Promise.all([
     supabase
       .from('project_profit_share')
@@ -76,6 +85,7 @@ export default async function ProfitSharePage() {
       ? supabase.from('salaries').select('user_profile_id, monthly_salary_aed').not('user_profile_id', 'is', null)
       : Promise.resolve({ data: [] }),
     supabase.from('currency_rates').select('*'),
+    supabase.from('salary_returns').select('id, user_profile_id, month_key, amount, note').gte('month_key', START_MONTH),
   ])
 
   // Filter locked users
@@ -102,10 +112,10 @@ export default async function ProfitSharePage() {
       ? supabase.from('project_expenses').select('project_id, amount, currency').in('project_id', projectIds)
       : Promise.resolve({ data: [] }),
     projectIds.length > 0
-      ? supabase.from('invoices').select('project_id, currency, apply_vat, line_items:invoice_line_items(rate, qty)').in('project_id', projectIds)
+      ? supabase.from('invoices').select('project_id, currency, apply_vat, status, line_items:invoice_line_items(rate, qty)').in('project_id', projectIds)
       : Promise.resolve({ data: [] }),
     projectIds.length > 0
-      ? supabase.from('purchase_invoices').select('project_id, gross_amount, fx_rate').in('project_id', projectIds)
+      ? supabase.from('purchase_invoices').select('project_id, gross_amount, fx_rate, status').in('project_id', projectIds)
       : Promise.resolve({ data: [] }),
   ])
 
@@ -116,10 +126,10 @@ export default async function ProfitSharePage() {
   for (const pid of projectIds) {
     const inc =
       (allIncome ?? []).filter(i => i.project_id === pid).reduce((s, i) => s + i.amount * rateToAed(i.currency, rates), 0) +
-      (allInvoices ?? []).filter(i => i.project_id === pid).reduce((s, inv) => s + invoiceTotal(inv as any) * rateToAed(inv.currency, rates), 0)
+      (allInvoices ?? []).filter(i => i.project_id === pid && (i as any).status === 'received').reduce((s, inv) => s + invoiceTotal(inv as any) * rateToAed(inv.currency, rates), 0)
     const exp =
       (allExpenses ?? []).filter(e => e.project_id === pid).reduce((s, e) => s + e.amount * rateToAed(e.currency, rates), 0) +
-      (allPurchaseInvoices ?? []).filter(p => p.project_id === pid).reduce((s, p) => s + p.gross_amount * p.fx_rate, 0)
+      (allPurchaseInvoices ?? []).filter(p => p.project_id === pid && (p.status === 'paid' || p.status === 'partial')).reduce((s, p) => s + p.gross_amount * p.fx_rate, 0)
     gpByProject.set(pid, inc - exp)
   }
 
@@ -192,6 +202,7 @@ export default async function ProfitSharePage() {
       months={months}
       salaryByUser={canSeeFinance ? salaryByUser : {}}
       canSeeFinance={canSeeFinance}
+      salaryReturns={salaryReturns ?? []}
     />
   )
 }

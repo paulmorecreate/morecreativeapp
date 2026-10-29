@@ -221,6 +221,7 @@ const INVOICE_STATUS_BADGE: Record<string, string> = {
   sent: 'bg-blue-50 text-blue-700',
   partial: 'bg-amber-50 text-amber-700',
   paid: 'bg-green-50 text-green-700',
+  received: 'bg-green-50 text-green-700',
 }
 const PO_STATUS_BADGE: Record<string, string> = {
   pending: 'bg-amber-50 text-amber-700',
@@ -263,11 +264,11 @@ function PLSummary({
   purchaseInvoices: PurchaseInvoice[]
 }) {
   const incomeFromEntries = income.reduce((s, i) => s + toAED(i.amount, i.currency, rates), 0)
-  const incomeFromInvoices = invoices.reduce((s, inv) => s + toAED(invoiceLineTotal(inv), inv.currency, rates), 0)
+  const incomeFromInvoices = invoices.filter(inv => inv.status === 'received').reduce((s, inv) => s + toAED(invoiceLineTotal(inv), inv.currency, rates), 0)
   const totalIncomeAED = incomeFromEntries + incomeFromInvoices
 
   const expensesFromEntries = expenses.reduce((s, e) => s + toAED(e.amount, e.currency, rates), 0)
-  const expensesFromPurchases = purchaseInvoices.reduce((s, inv) => s + inv.gross_amount * inv.fx_rate, 0)
+  const expensesFromPurchases = purchaseInvoices.filter(inv => inv.status === 'paid' || inv.status === 'partial').reduce((s, inv) => s + inv.gross_amount * inv.fx_rate, 0)
   const totalExpensesAED = expensesFromEntries + expensesFromPurchases
 
   const grossProfit = totalIncomeAED - totalExpensesAED
@@ -707,10 +708,10 @@ function ProjectFinanceTab({
   const grossProfit = (() => {
     const totalIncome =
       initialIncome.reduce((s, i) => s + toAED(i.amount, i.currency, currencyRates), 0) +
-      initialInvoices.reduce((s, inv) => s + toAED(invoiceLineTotal(inv), inv.currency, currencyRates), 0)
+      initialInvoices.filter(inv => inv.status === 'received').reduce((s, inv) => s + toAED(invoiceLineTotal(inv), inv.currency, currencyRates), 0)
     const totalExpenses =
       initialExpenses.reduce((s, e) => s + toAED(e.amount, e.currency, currencyRates), 0) +
-      initialPurchaseInvoices.reduce((s, inv) => s + inv.gross_amount * inv.fx_rate, 0)
+      initialPurchaseInvoices.filter(inv => inv.status === 'paid' || inv.status === 'partial').reduce((s, inv) => s + inv.gross_amount * inv.fx_rate, 0)
     return totalIncome - totalExpenses
   })()
 
