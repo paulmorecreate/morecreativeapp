@@ -381,6 +381,7 @@ export interface Invoice {
   billed_to_address: string | null
   amount_paid: number
   notes: string | null
+  include_in_profit_share?: boolean
   created_at: string
   updated_at: string
   line_items?: InvoiceLineItem[]
@@ -396,6 +397,7 @@ export interface ProjectIncome {
   currency: string
   status: string
   date: string | null
+  include_in_profit_share?: boolean
   created_at: string
 }
 

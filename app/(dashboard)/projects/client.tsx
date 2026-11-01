@@ -123,16 +123,16 @@ export function ProjectsClient({ projects, categories }: Props) {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50/50">
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Project</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Category</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Location</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Start Date</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">End Date</th>
+            <tr className="border-b border-gray-400 bg-gray-800">
+              <th className="text-left px-4 py-3 font-medium text-gray-200 text-xs uppercase tracking-wide">Project</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-200 text-xs uppercase tracking-wide">Category</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-200 text-xs uppercase tracking-wide">Location</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-200 text-xs uppercase tracking-wide">Start Date</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-200 text-xs uppercase tracking-wide">End Date</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-gray-400">
             {active.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
@@ -143,15 +143,15 @@ export function ProjectsClient({ projects, categories }: Props) {
             {active.map((project, i) => (
               <tr
                 key={project.id}
-                className={`group transition-colors cursor-pointer ${i % 2 === 1 ? 'bg-red-50' : 'bg-white'} hover:bg-blue-50/40`}
+                className={`group transition-colors cursor-pointer ${i % 2 === 1 ? 'bg-slate-100' : 'bg-white'} hover:bg-blue-50/40`}
                 onClick={() => router.push(`/projects/${project.id}`)}
               >
-                <td className="px-4 py-3 font-medium text-gray-900">{project.name}</td>
-                <td className="px-4 py-3 text-gray-500 text-xs">{project.category ?? <span className="text-gray-300">—</span>}</td>
-                <td className="px-4 py-3 text-gray-500">{project.location ?? <span className="text-gray-300">—</span>}</td>
-                <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(project.start_date) ?? <span className="text-gray-300">—</span>}</td>
-                <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(project.end_date) ?? <span className="text-gray-300">—</span>}</td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3.5 font-medium text-gray-900">{project.name}</td>
+                <td className="px-4 py-3.5 text-gray-500 text-xs">{project.category ?? <span className="text-gray-300">—</span>}</td>
+                <td className="px-4 py-3.5 text-gray-500">{project.location ?? <span className="text-gray-300">—</span>}</td>
+                <td className="px-4 py-3.5 text-gray-500 text-xs">{formatDate(project.start_date) ?? <span className="text-gray-300">—</span>}</td>
+                <td className="px-4 py-3.5 text-gray-500 text-xs">{formatDate(project.end_date) ?? <span className="text-gray-300">—</span>}</td>
+                <td className="px-4 py-3.5 text-right">
                   <div className="flex items-center justify-end gap-2">
                     <button
                       onClick={e => { e.stopPropagation(); setDeleteTarget(project) }}
@@ -184,28 +184,28 @@ export function ProjectsClient({ projects, categories }: Props) {
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100 bg-gray-50/50">
-                  <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Project</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Category</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Location</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Start Date</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">End Date</th>
+                <tr className="border-b border-gray-400 bg-gray-800">
+                  <th className="text-left px-4 py-3 font-medium text-gray-200 text-xs uppercase tracking-wide">Project</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-200 text-xs uppercase tracking-wide">Category</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-200 text-xs uppercase tracking-wide">Location</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-200 text-xs uppercase tracking-wide">Start Date</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-200 text-xs uppercase tracking-wide">End Date</th>
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-400">
                 {completed.map((project, i) => (
                   <tr
                     key={project.id}
-                    className={`group transition-colors cursor-pointer opacity-60 ${i % 2 === 1 ? 'bg-red-50' : 'bg-white'} hover:bg-blue-50/40 hover:opacity-80`}
+                    className={`group transition-colors cursor-pointer opacity-60 ${i % 2 === 1 ? 'bg-slate-100' : 'bg-white'} hover:bg-blue-50/40 hover:opacity-80`}
                     onClick={() => router.push(`/projects/${project.id}`)}
                   >
-                    <td className="px-4 py-3 font-medium text-gray-900">{project.name}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{project.category ?? <span className="text-gray-300">—</span>}</td>
-                    <td className="px-4 py-3 text-gray-500">{project.location ?? <span className="text-gray-300">—</span>}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(project.start_date) ?? <span className="text-gray-300">—</span>}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(project.end_date) ?? <span className="text-gray-300">—</span>}</td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3.5 font-medium text-gray-900">{project.name}</td>
+                    <td className="px-4 py-3.5 text-gray-500 text-xs">{project.category ?? <span className="text-gray-300">—</span>}</td>
+                    <td className="px-4 py-3.5 text-gray-500">{project.location ?? <span className="text-gray-300">—</span>}</td>
+                    <td className="px-4 py-3.5 text-gray-500 text-xs">{formatDate(project.start_date) ?? <span className="text-gray-300">—</span>}</td>
+                    <td className="px-4 py-3.5 text-gray-500 text-xs">{formatDate(project.end_date) ?? <span className="text-gray-300">—</span>}</td>
+                    <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={e => { e.stopPropagation(); setDeleteTarget(project) }}

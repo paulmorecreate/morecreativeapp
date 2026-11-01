@@ -127,7 +127,7 @@ type ProjectTalent = {
 type SimpleRecord = { id: string; name: string }
 
 type UserProfile = { id: string; first_name: string | null; surname: string | null; email: string; color: string | null }
-type ProfitShare = { id: string; project_id: string; mc_percentage: number; mc_paid: boolean }
+type ProfitShare = { id: string; project_id: string; mc_percentage: number; mc_paid: boolean; preview_only: boolean }
 type ProfitShareEmployee = { id: string; project_id: string; user_profile_id: string; user_profile: UserProfile; paid: boolean }
 
 type DeleteTarget = {
@@ -317,6 +317,13 @@ function ProfitShareSection({
   const [empPaidIds, setEmpPaidIds] = useState<Set<string>>(() =>
     new Set(employees.filter(e => e.paid).map(e => e.id))
   )
+  const [previewOnly, setPreviewOnly] = useState(profitShare?.preview_only ?? false)
+
+  async function togglePreviewOnly() {
+    const next = !previewOnly
+    setPreviewOnly(next)
+    await supabase.from('project_profit_share').update({ preview_only: next }).eq('project_id', projectId)
+  }
 
   function startEditing() {
     setMcPct(String(profitShare?.mc_percentage ?? 100))
@@ -490,6 +497,23 @@ function ProfitShareSection({
               {employees.length === 0 && (
                 <p className="text-xs text-gray-400 pl-3">No employees assigned.</p>
               )}
+            </div>
+          )}
+          {canEdit && (
+            <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
+              <div>
+                <p className="text-xs font-medium text-gray-700">Preview only</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">Show on Team Earnings as upcoming — hide amounts</p>
+              </div>
+              <button
+                onClick={togglePreviewOnly}
+                className={cn(
+                  'relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors cursor-pointer',
+                  previewOnly ? 'bg-gray-900' : 'bg-gray-200'
+                )}
+              >
+                <span className={cn('pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform', previewOnly ? 'translate-x-4' : 'translate-x-0')} />
+              </button>
             </div>
           )}
         </div>
@@ -700,6 +724,16 @@ function ProjectFinanceTab({
     router.refresh()
   }
 
+  async function toggleIncomePS(id: string, current: boolean) {
+    await supabase.from('project_income').update({ include_in_profit_share: !current }).eq('id', id)
+    router.refresh()
+  }
+
+  async function toggleInvoicePS(id: string, current: boolean) {
+    await supabase.from('invoices').update({ include_in_profit_share: !current }).eq('id', id)
+    router.refresh()
+  }
+
   const categoryOptions = [
     ...expenseCategories.map(c => ({ value: c.name, label: c.name })),
     { value: '__new__', label: '+ Add new category…' },
@@ -707,8 +741,8 @@ function ProjectFinanceTab({
 
   const grossProfit = (() => {
     const totalIncome =
-      initialIncome.reduce((s, i) => s + toAED(i.amount, i.currency, currencyRates), 0) +
-      initialInvoices.filter(inv => inv.status === 'received').reduce((s, inv) => s + toAED(invoiceLineTotal(inv), inv.currency, currencyRates), 0)
+      initialIncome.filter(i => i.include_in_profit_share !== false).reduce((s, i) => s + toAED(i.amount, i.currency, currencyRates), 0) +
+      initialInvoices.filter(inv => inv.status === 'received' && inv.include_in_profit_share !== false).reduce((s, inv) => s + toAED(invoiceLineTotal(inv), inv.currency, currencyRates), 0)
     const totalExpenses =
       initialExpenses.reduce((s, e) => s + toAED(e.amount, e.currency, currencyRates), 0) +
       initialPurchaseInvoices.filter(inv => inv.status === 'paid' || inv.status === 'partial').reduce((s, inv) => s + inv.gross_amount * inv.fx_rate, 0)
@@ -756,6 +790,7 @@ function ProjectFinanceTab({
                 <th className="px-5 py-2.5 text-right text-xs font-medium text-gray-400">Amount</th>
                 <th className="px-5 py-2.5 text-right text-xs font-medium text-gray-400">AED equiv.</th>
                 <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-400">Status</th>
+                {canEdit && <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-400">In PS</th>}
                 {canEdit && <th className="px-2 py-2.5 w-16" />}
               </tr>
             </thead>
@@ -791,6 +826,22 @@ function ProjectFinanceTab({
                       </span>
                     )}
                   </td>
+                  {canEdit && (
+                    <td className="px-3 py-3 text-center">
+                      <button
+                        onClick={() => toggleIncomePS(inc.id, inc.include_in_profit_share !== false)}
+                        title={inc.include_in_profit_share !== false ? 'Included in profit share — click to exclude' : 'Excluded from profit share — click to include'}
+                        className={cn(
+                          'text-[10px] font-semibold px-1.5 py-0.5 rounded transition-colors',
+                          inc.include_in_profit_share !== false
+                            ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                            : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                        )}
+                      >
+                        PS
+                      </button>
+                    </td>
+                  )}
                   {canEdit && (
                     <td className="px-2 py-3">
                       <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
@@ -896,6 +947,7 @@ function ProjectFinanceTab({
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Due Date</th>
                   <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Amount</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
+                  {canEdit && <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500">In PS</th>}
                   {canEdit && <th className="px-3 py-3 w-10" />}
                 </tr>
               </thead>
@@ -925,6 +977,22 @@ function ProjectFinanceTab({
                         {inv.status}
                       </span>
                     </td>
+                    {canEdit && (
+                      <td className="px-3 py-3 text-center" onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={() => toggleInvoicePS(inv.id, inv.include_in_profit_share !== false)}
+                          title={inv.include_in_profit_share !== false ? 'Included in profit share — click to exclude' : 'Excluded from profit share — click to include'}
+                          className={cn(
+                            'text-[10px] font-semibold px-1.5 py-0.5 rounded transition-colors',
+                            inv.include_in_profit_share !== false
+                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                              : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                          )}
+                        >
+                          PS
+                        </button>
+                      </td>
+                    )}
                     {canEdit && (
                       <td className="px-3 py-3">
                         <button

@@ -193,16 +193,16 @@ export function OpportunitiesClient({ opportunities, talents, mcRoles, categorie
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50/50">
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Deal</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Role</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Talents</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Event date</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Notes</th>
+            <tr className="border-b border-gray-400 bg-gray-800">
+              <th className="text-left px-4 py-3 font-medium text-gray-200 text-xs uppercase tracking-wide">Deal</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-200 text-xs uppercase tracking-wide">Role</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-200 text-xs uppercase tracking-wide">Talents</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-200 text-xs uppercase tracking-wide">Event date</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-200 text-xs uppercase tracking-wide">Notes</th>
               <th className="w-8 px-3 py-3" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-gray-400">
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-400">
@@ -213,29 +213,29 @@ export function OpportunitiesClient({ opportunities, talents, mcRoles, categorie
             {filtered.map((opp, i) => (
               <tr
                 key={opp.id}
-                className={`transition-colors cursor-pointer group ${i % 2 === 1 ? 'bg-red-50' : 'bg-white'} hover:bg-blue-50/40`}
+                className={`transition-colors cursor-pointer group ${i % 2 === 1 ? 'bg-slate-100' : 'bg-white'} hover:bg-blue-50/40`}
                 onClick={() => router.push(`/opportunities/${opp.id}`)}
               >
-                <td className="px-4 py-3 font-medium text-gray-900">{opp.name}</td>
-                <td className="px-4 py-3 text-gray-500 text-xs">
+                <td className="px-4 py-3.5 font-medium text-gray-900">{opp.name}</td>
+                <td className="px-4 py-3.5 text-gray-500 text-xs">
                   {opp.mc_role ?? <span className="text-gray-300">—</span>}
                 </td>
-                <td className="px-4 py-3 text-gray-500 text-xs">
+                <td className="px-4 py-3.5 text-gray-500 text-xs">
                   {opp.opportunity_talents.length > 0
                     ? opp.opportunity_talents.map(t => t.talent?.name).filter(Boolean).join(', ')
                     : <span className="text-gray-300">—</span>}
                 </td>
-                <td className="px-4 py-3 text-gray-500 text-xs">
+                <td className="px-4 py-3.5 text-gray-500 text-xs">
                   {opp.event_date
                     ? new Date(opp.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
                     : <span className="text-gray-300">—</span>}
                 </td>
-                <td className="px-4 py-3 text-xs text-gray-400 max-w-[200px]">
+                <td className="px-4 py-3.5 text-xs text-gray-400 max-w-[200px]">
                   {opp.notes
                     ? <span className="line-clamp-2">{opp.notes}</span>
                     : <span className="text-gray-300">—</span>}
                 </td>
-                <td className="px-3 py-3 w-16" onClick={e => e.stopPropagation()}>
+                <td className="px-3 py-3.5 w-16" onClick={e => e.stopPropagation()}>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => setConvertTarget(opp)}
@@ -272,7 +272,7 @@ export function OpportunitiesClient({ opportunities, talents, mcRoles, categorie
           {showConverted && (
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden opacity-60">
               <table className="w-full text-sm">
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-400">
                   {converted.map(opp => (
                     <tr key={opp.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => router.push(`/opportunities/${opp.id}`)}>
                       <td className="px-4 py-3 font-medium text-gray-700">{opp.name}</td>
