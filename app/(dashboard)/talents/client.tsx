@@ -613,34 +613,34 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50/50">
+            <tr className="border-b border-gray-400 bg-gray-800">
               <th className="pl-4 pr-2 py-3 w-8">
                 <button
                   onClick={toggleSelectAll}
                   className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                    allSelected ? 'bg-gray-900 border-gray-900' : someSelected ? 'border-gray-400 bg-white' : 'border-gray-300 hover:border-gray-500 bg-white'
+                    allSelected ? 'bg-white border-white' : someSelected ? 'border-gray-400 bg-transparent' : 'border-gray-500 hover:border-gray-300 bg-transparent'
                   }`}
                 >
-                  {allSelected && <Check className="w-2.5 h-2.5 text-white" />}
-                  {someSelected && !allSelected && <Minus className="w-2.5 h-2.5 text-gray-500" />}
+                  {allSelected && <Check className="w-2.5 h-2.5 text-gray-900" />}
+                  {someSelected && !allSelected && <Minus className="w-2.5 h-2.5 text-gray-300" />}
                 </button>
               </th>
-              <th onClick={() => toggleSort('name')} className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide cursor-pointer select-none hover:text-gray-700">
+              <th onClick={() => toggleSort('name')} className="text-left px-4 py-3 font-medium text-gray-200 text-xs uppercase tracking-wide cursor-pointer select-none hover:text-white">
                 Name<SortIcon col="name" />
               </th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Links</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-200 text-xs uppercase tracking-wide">Links</th>
               {([['talent_level','Level'],['category','Cat'],['agent','Agent'],['ig_followers','IG Followers'],['tiktok_followers','TK Followers']] as [string,string][]).map(([col, label]) => (
-                <th key={col} onClick={() => toggleSort(col)} className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide cursor-pointer select-none hover:text-gray-700">
+                <th key={col} onClick={() => toggleSort(col)} className="text-left px-4 py-3 font-medium text-gray-200 text-xs uppercase tracking-wide cursor-pointer select-none hover:text-white">
                   {label}<SortIcon col={col} />
                 </th>
               ))}
-              <th onClick={() => toggleSort('last_updated')} className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide cursor-pointer select-none hover:text-gray-700 whitespace-nowrap">
+              <th onClick={() => toggleSort('last_updated')} className="text-left px-4 py-3 font-medium text-gray-200 text-xs uppercase tracking-wide cursor-pointer select-none hover:text-white whitespace-nowrap">
                 Last Updated<SortIcon col="last_updated" />
               </th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-gray-400">
             {sorted.length === 0 && (
               <tr>
                 <td colSpan={10} className="px-4 py-10 text-center text-sm text-gray-400">
@@ -648,14 +648,14 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
                 </td>
               </tr>
             )}
-            {sorted.map(talent => {
+            {sorted.map((talent, i) => {
               const agentNames = talent.talent_agents?.map(ta => ta.agent?.name).filter(Boolean).join(', ') ?? ''
               const isSelected = selected.has(talent.id)
               const { date: lastUpdatedDate, person: lastUpdatedPerson, color: lastUpdatedColor } = formatLastUpdated(talent)
               return (
                 <tr
                   key={talent.id}
-                  className={`transition-colors group ${isSelected ? 'bg-blue-50/30' : 'hover:bg-gray-50/50'}`}
+                  className={`transition-colors group cursor-pointer ${isSelected ? 'bg-blue-50/30' : i % 2 === 1 ? 'bg-slate-100' : 'bg-white'} hover:bg-blue-50/40`}
                 >
                   <td className="pl-4 pr-2 py-3">
                     <button
