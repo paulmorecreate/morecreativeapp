@@ -63,6 +63,8 @@ export function ProfitShareOverviewClient({ gridUsers: initialGrid, allMonths: i
   const [addMonthValue, setAddMonthValue] = useState('')
   const [editingSalary, setEditingSalary] = useState<{ userId: string; monthKey: string } | null>(null)
   const [editSalaryValue, setEditSalaryValue] = useState('')
+  const [editingReturnId, setEditingReturnId] = useState<string | null>(null)
+  const [editingReturnAmount, setEditingReturnAmount] = useState('')
   const [addOneOffMonth, setAddOneOffMonth] = useState<string | null>(null)
   const [oneOffForm, setOneOffForm] = useState({ userId: '', amount: '', note: '' })
 
@@ -279,6 +281,15 @@ export function ProfitShareOverviewClient({ gridUsers: initialGrid, allMonths: i
     await supabase.from('salary_returns').delete().eq('id', id)
   }
 
+  async function updateReturn(id: string) {
+    const amount = parseFloat(editingReturnAmount)
+    setEditingReturnId(null)
+    if (isNaN(amount) || amount <= 0) return
+    const supabase = createClient()
+    await supabase.from('salary_returns').update({ amount }).eq('id', id)
+    setReturns(prev => prev.map(r => r.id === id ? { ...r, amount } : r))
+  }
+
   const hasAnyData = months.length > 0 || pending.length > 0 || upcomingProjects.length > 0
 
   if (!hasAnyData) {
@@ -400,15 +411,16 @@ export function ProfitShareOverviewClient({ gridUsers: initialGrid, allMonths: i
                               {salary > 0 && (
                                 <>
                                   <div className="flex items-center gap-1.5">
-                                    {/* action buttons sit LEFT of label so amount stays rightmost */}
-                                    {!isEditing && salaryPayment && (
-                                      <button onClick={() => deleteSalaryPayment(u.userId, m)} className="text-gray-200 hover:text-red-400 transition-colors" title="Remove salary entry">
-                                        <X className="w-3 h-3" />
+                                    {/* Returns button — always visible */}
+                                    {!isEditing && (
+                                      <button onClick={() => openReturnModal(u.userId, u.userName, m)} className="text-gray-400 hover:text-gray-700 transition-colors" title="Manage salary returns">
+                                        <Plus className="w-3 h-3" />
                                       </button>
                                     )}
-                                    {!isEditing && !salaryPayment && (
-                                      <button onClick={() => openReturnModal(u.userId, u.userName, m)} className="text-gray-200 hover:text-gray-600 transition-colors" title="Log salary return">
-                                        <Plus className="w-3 h-3" />
+                                    {/* X only to remove a per-month salary override */}
+                                    {!isEditing && salaryPayment && (
+                                      <button onClick={() => deleteSalaryPayment(u.userId, m)} className="text-gray-300 hover:text-red-400 transition-colors" title="Remove salary override">
+                                        <X className="w-3 h-3" />
                                       </button>
                                     )}
                                     <span className="text-[10px] text-gray-400">salary</span>
@@ -742,7 +754,26 @@ export function ProfitShareOverviewClient({ gridUsers: initialGrid, allMonths: i
                       {r.note && <span className="text-xs text-gray-400 ml-2">{r.note}</span>}
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-red-500">−{fmtAed(r.amount)}</span>
+                      {editingReturnId === r.id ? (
+                        <input
+                          autoFocus
+                          type="number"
+                          min="0"
+                          value={editingReturnAmount}
+                          onChange={e => setEditingReturnAmount(e.target.value)}
+                          onBlur={() => updateReturn(r.id)}
+                          onKeyDown={e => { if (e.key === 'Enter') updateReturn(r.id); if (e.key === 'Escape') setEditingReturnId(null) }}
+                          className="w-24 text-right border border-gray-300 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-black/20 bg-white"
+                        />
+                      ) : (
+                        <button
+                          onClick={() => { setEditingReturnId(r.id); setEditingReturnAmount(String(r.amount)) }}
+                          className="text-xs font-semibold text-red-500 hover:text-red-700 hover:underline underline-offset-2 tabular-nums transition-colors"
+                          title="Click to edit"
+                        >
+                          −{fmtAed(r.amount)}
+                        </button>
+                      )}
                       <button onClick={() => deleteReturn(r.id)} className="text-gray-300 hover:text-red-400 transition-colors">
                         <X className="w-3 h-3" />
                       </button>
