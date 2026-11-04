@@ -33,6 +33,16 @@ export default async function InvoiceDetailPage({ params, searchParams }: { para
 
   if (!invoice) notFound()
 
+  let linkedInvoice: { id: string; invoice_number: string; issue_date: string | null } | null = null
+  if ((invoice as any).linked_invoice_id) {
+    const { data } = await supabase
+      .from('invoices')
+      .select('id, invoice_number, issue_date')
+      .eq('id', (invoice as any).linked_invoice_id)
+      .single()
+    linkedInvoice = data
+  }
+
   return (
     <InvoiceDetailClient
       invoice={invoice as any}
@@ -40,6 +50,7 @@ export default async function InvoiceDetailPage({ params, searchParams }: { para
       settings={settings!}
       projects={projects ?? []}
       returnTo={from === 'finance' ? '/finance?tab=sales' : undefined}
+      linkedInvoice={linkedInvoice}
     />
   )
 }

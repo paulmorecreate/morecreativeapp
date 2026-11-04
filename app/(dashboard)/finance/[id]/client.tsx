@@ -38,9 +38,10 @@ type Props = {
   projects: { id: string; name: string }[]
   returnTo?: string
   isNew?: boolean
+  linkedInvoice?: { id: string; invoice_number: string; issue_date: string | null } | null
 }
 
-export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, settings, projects, returnTo, isNew }: Props) {
+export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, settings, projects, returnTo, isNew, linkedInvoice }: Props) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -236,10 +237,22 @@ export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, sett
           <ArrowLeft className="w-4 h-4" />
         </button>
         <div className="flex-1">
-          <h1 className="text-2xl font-semibold text-gray-900">{form.invoice_number}</h1>
-          <span className={cn('inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium capitalize', STATUS_STYLES[form.status])}>
-            {form.status}
-          </span>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold text-gray-900">{form.invoice_number}</h1>
+            {invoice.document_type === 'credit_note' && (
+              <span className="px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-700">Credit Note</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', STATUS_STYLES[form.status])}>
+              {form.status}
+            </span>
+            {linkedInvoice && (
+              <span className="text-xs text-gray-400">
+                re: <button onClick={() => router.push(`/finance/${linkedInvoice!.id}`)} className="text-purple-600 hover:underline underline-offset-2">{linkedInvoice.invoice_number}</button>
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {isNew && (
@@ -253,6 +266,9 @@ export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, sett
               lineItems={lineItems}
               settings={settings}
               fileName={`${form.invoice_number}.pdf`}
+              documentType={invoice.document_type as 'invoice' | 'credit_note' | undefined}
+              linkedInvoiceNumber={linkedInvoice?.invoice_number}
+              linkedInvoiceDate={linkedInvoice?.issue_date ?? undefined}
             />
           )}
           <Button variant="secondary" onClick={handleSaveAndClose} disabled={saving}>
@@ -268,7 +284,7 @@ export function InvoiceDetailClient({ invoice, lineItems: initialLineItems, sett
       <div className="space-y-6">
         {/* Invoice meta */}
         <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-900">Invoice Details</h2>
+          <h2 className="text-sm font-semibold text-gray-900">{invoice.document_type === 'credit_note' ? 'Credit Note Details' : 'Invoice Details'}</h2>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-600">Invoice Number</label>

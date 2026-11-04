@@ -551,6 +551,10 @@ function ProjectFinanceTab({
   const supabase = createClient()
   const [creating, setCreating] = useState(false)
 
+  // Credit note picker
+  const [cnPickerOpen, setCnPickerOpen] = useState(false)
+  const [cnLinkedInvoiceId, setCnLinkedInvoiceId] = useState('')
+
   // Add income
   const [addIncomeOpen, setAddIncomeOpen] = useState(false)
   const [incomeSaving, setIncomeSaving] = useState(false)
@@ -609,6 +613,56 @@ function ProjectFinanceTab({
       .single()
     setCreating(false)
     if (!error && inv) router.push(`/finance/${inv.id}`)
+  }
+
+  async function handleNewCreditNote() {
+    if (!cnLinkedInvoiceId) return
+    setCreating(true)
+    const year = new Date().getFullYear()
+    const { data: lastCN } = await supabase
+      .from('invoices')
+      .select('invoice_number')
+      .ilike('invoice_number', `CN-${year}-%`)
+      .order('invoice_number', { ascending: false })
+      .limit(1)
+      .single()
+    let seq = 1
+    if (lastCN?.invoice_number) {
+      const parts = lastCN.invoice_number.split('-')
+      seq = (parseInt(parts[2] ?? '0', 10) || 0) + 1
+    }
+    const cn_number = `CN-${year}-${String(seq).padStart(4, '0')}`
+    const original = initialInvoices.find(inv => inv.id === cnLinkedInvoiceId)
+    if (!original) { setCreating(false); return }
+    const { data: cn } = await supabase.from('invoices').insert({
+      invoice_number: cn_number,
+      project_id: projectId,
+      currency: original.currency,
+      apply_vat: original.apply_vat,
+      status: 'draft',
+      billed_to_name: original.billed_to_name,
+      billed_to_company: original.billed_to_company,
+      billed_to_address: original.billed_to_address,
+      document_type: 'credit_note',
+      linked_invoice_id: original.id,
+      notes: `Credit note for invoice ${original.invoice_number}`,
+    }).select().single()
+    if (!cn) { setCreating(false); return }
+    if (original.line_items && original.line_items.length > 0) {
+      await supabase.from('invoice_line_items').insert(
+        original.line_items.map((item, i) => ({
+          invoice_id: cn.id,
+          description: item.description,
+          rate: -Math.abs(item.rate),
+          qty: item.qty,
+          sort_order: i,
+        }))
+      )
+    }
+    setCreating(false)
+    setCnPickerOpen(false)
+    setCnLinkedInvoiceId('')
+    router.push(`/finance/${cn.id}`)
   }
 
   async function handleNewPurchaseInvoice() {
@@ -927,17 +981,32 @@ function ProjectFinanceTab({
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-gray-900">Sales Invoices</h3>
           {canEdit && (
-            <Button variant="secondary" onClick={handleNewInvoice} disabled={creating}>
-              <Plus className="w-3.5 h-3.5" />
-              {creating ? 'Creating…' : 'New Sales Invoice'}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" onClick={() => { setCnLinkedInvoiceId(''); setCnPickerOpen(true) }} disabled={creating || initialInvoices.filter(i => i.document_type !== 'credit_note' && i.status === 'received').length === 0}>
+                <Plus className="w-3.5 h-3.5" />
+                Credit Note
+              </Button>
+              <Button variant="secondary" onClick={handleNewInvoice} disabled={creating}>
+                <Plus className="w-3.5 h-3.5" />
+                {creating ? 'Creating…' : 'New Sales Invoice'}
+              </Button>
+            </div>
           )}
         </div>
         {initialInvoices.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 px-5 py-6 text-center">
             <p className="text-sm text-gray-400">No sales invoices for this project yet.</p>
           </div>
-        ) : (
+        ) : (() => {
+          const cnsByLinkedId = new Map<string, Invoice[]>()
+          for (const inv of initialInvoices) {
+            if (inv.document_type === 'credit_note' && inv.linked_invoice_id) {
+              const list = cnsByLinkedId.get(inv.linked_invoice_id) ?? []
+              list.push(inv)
+              cnsByLinkedId.set(inv.linked_invoice_id, list)
+            }
+          }
+          return (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
@@ -952,9 +1021,23 @@ function ProjectFinanceTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {initialInvoices.map(inv => (
-                  <tr key={inv.id} onClick={canEdit ? () => router.push(`/finance/${inv.id}`) : undefined} className={cn('transition-colors group', canEdit && 'hover:bg-gray-50 cursor-pointer')}>
-                    <td className="px-5 py-3 font-medium text-gray-900">{inv.invoice_number}</td>
+                {initialInvoices.map(inv => {
+                  const isCN = inv.document_type === 'credit_note'
+                  const linkedCNs = cnsByLinkedId.get(inv.id) ?? []
+                  const lineTotal = invoiceLineTotal(inv)
+                  return (
+                  <tr key={inv.id} onClick={canEdit ? () => router.push(`/finance/${inv.id}`) : undefined} className={cn('transition-colors group', canEdit && 'hover:bg-gray-50 cursor-pointer', isCN && 'bg-purple-50/30')}>
+                    <td className="px-5 py-3 font-medium text-gray-900">
+                      <div className="flex items-center gap-2">
+                        {inv.invoice_number}
+                        {isCN && <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-700">CN</span>}
+                        {!isCN && linkedCNs.length > 0 && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-600">CN issued</span>}
+                      </div>
+                      {isCN && inv.linked_invoice_id && (() => {
+                        const orig = initialInvoices.find(i => i.id === inv.linked_invoice_id)
+                        return orig ? <span className="text-xs text-purple-500 font-normal">re: {orig.invoice_number}</span> : null
+                      })()}
+                    </td>
                     <td className="px-5 py-3 text-gray-700">
                       {inv.billed_to_name ?? <span className="text-gray-300">—</span>}
                       {inv.billed_to_company && <span className="block text-xs text-gray-400">{inv.billed_to_company}</span>}
@@ -962,13 +1045,13 @@ function ProjectFinanceTab({
                     <td className="px-5 py-3 text-gray-500">
                       {inv.due_date ? new Date(inv.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                     </td>
-                    <td className="px-5 py-3 text-right font-medium text-gray-900">
-                      <div>{fmtAmount(inv.currency, invoiceLineTotal(inv))}</div>
+                    <td className="px-5 py-3 text-right font-medium">
+                      <div className={isCN ? 'text-red-600' : 'text-gray-900'}>{fmtAmount(inv.currency, lineTotal)}</div>
                       {inv.status === 'partial' && inv.amount_paid > 0 && (
                         <div className="text-xs mt-0.5 space-x-1">
                           <span className="text-green-600">{fmtAmount(inv.currency, inv.amount_paid)} paid</span>
                           <span className="text-gray-300">·</span>
-                          <span className="text-amber-600">{fmtAmount(inv.currency, invoiceLineTotal(inv) - inv.amount_paid)} due</span>
+                          <span className="text-amber-600">{fmtAmount(inv.currency, lineTotal - inv.amount_paid)} due</span>
                         </div>
                       )}
                     </td>
@@ -979,18 +1062,20 @@ function ProjectFinanceTab({
                     </td>
                     {canEdit && (
                       <td className="px-3 py-3 text-center" onClick={e => e.stopPropagation()}>
-                        <button
-                          onClick={() => toggleInvoicePS(inv.id, inv.include_in_profit_share !== false)}
-                          title={inv.include_in_profit_share !== false ? 'Included in profit share — click to exclude' : 'Excluded from profit share — click to include'}
-                          className={cn(
-                            'text-[10px] font-semibold px-1.5 py-0.5 rounded transition-colors',
-                            inv.include_in_profit_share !== false
-                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                              : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                          )}
-                        >
-                          PS
-                        </button>
+                        {!isCN && (
+                          <button
+                            onClick={() => toggleInvoicePS(inv.id, inv.include_in_profit_share !== false)}
+                            title={inv.include_in_profit_share !== false ? 'Included in profit share — click to exclude' : 'Excluded from profit share — click to include'}
+                            className={cn(
+                              'text-[10px] font-semibold px-1.5 py-0.5 rounded transition-colors',
+                              inv.include_in_profit_share !== false
+                                ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                            )}
+                          >
+                            PS
+                          </button>
+                        )}
                       </td>
                     )}
                     {canEdit && (
@@ -1004,11 +1089,13 @@ function ProjectFinanceTab({
                       </td>
                     )}
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
-        )}
+          )
+        })()}
       </div>
 
       {/* Purchase Invoices */}
@@ -1225,6 +1312,39 @@ function ProjectFinanceTab({
             <Button type="submit" disabled={editExpenseSaving || !editExpenseForm.description.trim() || !editExpenseForm.amount || !editExpenseForm.category || (editExpenseForm.category === '__new__' && !editExpenseForm.newCategory.trim())} className="flex-1">{editExpenseSaving ? 'Saving…' : 'Save Changes'}</Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Credit Note Picker */}
+      <Modal open={cnPickerOpen} onClose={() => setCnPickerOpen(false)} title="New Credit Note">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">Select the invoice you want to issue a credit note against. The credit note will be pre-populated with the same line items as negative amounts.</p>
+          <div className="space-y-2">
+            {initialInvoices.filter(i => i.document_type !== 'credit_note' && i.status === 'received').map(inv => (
+              <button
+                key={inv.id}
+                onClick={() => setCnLinkedInvoiceId(inv.id)}
+                className={cn(
+                  'w-full text-left px-4 py-3 rounded-xl border transition-colors',
+                  cnLinkedInvoiceId === inv.id
+                    ? 'border-gray-900 bg-gray-50'
+                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-sm text-gray-900">{inv.invoice_number}</span>
+                  <span className="text-sm font-medium text-gray-700">{fmtAmount(inv.currency, invoiceLineTotal(inv))}</span>
+                </div>
+                {inv.billed_to_name && <div className="text-xs text-gray-400 mt-0.5">{inv.billed_to_name}{inv.billed_to_company ? ` · ${inv.billed_to_company}` : ''}</div>}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button variant="secondary" onClick={() => setCnPickerOpen(false)} className="flex-1">Cancel</Button>
+            <Button onClick={handleNewCreditNote} disabled={!cnLinkedInvoiceId || creating} className="flex-1">
+              {creating ? 'Creating…' : 'Create Credit Note'}
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       {/* Delete confirmation modal */}

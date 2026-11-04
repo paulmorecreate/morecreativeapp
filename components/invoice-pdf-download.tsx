@@ -11,12 +11,15 @@ type Props = {
   lineItems: InvoiceLineItem[]
   settings: InvoiceSettings
   fileName: string
+  documentType?: 'invoice' | 'credit_note'
+  linkedInvoiceNumber?: string
+  linkedInvoiceDate?: string
 }
 
-export function InvoicePDFDownload({ invoice, lineItems, settings, fileName }: Props) {
+export function InvoicePDFDownload({ invoice, lineItems, settings, fileName, documentType, linkedInvoiceNumber, linkedInvoiceDate }: Props) {
   return (
     <PDFDownloadLink
-      document={<InvoiceDocument invoice={invoice} lineItems={lineItems} settings={settings} />}
+      document={<InvoiceDocument invoice={invoice} lineItems={lineItems} settings={settings} documentType={documentType} linkedInvoiceNumber={linkedInvoiceNumber} linkedInvoiceDate={linkedInvoiceDate} />}
       fileName={fileName}
     >
       {({ loading }) => (

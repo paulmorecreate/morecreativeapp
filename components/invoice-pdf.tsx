@@ -72,11 +72,18 @@ export function InvoiceDocument({
   invoice,
   lineItems,
   settings,
+  documentType,
+  linkedInvoiceNumber,
+  linkedInvoiceDate,
 }: {
   invoice: Invoice
   lineItems: InvoiceLineItem[]
   settings: InvoiceSettings
+  documentType?: 'invoice' | 'credit_note'
+  linkedInvoiceNumber?: string
+  linkedInvoiceDate?: string
 }) {
+  const isCreditNote = documentType === 'credit_note'
   const currency = invoice.currency
   const subtotal = lineItems.reduce((s, l) => s + l.rate * l.qty, 0)
   const tax = invoice.apply_vat ? subtotal * 0.05 : 0
@@ -140,10 +147,19 @@ export function InvoiceDocument({
           </View>
         </View>
 
+        {/* Credit note reference banner */}
+        {isCreditNote && linkedInvoiceNumber && (
+          <View style={{ backgroundColor: '#f3e8ff', borderRadius: 6, paddingHorizontal: 12, paddingVertical: 7, marginBottom: 16 }}>
+            <Text style={{ fontSize: 8, color: '#7c3aed' }}>
+              {`CREDIT NOTE — This document relates to Invoice ${linkedInvoiceNumber}${linkedInvoiceDate ? ` dated ${fmtDate(linkedInvoiceDate)}` : ''}`}
+            </Text>
+          </View>
+        )}
+
         {/* Info row */}
         <View style={s.infoRow}>
           <View style={s.billedToBlock}>
-            <Text style={s.billedToLabel}>Billed To</Text>
+            <Text style={s.billedToLabel}>{isCreditNote ? 'Issued To' : 'Billed To'}</Text>
             <Text style={s.billedToText}>{billedToLines || '—'}</Text>
           </View>
           <View style={s.datesBlock}>
@@ -153,12 +169,12 @@ export function InvoiceDocument({
             <Text style={s.datesValue}>{fmtDate(invoice.due_date)}</Text>
           </View>
           <View style={s.invoiceNumBlock}>
-            <Text style={s.datesLabel}>Invoice Number</Text>
+            <Text style={s.datesLabel}>{isCreditNote ? 'Credit Note Number' : 'Invoice Number'}</Text>
             <Text style={s.datesValue}>{invoice.invoice_number}</Text>
           </View>
           <View style={s.amountBlock}>
-            <Text style={s.amountLabel}>Amount Due ({currency})</Text>
-            <Text style={s.amountValue}>{fmt(currency, amountDue)}</Text>
+            <Text style={s.amountLabel}>{isCreditNote ? `Credit Amount (${currency})` : `Amount Due (${currency})`}</Text>
+            <Text style={[s.amountValue, isCreditNote ? { color: '#dc2626' } : {}]}>{fmt(currency, amountDue)}</Text>
           </View>
         </View>
 

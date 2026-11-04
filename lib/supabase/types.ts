@@ -387,6 +387,8 @@ export interface Invoice {
   amount_paid: number
   notes: string | null
   include_in_profit_share?: boolean
+  document_type?: 'invoice' | 'credit_note'
+  linked_invoice_id?: string | null
   created_at: string
   updated_at: string
   line_items?: InvoiceLineItem[]
