@@ -86,15 +86,6 @@ export function ProfitShareOverviewClient({ gridUsers: initialGrid, allMonths: i
     setEditingSalary(null)
     if (isNaN(amount) || amount < 0) return
     const supabase = createClient()
-    if (amount === 0) {
-      // Treat 0 as "revert to base salary" — delete the override row
-      const existing = salaryPayments.find(p => p.user_profile_id === userId && p.month_key === monthKey)
-      if (existing) {
-        await supabase.from('monthly_salary_payments').delete().eq('id', existing.id)
-        setSalaryPayments(prev => prev.filter(p => p.id !== existing.id))
-      }
-      return
-    }
     const { data } = await supabase.from('monthly_salary_payments')
       .upsert({ user_profile_id: userId, month_key: monthKey, amount, note: null }, { onConflict: 'user_profile_id,month_key' })
       .select('id, user_profile_id, month_key, amount, note').single()
@@ -415,13 +406,13 @@ export function ProfitShareOverviewClient({ gridUsers: initialGrid, allMonths: i
                         const monthReturns = returns.filter(r => r.user_profile_id === u.userId && r.month_key === m)
                         const monthReturnsTotal = monthReturns.reduce((s, r) => s + r.amount, 0)
                         const isEditing = editingSalary?.userId === u.userId && editingSalary?.monthKey === m
-                        if (commission === 0 && salary === 0) {
+                        if (commission === 0 && salary === 0 && !salaryPayment) {
                           return <td key={u.userId} className="px-5 py-3.5 text-right text-gray-300">—</td>
                         }
                         return (
                           <td key={u.userId} className="px-5 py-3.5">
                             <div className="flex flex-col items-end gap-0.5">
-                              {salary > 0 && (
+                              {(salary > 0 || salaryPayment) && (
                                 <>
                                   <div className="flex items-center gap-1.5">
                                     {/* Returns button — always visible */}
