@@ -36,10 +36,15 @@ function parseDate(val: unknown): string | null {
     return `${y}-${m}-${d}`
   }
   const s = String(val).trim()
-  // "DD MMM YYYY" format from ENBD exports — parse directly, no timezone involved
+  // "DD MMM YYYY" format from ENBD exports
   const parts = s.split(' ')
   if (parts.length === 3 && MONTH_MAP[parts[1]]) {
     return `${parts[2]}-${MONTH_MAP[parts[1]]}-${parts[0].padStart(2, '0')}`
+  }
+  // "DD-Mon-YYYY" format from ADCB exports
+  const hparts = s.split('-')
+  if (hparts.length === 3 && MONTH_MAP[hparts[1]]) {
+    return `${hparts[2]}-${MONTH_MAP[hparts[1]]}-${hparts[0].padStart(2, '0')}`
   }
   // Fallback: force UTC parse to avoid timezone shift
   const d = new Date(s + 'T00:00:00Z')
@@ -69,6 +74,11 @@ function isMasterFormat(rows: unknown[][]): boolean {
   return str(h[0]) === 'Date' && str(h[2]) === 'Currency' && str(h[10]) === 'Accounting Category'
 }
 
+// ADCB format: row 3 = "Customer Account Statement", row 15 = column headers starting with "Sr.No"
+function isAdcbFormat(rows: unknown[][]): boolean {
+  return rows.length >= 16 && str(rows[3][0]) === 'Customer Account Statement' && str(rows[15][0]) === 'Sr.No'
+}
+
 // ── Auto-categorization rules (for raw bank imports) ─────────────────────────
 
 type AutoCat = { accounting_category: string; transaction_type: string; document_required: string }
@@ -78,6 +88,21 @@ const RULES: Array<{ match: (desc: string, credit: number, debit: number) => boo
   {
     match: d => /acct to acct transfer/i.test(d),
     result: { accounting_category: 'Own-account transfer', transaction_type: 'Own-account transfer', document_required: 'Bank statement' },
+  },
+  // ADCB: inward SWIFT / B/O transfers (credits = client receipts)
+  {
+    match: (d, crd) => crd > 0 && /^B\/O_/i.test(d),
+    result: { accounting_category: 'Client receipts - review invoice', transaction_type: 'Receipt - review', document_required: 'Sales invoice / contract' },
+  },
+  // ADCB: CDM cash deposits
+  {
+    match: d => /CDM.Cash Deposit/i.test(d),
+    result: { accounting_category: 'Own-account transfer', transaction_type: 'Own-account transfer', document_required: 'Bank statement' },
+  },
+  // ADCB: outward TT processing + correspondent charges
+  {
+    match: d => /O\/W TT (PROC )?CHGS/i.test(d) || /CORESP TT CHGS/i.test(d),
+    result: { accounting_category: 'Bank charges', transaction_type: 'Expense', document_required: 'Not required' },
   },
   // Salaries via WPS
   {
@@ -268,7 +293,108 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // ── Raw bank export format ────────────────────────────────────────────────
+    // ── ADCB bank export format ───────────────────────────────────────────────
+
+    if (isAdcbFormat(rows)) {
+      // Account No is in row 5 (index 5), cell E (index 4): e.g. "14687710920001-AED"
+      const accountCell = str(rows[5][4])
+      const lastDash = accountCell.lastIndexOf('-')
+      const currency = lastDash !== -1 ? accountCell.slice(lastDash + 1).toUpperCase() : 'AED'
+      const accountNumber = lastDash !== -1 ? accountCell.slice(0, lastDash) : accountCell
+
+      if (!accountNumber) {
+        return NextResponse.json({ error: 'Could not detect ADCB account number from file.' }, { status: 422 })
+      }
+
+      const [{ data: fxRates }, { data: userRules }] = await Promise.all([
+        supabase.from('monthly_fx_rates').select('*'),
+        supabase.from('bank_categorisation_rules').select('pattern,accounting_category,transaction_type,document_required'),
+      ])
+      const fxMap = new Map<string, number>()
+      for (const r of fxRates ?? []) fxMap.set(`${r.year}-${r.month}`, r.rate_to_aed)
+
+      function getFxRate(dateStr: string): number {
+        if (currency === 'AED') return 1
+        const d = new Date(dateStr)
+        return fxMap.get(`${d.getFullYear()}-${d.getMonth() + 1}`) ?? 1
+      }
+
+      const toInsert: Record<string, unknown>[] = []
+      let autoCatCount = 0
+
+      // Data rows start at index 16 (row 17)
+      for (let i = 16; i < rows.length; i++) {
+        const row = rows[i]
+        if (!row || row.every(v => v === null || v === '')) continue
+        // Sr.No must be a number to be a data row
+        const srNo = str(row[0])
+        if (!srNo || isNaN(Number(srNo))) continue
+
+        const dateStr = parseDate(row[1])
+        const reference = str(row[3])   // Bank Reference No
+        const description = str(row[5]) // Description
+        if (!dateStr || !reference || !description) continue
+
+        const debit = parseAmount(row[6])   // Debit Amount ("-" parses to 0)
+        const credit = parseAmount(row[7])  // Credit Amount ("-" parses to 0)
+        const balance = parseBalance(row[8]) ?? 0
+        const fxRate = getFxRate(dateStr)
+        const aedEquivalent = credit > 0 ? credit * fxRate : debit > 0 ? -(debit * fxRate) : 0
+
+        const cat = autoCategorize(description, credit, debit, userRules ?? [])
+        if (cat) autoCatCount++
+
+        toInsert.push({
+          date: dateStr,
+          value_date: parseDate(row[2]),
+          currency,
+          account_number: accountNumber,
+          reference,
+          description,
+          credit,
+          debit,
+          balance,
+          fx_rate_to_aed: fxRate,
+          aed_equivalent: aedEquivalent,
+          transaction_type: cat?.transaction_type ?? null,
+          accounting_category: cat?.accounting_category ?? null,
+          document_required: cat?.document_required ?? null,
+          document_status: cat?.accounting_category === 'Bank charges' || cat?.accounting_category === 'Own-account transfer' ? 'Not Required' : 'Missing',
+          sort_order: Number(srNo),
+          updated_at: now,
+        })
+      }
+
+      if (toInsert.length === 0) {
+        return NextResponse.json({ error: 'No transactions found in ADCB file.' }, { status: 422 })
+      }
+
+      const { data: inserted, error } = await supabase
+        .from('bank_transactions')
+        .upsert(toInsert, {
+          onConflict: 'date,account_number,reference,description,credit,debit,balance',
+          ignoreDuplicates: true,
+        })
+        .select('id')
+
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+      const importedCount = inserted?.length ?? 0
+      const skippedCount = toInsert.length - importedCount
+
+      return NextResponse.json({
+        format: 'raw',
+        imported: importedCount,
+        skipped: skippedCount,
+        total: toInsert.length,
+        autoCategorized: autoCatCount,
+        needsReview: toInsert.length - autoCatCount,
+        account: accountNumber,
+        currency,
+      })
+    }
+
+    // ── Raw bank export format (Mashreq / ENBD) ───────────────────────────────
 
     // Extract account metadata from header block
     let accountNumber = ''

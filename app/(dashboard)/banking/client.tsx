@@ -1047,7 +1047,7 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
       {tab === 'upload' && (
         <div className="max-w-xl">
           <p className="text-sm text-gray-500 mb-5">
-            Download your statement from Emirates NBD Online Banking as an Excel file (.xlsx), then upload it here.
+            Upload a bank statement export (.xls or .xlsx). Supports ADCB account statements and Emirates NBD exports, as well as the master spreadsheet format.
             Transactions already in the system are skipped — safe to upload the same file twice.
           </p>
 
