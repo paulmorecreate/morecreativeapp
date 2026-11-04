@@ -151,15 +151,15 @@ function AnnualStatusBadge({ dueDate }: { dueDate: string | null }) {
 const SALE_STATUS_FILTERS = ['all', 'draft', 'sent', 'partial', 'received', 'cancelled'] as const
 const PO_STATUS_FILTERS = ['all', 'pending', 'partial', 'paid', 'cancelled'] as const
 
-function SummaryBar({ paid, pending }: { paid: number; pending: number }) {
+function SummaryBar({ paid, pending, paidLabel = 'Total Received', pendingLabel = 'Total Owed' }: { paid: number; pending: number; paidLabel?: string; pendingLabel?: string }) {
   return (
     <div className="grid grid-cols-2 gap-3 mb-5">
       <div className="bg-green-50 border border-green-100 rounded-xl px-5 py-3.5">
-        <p className="text-xs font-medium text-green-600 mb-0.5">Total Received</p>
+        <p className="text-xs font-medium text-green-600 mb-0.5">{paidLabel}</p>
         <p className="text-lg font-semibold text-green-800">{fmtAed(paid)}</p>
       </div>
       <div className="bg-amber-50 border border-amber-100 rounded-xl px-5 py-3.5">
-        <p className="text-xs font-medium text-amber-600 mb-0.5">Total Owed</p>
+        <p className="text-xs font-medium text-amber-600 mb-0.5">{pendingLabel}</p>
         <p className="text-lg font-semibold text-amber-800">{fmtAed(pending)}</p>
       </div>
     </div>
@@ -1281,7 +1281,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
       {/* Purchase Invoices tab */}
       {tab === 'purchase' && (
         <>
-          <SummaryBar paid={poSummary.paid} pending={poSummary.pending} />
+          <SummaryBar paid={poSummary.paid} pending={poSummary.pending} paidLabel="Total Paid" pendingLabel="Total Pending" />
 
           {/* Filters row */}
           <div className="flex flex-wrap items-center gap-3 mb-5">
