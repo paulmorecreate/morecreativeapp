@@ -842,6 +842,7 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
               return (
                 <tr
                   key={talent.id}
+                  onDoubleClick={() => router.push(`/talents/${talent.id}`)}
                   className={`transition-colors group cursor-pointer ${isSelected ? 'bg-blue-50/30' : i % 2 === 1 ? 'bg-slate-100' : 'bg-white'} hover:bg-blue-50/40`}
                 >
                   <td className="pl-4 pr-2 py-3">
