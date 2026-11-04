@@ -86,15 +86,23 @@ export function ProfitShareOverviewClient({ gridUsers: initialGrid, allMonths: i
     setEditingSalary(null)
     if (isNaN(amount) || amount < 0) return
     const supabase = createClient()
-    const existing = salaryPayments.find(p => p.user_profile_id === userId && p.month_key === monthKey)
-    if (existing) {
-      await supabase.from('monthly_salary_payments').update({ amount }).eq('id', existing.id)
-      setSalaryPayments(prev => prev.map(p => p.id === existing.id ? { ...p, amount } : p))
-    } else {
-      const { data } = await supabase.from('monthly_salary_payments')
-        .insert({ user_profile_id: userId, month_key: monthKey, amount, note: null })
-        .select('id, user_profile_id, month_key, amount, note').single()
-      if (data) setSalaryPayments(prev => [...prev, data])
+    if (amount === 0) {
+      // Treat 0 as "revert to base salary" — delete the override row
+      const existing = salaryPayments.find(p => p.user_profile_id === userId && p.month_key === monthKey)
+      if (existing) {
+        await supabase.from('monthly_salary_payments').delete().eq('id', existing.id)
+        setSalaryPayments(prev => prev.filter(p => p.id !== existing.id))
+      }
+      return
+    }
+    const { data } = await supabase.from('monthly_salary_payments')
+      .upsert({ user_profile_id: userId, month_key: monthKey, amount, note: null }, { onConflict: 'user_profile_id,month_key' })
+      .select('id, user_profile_id, month_key, amount, note').single()
+    if (data) {
+      setSalaryPayments(prev => {
+        const without = prev.filter(p => !(p.user_profile_id === userId && p.month_key === monthKey))
+        return [...without, data]
+      })
     }
   }
 
@@ -103,9 +111,14 @@ export function ProfitShareOverviewClient({ gridUsers: initialGrid, allMonths: i
     if (!oneOffForm.userId || isNaN(amount) || amount <= 0 || !addOneOffMonth) return
     const supabase = createClient()
     const { data } = await supabase.from('monthly_salary_payments')
-      .insert({ user_profile_id: oneOffForm.userId, month_key: addOneOffMonth, amount, note: oneOffForm.note || null })
+      .upsert({ user_profile_id: oneOffForm.userId, month_key: addOneOffMonth, amount, note: oneOffForm.note || null }, { onConflict: 'user_profile_id,month_key' })
       .select('id, user_profile_id, month_key, amount, note').single()
-    if (data) setSalaryPayments(prev => [...prev, data])
+    if (data) {
+      setSalaryPayments(prev => {
+        const without = prev.filter(p => !(p.user_profile_id === oneOffForm.userId && p.month_key === addOneOffMonth))
+        return [...without, data]
+      })
+    }
     setAddOneOffMonth(null)
     setOneOffForm({ userId: '', amount: '', note: '' })
   }
