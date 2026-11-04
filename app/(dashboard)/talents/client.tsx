@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Search, ExternalLink, ChevronRight, Trash2, ChevronUp, ChevronDown, Check, Minus, FileDown, FolderInput, Sparkles } from 'lucide-react'
+import { Plus, Search, ExternalLink, ChevronRight, Trash2, ChevronUp, ChevronDown, Check, Minus, FileDown, FolderInput, Sparkles, Upload, FileSpreadsheet, AlertCircle } from 'lucide-react'
 import { Talent, TalentCategory, TalentLevel } from '@/lib/supabase/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -155,6 +155,14 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
   const [exportingList, setExportingList] = useState(false)
   const [exportingListExcel, setExportingListExcel] = useState(false)
 
+  // Import
+  type ImportRow = { name: string; category: string | null; talent_level: string | null; email: string | null; phone: string | null; ig_link: string | null; tiktok_link: string | null; ig_followers: string | null; tiktok_followers: string | null; isDuplicate: boolean }
+  const [importOpen, setImportOpen] = useState(false)
+  const [importState, setImportState] = useState<'idle' | 'parsed' | 'importing' | 'done'>('idle')
+  const [importRows, setImportRows] = useState<ImportRow[]>([])
+  const [importResults, setImportResults] = useState<{ added: number; skipped: number; duplicates: string[] } | null>(null)
+  const existingNames = new Set(talents.map(t => t.name.toLowerCase()))
+
   async function handleExportList() {
     setExportingList(true)
     try {
@@ -278,6 +286,118 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
     } finally {
       setExportingListExcel(false)
     }
+  }
+
+  async function downloadTalentTemplate() {
+    const { Workbook } = await import('exceljs')
+    const wb = new Workbook()
+    const ws = wb.addWorksheet('Talents')
+
+    const categoryList = talentCategories.map(c => c.name).join(',')
+    const levelList = talentLevels.map(l => l.name).join(',')
+
+    ws.columns = [
+      { key: 'name',             width: 28 },
+      { key: 'category',         width: 16 },
+      { key: 'talent_level',     width: 16 },
+      { key: 'email',            width: 28 },
+      { key: 'phone',            width: 18 },
+      { key: 'ig_link',          width: 36 },
+      { key: 'tiktok_link',      width: 36 },
+      { key: 'ig_followers',     width: 16 },
+      { key: 'tiktok_followers', width: 18 },
+    ]
+
+    const headers = ['Name *', 'Category', 'Talent Level', 'Email', 'Phone', 'Instagram URL', 'TikTok URL', 'IG Followers', 'TikTok Followers']
+    const headerRow = ws.addRow(headers)
+    headerRow.height = 20
+    headerRow.eachCell((cell, col) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF111111' } }
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9 }
+      cell.alignment = { vertical: 'middle', horizontal: 'left' }
+      if (col === 1) cell.font = { ...cell.font, color: { argb: 'FFFFDD88' } }
+    })
+
+    for (let row = 2; row <= 201; row++) {
+      const r = ws.getRow(row)
+      r.height = 16
+      if (categoryList) {
+        ws.getCell(`B${row}`).dataValidation = { type: 'list', allowBlank: true, formulae: [`"${categoryList}"`], showErrorMessage: false }
+      }
+      if (levelList) {
+        ws.getCell(`C${row}`).dataValidation = { type: 'list', allowBlank: true, formulae: [`"${levelList}"`], showErrorMessage: false }
+      }
+      r.eachCell({ includeEmpty: true }, cell => {
+        cell.border = { bottom: { style: 'thin', color: { argb: 'FFEEEEEE' } } }
+        cell.font = { size: 9 }
+        cell.alignment = { vertical: 'middle' }
+      })
+    }
+
+    const buffer = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = 'talents-import-template.xlsx'; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleImportFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const { Workbook } = await import('exceljs')
+    const wb = new Workbook()
+    await wb.xlsx.load(await file.arrayBuffer())
+    const ws = wb.worksheets[0]
+    const rows: ImportRow[] = []
+    ws.eachRow((row, rowNum) => {
+      if (rowNum === 1) return
+      const cell = (c: number) => { const v = row.getCell(c).value; return v ? String(v).trim() : null }
+      const name = cell(1)
+      if (!name) return
+      rows.push({
+        name,
+        category:         cell(2),
+        talent_level:     cell(3),
+        email:            cell(4),
+        phone:            cell(5),
+        ig_link:          cell(6),
+        tiktok_link:      cell(7),
+        ig_followers:     cell(8),
+        tiktok_followers: cell(9),
+        isDuplicate:      existingNames.has(name.toLowerCase()),
+      })
+    })
+    setImportRows(rows)
+    setImportState('parsed')
+    e.target.value = ''
+  }
+
+  async function handleRunImport() {
+    setImportState('importing')
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const by = user?.email ?? null
+    const toInsert = importRows.filter(r => !r.isDuplicate)
+    const duplicates = importRows.filter(r => r.isDuplicate).map(r => r.name)
+    if (toInsert.length > 0) {
+      await supabase.from('talents').insert(
+        toInsert.map(r => ({
+          name: r.name,
+          category: r.category || null,
+          talent_level: r.talent_level || null,
+          email: r.email || null,
+          phone: r.phone || null,
+          ig_link: r.ig_link || null,
+          tiktok_link: r.tiktok_link || null,
+          ig_followers: r.ig_followers || null,
+          tiktok_followers: r.tiktok_followers || null,
+          created_by: by,
+        }))
+      )
+    }
+    setImportResults({ added: toInsert.length, skipped: importRows.length - toInsert.length, duplicates })
+    setImportState('done')
+    router.refresh()
   }
 
   // Add to Project
@@ -573,6 +693,14 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
               </Button>
             </Link>
           )}
+          <Button variant="secondary" onClick={downloadTalentTemplate}>
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            Template
+          </Button>
+          <Button variant="secondary" onClick={() => { setImportOpen(true); setImportState('idle'); setImportRows([]); setImportResults(null) }}>
+            <Upload className="w-3.5 h-3.5" />
+            Import
+          </Button>
           <Button onClick={() => setOpen(true)}>
             <Plus className="w-4 h-4" />
             Add Talent
@@ -988,6 +1116,102 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
               {deleting ? 'Deleting…' : 'Delete'}
             </button>
           </div>
+        </div>
+      </Modal>
+
+      {/* Import modal */}
+      <Modal open={importOpen} onClose={() => setImportOpen(false)} title="Import Talents">
+        <div className="space-y-4">
+          {importState === 'idle' && (
+            <div>
+              <p className="text-sm text-gray-600 mb-4">
+                Upload a completed template to bulk-add talents. Only rows with a <strong>Name</strong> are imported — all other fields are optional.
+              </p>
+              <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl px-6 py-10 cursor-pointer hover:border-gray-400 transition-colors">
+                <FileSpreadsheet className="w-8 h-8 text-gray-300" />
+                <span className="text-sm text-gray-500">Click to select .xlsx file</span>
+                <span className="text-xs text-gray-400">Use the Template button to download the correct format</span>
+                <input type="file" accept=".xlsx" className="hidden" onChange={handleImportFileChange} />
+              </label>
+            </div>
+          )}
+
+          {importState === 'parsed' && (
+            <div className="space-y-4">
+              <div className="flex items-start gap-3 bg-gray-50 rounded-xl px-4 py-3">
+                <FileSpreadsheet className="w-5 h-5 text-gray-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">{importRows.length} row{importRows.length !== 1 ? 's' : ''} with names found</p>
+                  {importRows.filter(r => r.isDuplicate).length > 0 && (
+                    <p className="text-xs text-amber-600 mt-0.5 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      {importRows.filter(r => r.isDuplicate).length} duplicate{importRows.filter(r => r.isDuplicate).length !== 1 ? 's' : ''} will be skipped (name already exists)
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {importRows.filter(r => r.isDuplicate).length > 0 && (
+                <div className="max-h-28 overflow-y-auto rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 space-y-0.5">
+                  {importRows.filter(r => r.isDuplicate).map(r => (
+                    <p key={r.name} className="text-xs text-amber-700">{r.name}</p>
+                  ))}
+                </div>
+              )}
+
+              <div className="rounded-lg border border-gray-100 overflow-hidden max-h-56 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="px-3 py-2 text-left font-semibold text-gray-500">Name</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-500">Category</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-500">Level</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-500">Email</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {importRows.map((r, i) => (
+                      <tr key={i} className={r.isDuplicate ? 'opacity-40' : ''}>
+                        <td className="px-3 py-1.5 text-gray-900 font-medium">{r.name}{r.isDuplicate && <span className="ml-1.5 text-amber-500 text-[10px]">duplicate</span>}</td>
+                        <td className="px-3 py-1.5 text-gray-500">{r.category ?? '—'}</td>
+                        <td className="px-3 py-1.5 text-gray-500">{r.talent_level ?? '—'}</td>
+                        <td className="px-3 py-1.5 text-gray-500">{r.email ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex justify-between items-center pt-1">
+                <button onClick={() => { setImportState('idle'); setImportRows([]) }} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">← Choose different file</button>
+                <Button onClick={handleRunImport} disabled={importRows.filter(r => !r.isDuplicate).length === 0}>
+                  Import {importRows.filter(r => !r.isDuplicate).length} Talent{importRows.filter(r => !r.isDuplicate).length !== 1 ? 's' : ''}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {importState === 'importing' && (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-800 rounded-full animate-spin" />
+              <p className="text-sm text-gray-500">Importing…</p>
+            </div>
+          )}
+
+          {importState === 'done' && importResults && (
+            <div className="space-y-4">
+              <div className="bg-green-50 border border-green-100 rounded-xl px-4 py-4 text-center">
+                <p className="text-2xl font-bold text-green-700">{importResults.added}</p>
+                <p className="text-sm text-green-600 mt-0.5">talent{importResults.added !== 1 ? 's' : ''} added</p>
+              </div>
+              {importResults.skipped > 0 && (
+                <p className="text-xs text-gray-400 text-center">{importResults.skipped} row{importResults.skipped !== 1 ? 's' : ''} skipped (already exist)</p>
+              )}
+              <div className="flex justify-end">
+                <Button onClick={() => setImportOpen(false)}>Done</Button>
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
     </div>
