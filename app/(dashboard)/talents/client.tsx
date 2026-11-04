@@ -407,6 +407,28 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
     e.target.value = ''
   }
 
+  function exportFlaggedRows() {
+    const flagged = importRows.filter(r => r.isDuplicate || r.similarTo)
+    if (flagged.length === 0) return
+    const headers = ['Name', 'Flag', 'Reason', 'Category', 'Talent Level', 'Email', 'Phone', 'Country', 'Notes']
+    const rows = flagged.map(r => [
+      r.name,
+      r.isDuplicate ? 'Exact duplicate — skipped' : 'Similar name — will import',
+      r.isDuplicate ? 'Already exists in the system' : `Similar to: ${r.similarTo}`,
+      r.category ?? '',
+      r.talent_level ?? '',
+      r.email ?? '',
+      r.phone ?? '',
+      r.country ?? '',
+      r.notes ?? '',
+    ])
+    const csv = [headers, ...rows].map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = 'talents-import-flagged.csv'; a.click()
+    URL.revokeObjectURL(url)
+  }
+
   async function handleRunImport() {
     setImportState('importing')
     const supabase = createClient()
@@ -1223,9 +1245,20 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
 
               <div className="flex justify-between items-center pt-1">
                 <button onClick={() => { setImportState('idle'); setImportRows([]) }} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">← Choose different file</button>
-                <Button onClick={handleRunImport} disabled={importRows.filter(r => !r.isDuplicate).length === 0}>
-                  Import {importRows.filter(r => !r.isDuplicate).length} Talent{importRows.filter(r => !r.isDuplicate).length !== 1 ? 's' : ''}
-                </Button>
+                <div className="flex items-center gap-2">
+                  {importRows.some(r => r.isDuplicate || r.similarTo) && (
+                    <button
+                      onClick={exportFlaggedRows}
+                      className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors"
+                    >
+                      <FileDown className="w-3.5 h-3.5" />
+                      Export flagged ({importRows.filter(r => r.isDuplicate || r.similarTo).length})
+                    </button>
+                  )}
+                  <Button onClick={handleRunImport} disabled={importRows.filter(r => !r.isDuplicate).length === 0}>
+                    Import {importRows.filter(r => !r.isDuplicate).length} Talent{importRows.filter(r => !r.isDuplicate).length !== 1 ? 's' : ''}
+                  </Button>
+                </div>
               </div>
             </div>
           )}
