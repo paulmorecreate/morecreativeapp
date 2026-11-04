@@ -248,6 +248,8 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
   const [newFxMonth, setNewFxMonth] = useState(() => new Date().getMonth() + 1)
   const [newFxRate, setNewFxRate] = useState('')
   const [fxSaving, setFxSaving] = useState(false)
+  const [editingFxId, setEditingFxId] = useState<string | null>(null)
+  const [editingFxRate, setEditingFxRate] = useState('')
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null)
   const [tbYear, setTbYear] = useState(new Date().getFullYear())
   const [plYear, setPlYear] = useState(new Date().getFullYear())
@@ -663,6 +665,16 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
     const supabase = createClient()
     await supabase.from('monthly_fx_rates').delete().eq('id', id)
     setFxRates(prev => prev.filter(r => r.id !== id))
+  }
+
+  async function handleUpdateFxRate(id: string) {
+    const rate = parseFloat(editingFxRate)
+    if (!rate || rate <= 0) return
+    const supabase = createClient()
+    await supabase.from('monthly_fx_rates').update({ rate_to_aed: rate }).eq('id', id)
+    setFxRates(prev => prev.map(r => r.id === id ? { ...r, rate_to_aed: rate } : r))
+    setEditingFxId(null)
+    setEditingFxRate('')
   }
 
   // ── Transaction table ──────────────────────────────────────────────────────
@@ -1287,14 +1299,45 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
                       <td className="px-4 py-2 text-gray-700">
                         {new Date(r.year, r.month - 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
                       </td>
-                      <td className="px-4 py-2 text-right font-mono text-gray-700">{r.rate_to_aed}</td>
+                      <td className="px-4 py-2 text-right font-mono text-gray-700">
+                        {editingFxId === r.id ? (
+                          <input
+                            type="number"
+                            step="0.0001"
+                            autoFocus
+                            value={editingFxRate}
+                            onChange={e => setEditingFxRate(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') handleUpdateFxRate(r.id); if (e.key === 'Escape') { setEditingFxId(null); setEditingFxRate('') } }}
+                            className="text-xs bg-white border border-gray-300 rounded px-2 py-0.5 w-24 font-mono text-right focus:outline-none focus:border-gray-500"
+                          />
+                        ) : (
+                          <span
+                            onClick={() => { setEditingFxId(r.id); setEditingFxRate(String(r.rate_to_aed)) }}
+                            className="cursor-pointer hover:text-blue-600 transition-colors"
+                            title="Click to edit"
+                          >
+                            {r.rate_to_aed}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-2">
-                        <button
-                          onClick={() => handleDeleteFxRate(r.id)}
-                          className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {editingFxId === r.id ? (
+                          <div className="flex items-center gap-1.5">
+                            <button onClick={() => handleUpdateFxRate(r.id)} className="text-green-600 hover:text-green-700 transition-colors">
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => { setEditingFxId(null); setEditingFxRate('') }} className="text-gray-400 hover:text-gray-600 transition-colors">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleDeleteFxRate(r.id)}
+                            className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
