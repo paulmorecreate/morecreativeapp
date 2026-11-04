@@ -156,12 +156,34 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
   const [exportingListExcel, setExportingListExcel] = useState(false)
 
   // Import
-  type ImportRow = { name: string; category: string | null; talent_level: string | null; email: string | null; phone: string | null; ig_link: string | null; tiktok_link: string | null; ig_followers: string | null; tiktok_followers: string | null; isDuplicate: boolean }
+  type ImportRow = { name: string; category: string | null; talent_level: string | null; email: string | null; phone: string | null; ig_link: string | null; tiktok_link: string | null; ig_followers: string | null; tiktok_followers: string | null; isDuplicate: boolean; similarTo: string | null }
   const [importOpen, setImportOpen] = useState(false)
   const [importState, setImportState] = useState<'idle' | 'parsed' | 'importing' | 'done'>('idle')
   const [importRows, setImportRows] = useState<ImportRow[]>([])
   const [importResults, setImportResults] = useState<{ added: number; skipped: number; duplicates: string[] } | null>(null)
   const existingNames = new Set(talents.map(t => t.name.toLowerCase()))
+
+  function levenshtein(a: string, b: string): number {
+    const m = a.length, n = b.length
+    const dp = Array.from({ length: m + 1 }, (_, i) => Array.from({ length: n + 1 }, (_, j) => i === 0 ? j : j === 0 ? i : 0))
+    for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1])
+    return dp[m][n]
+  }
+
+  function closestExistingName(name: string): string | null {
+    const norm = name.toLowerCase()
+    if (norm.length < 4) return null
+    let best: string | null = null
+    let bestSim = 0
+    for (const existing of talents.map(t => t.name)) {
+      const enorm = existing.toLowerCase()
+      if (enorm === norm) continue
+      const sim = 1 - levenshtein(norm, enorm) / Math.max(norm.length, enorm.length)
+      if (sim >= 0.80 && sim > bestSim) { best = existing; bestSim = sim }
+    }
+    return best
+  }
 
   async function handleExportList() {
     setExportingList(true)
@@ -354,6 +376,7 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
       const cell = (c: number) => { const v = row.getCell(c).value; return v ? String(v).trim() : null }
       const name = cell(1)
       if (!name) return
+      const isDuplicate = existingNames.has(name.toLowerCase())
       rows.push({
         name,
         category:         cell(2),
@@ -364,7 +387,8 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
         tiktok_link:      cell(7),
         ig_followers:     cell(8),
         tiktok_followers: cell(9),
-        isDuplicate:      existingNames.has(name.toLowerCase()),
+        isDuplicate,
+        similarTo:        isDuplicate ? null : closestExistingName(name),
       })
     })
     setImportRows(rows)
@@ -1140,28 +1164,26 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
             <div className="space-y-4">
               <div className="flex items-start gap-3 bg-gray-50 rounded-xl px-4 py-3">
                 <FileSpreadsheet className="w-5 h-5 text-gray-400 shrink-0 mt-0.5" />
-                <div>
+                <div className="space-y-0.5">
                   <p className="text-sm font-medium text-gray-900">{importRows.length} row{importRows.length !== 1 ? 's' : ''} with names found</p>
                   {importRows.filter(r => r.isDuplicate).length > 0 && (
-                    <p className="text-xs text-amber-600 mt-0.5 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" />
-                      {importRows.filter(r => r.isDuplicate).length} duplicate{importRows.filter(r => r.isDuplicate).length !== 1 ? 's' : ''} will be skipped (name already exists)
+                    <p className="text-xs text-red-600 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 shrink-0" />
+                      {importRows.filter(r => r.isDuplicate).length} exact duplicate{importRows.filter(r => r.isDuplicate).length !== 1 ? 's' : ''} — will be skipped
+                    </p>
+                  )}
+                  {importRows.filter(r => r.similarTo).length > 0 && (
+                    <p className="text-xs text-amber-600 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 shrink-0" />
+                      {importRows.filter(r => r.similarTo).length} close match{importRows.filter(r => r.similarTo).length !== 1 ? 'es' : ''} — review before importing
                     </p>
                   )}
                 </div>
               </div>
 
-              {importRows.filter(r => r.isDuplicate).length > 0 && (
-                <div className="max-h-28 overflow-y-auto rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 space-y-0.5">
-                  {importRows.filter(r => r.isDuplicate).map(r => (
-                    <p key={r.name} className="text-xs text-amber-700">{r.name}</p>
-                  ))}
-                </div>
-              )}
-
-              <div className="rounded-lg border border-gray-100 overflow-hidden max-h-56 overflow-y-auto">
+              <div className="rounded-lg border border-gray-100 overflow-hidden max-h-64 overflow-y-auto">
                 <table className="w-full text-xs">
-                  <thead>
+                  <thead className="sticky top-0">
                     <tr className="bg-gray-50 border-b border-gray-100">
                       <th className="px-3 py-2 text-left font-semibold text-gray-500">Name</th>
                       <th className="px-3 py-2 text-left font-semibold text-gray-500">Category</th>
@@ -1171,8 +1193,12 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {importRows.map((r, i) => (
-                      <tr key={i} className={r.isDuplicate ? 'opacity-40' : ''}>
-                        <td className="px-3 py-1.5 text-gray-900 font-medium">{r.name}{r.isDuplicate && <span className="ml-1.5 text-amber-500 text-[10px]">duplicate</span>}</td>
+                      <tr key={i} className={r.isDuplicate ? 'opacity-40 bg-red-50/40' : r.similarTo ? 'bg-amber-50/60' : ''}>
+                        <td className="px-3 py-1.5 font-medium">
+                          <span className={r.isDuplicate ? 'text-gray-400' : 'text-gray-900'}>{r.name}</span>
+                          {r.isDuplicate && <span className="ml-1.5 inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-600">exact duplicate</span>}
+                          {r.similarTo && <span className="ml-1.5 inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700">similar to: {r.similarTo}</span>}
+                        </td>
                         <td className="px-3 py-1.5 text-gray-500">{r.category ?? '—'}</td>
                         <td className="px-3 py-1.5 text-gray-500">{r.talent_level ?? '—'}</td>
                         <td className="px-3 py-1.5 text-gray-500">{r.email ?? '—'}</td>
