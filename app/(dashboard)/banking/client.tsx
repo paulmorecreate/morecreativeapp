@@ -421,6 +421,7 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
       let cmp = 0
       if (txSortCol === 'date') {
         cmp = a.date.localeCompare(b.date)
+        if (cmp === 0) cmp = a.created_at.localeCompare(b.created_at)
         if (cmp === 0) cmp = (a.sort_order ?? 0) - (b.sort_order ?? 0)
       } else if (txSortCol === 'description') {
         cmp = a.description.localeCompare(b.description)
