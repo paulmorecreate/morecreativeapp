@@ -841,11 +841,27 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {rows.map(t => {
+                {rows.map((t, i) => {
                   const isExpanded = expandedTxId === t.id
                   const colSpan = 7 + (showBalance ? 1 : 0) + (showAedEquiv ? 1 : 0) + (showAedBalance ? 1 : 0)
+                  const prevAccount = i > 0 ? rows[i - 1].account_number : null
+                  const showBankDivider = prevAccount !== null && prevAccount !== t.account_number
+                  const bankLabel = (acct: string) => acct === '019101880984' ? 'Mashreq Bank' : `ADCB Bank`
                   return (
                   <React.Fragment key={t.id}>
+                  {showBankDivider && (
+                    <tr>
+                      <td colSpan={colSpan} className="px-0 py-0">
+                        <div className="flex items-center gap-3 px-4 py-2 bg-gradient-to-r from-zinc-800 to-zinc-700 text-white text-xs font-medium">
+                          <span className="opacity-60">↑</span>
+                          <span>{bankLabel(rows[i - 1].account_number)} · {rows[i - 1].account_number}</span>
+                          <span className="opacity-40 mx-1">|</span>
+                          <span className="opacity-60">↓</span>
+                          <span>{bankLabel(t.account_number)} · {t.account_number}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                   <tr
                     onClick={() => setExpandedTxId(isExpanded ? null : t.id)}
                     className={cn('transition-colors cursor-pointer', !t.accounting_category ? 'bg-amber-50/40 hover:bg-amber-50' : 'hover:bg-gray-50', isExpanded && '!bg-gray-100')}
