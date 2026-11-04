@@ -96,13 +96,18 @@ export function InvoiceDocument({
     settings.company_vat_number ? `VAT Number ${settings.company_vat_number}` : null,
   ].filter(Boolean).join('\n')
 
-  const useEur = invoice.currency === 'EUR'
-  const bank = useEur ? {
+  const bank = invoice.currency === 'EUR' ? {
     holder: settings.eur_bank_account_holder,
     name: settings.eur_bank_name,
     account: settings.eur_bank_account_number,
     iban: settings.eur_bank_iban,
     swift: settings.eur_bank_swift,
+  } : invoice.currency === 'USD' ? {
+    holder: settings.usd_bank_account_holder,
+    name: settings.usd_bank_name,
+    account: settings.usd_bank_account_number,
+    iban: settings.usd_bank_iban,
+    swift: settings.usd_bank_swift,
   } : {
     holder: settings.bank_account_holder,
     name: settings.bank_name,

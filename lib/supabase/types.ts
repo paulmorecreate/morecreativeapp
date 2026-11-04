@@ -354,6 +354,11 @@ export interface InvoiceSettings {
   eur_bank_account_number: string | null
   eur_bank_iban: string | null
   eur_bank_swift: string | null
+  usd_bank_account_holder: string | null
+  usd_bank_name: string | null
+  usd_bank_account_number: string | null
+  usd_bank_iban: string | null
+  usd_bank_swift: string | null
   updated_at: string
 }
 

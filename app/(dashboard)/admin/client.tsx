@@ -680,6 +680,11 @@ function InvoiceSettingsPanel({ settings }: { settings: InvoiceSettings | null }
     eur_bank_account_number: settings?.eur_bank_account_number ?? '',
     eur_bank_iban: settings?.eur_bank_iban ?? '',
     eur_bank_swift: settings?.eur_bank_swift ?? '',
+    usd_bank_account_holder: settings?.usd_bank_account_holder ?? '',
+    usd_bank_name: settings?.usd_bank_name ?? '',
+    usd_bank_account_number: settings?.usd_bank_account_number ?? '',
+    usd_bank_iban: settings?.usd_bank_iban ?? '',
+    usd_bank_swift: settings?.usd_bank_swift ?? '',
   })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -728,7 +733,7 @@ function InvoiceSettingsPanel({ settings }: { settings: InvoiceSettings | null }
         </div>
         <div>
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Bank Details — AED / Default</p>
-          <p className="text-xs text-gray-400 mb-3">Used on invoices in AED, GBP, and USD</p>
+          <p className="text-xs text-gray-400 mb-3">Used on invoices in AED and GBP</p>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs text-gray-600">Account Holder Name</label>
@@ -775,6 +780,32 @@ function InvoiceSettingsPanel({ settings }: { settings: InvoiceSettings | null }
             <div className="space-y-1">
               <label className="text-xs text-gray-600">SWIFT / BIC</label>
               <Input value={form.eur_bank_swift} onChange={e => setForm(f => ({ ...f, eur_bank_swift: e.target.value }))} />
+            </div>
+          </div>
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Bank Details — USD</p>
+          <p className="text-xs text-gray-400 mb-3">Used on invoices in USD</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs text-gray-600">Account Holder Name</label>
+              <Input value={form.usd_bank_account_holder} onChange={e => setForm(f => ({ ...f, usd_bank_account_holder: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-gray-600">Bank Name</label>
+              <Input value={form.usd_bank_name} onChange={e => setForm(f => ({ ...f, usd_bank_name: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-gray-600">Account Number</label>
+              <Input value={form.usd_bank_account_number} onChange={e => setForm(f => ({ ...f, usd_bank_account_number: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-gray-600">IBAN</label>
+              <Input value={form.usd_bank_iban} onChange={e => setForm(f => ({ ...f, usd_bank_iban: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-gray-600">SWIFT / BIC</label>
+              <Input value={form.usd_bank_swift} onChange={e => setForm(f => ({ ...f, usd_bank_swift: e.target.value }))} />
             </div>
           </div>
         </div>

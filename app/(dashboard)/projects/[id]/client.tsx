@@ -1344,6 +1344,9 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   const [gridDetailSearchQ, setGridDetailSearchQ] = useState('')
   const [poolStatusFilter, setPoolStatusFilter] = useState<string>('all')
 
+  // Collapse state for the entire Lineup section
+  const [lineupCollapsed, setLineupCollapsed] = useState(false)
+
   // Collapse state for brand show cards — all collapsed by default
   const [collapsedShows, setCollapsedShows] = useState<Set<string>>(() => new Set(brandShows.map(s => s.id)))
   function toggleShowCollapse(showId: string) {
@@ -2068,8 +2071,11 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
       <div>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
-            <h2 className="text-sm font-semibold text-gray-900">Lineup</h2>
-            {brandShows.length > 0 && lineupView === 'list' && (
+            <button onClick={() => setLineupCollapsed(c => !c)} className="flex items-center gap-1.5 group">
+              <h2 className="text-sm font-semibold text-gray-900 group-hover:text-gray-600 transition-colors">Lineup</h2>
+              <ChevronDown className={cn('w-3.5 h-3.5 text-gray-400 transition-transform duration-150 group-hover:text-gray-600', lineupCollapsed && '-rotate-90')} />
+            </button>
+            {!lineupCollapsed && brandShows.length > 0 && lineupView === 'list' && (
               <div className="flex items-center gap-1.5 text-xs text-gray-400">
                 <button onClick={() => setCollapsedShows(new Set(brandShows.map(s => s.id)))} className="hover:text-gray-600 transition-colors">collapse all</button>
                 <span>·</span>
@@ -2111,6 +2117,8 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
             )}
           </div>
         </div>
+
+        {!lineupCollapsed && (<>
 
         {/* Status filter pills */}
         {brandShows.length > 0 && (
@@ -2426,6 +2434,8 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
             )
           })}
         </div>
+
+        </>)}
 
         {/* Talent pool — always visible regardless of view mode */}
         {projectTalents.length > 0 && (
