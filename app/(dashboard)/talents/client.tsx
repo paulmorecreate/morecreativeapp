@@ -156,7 +156,7 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
   const [exportingListExcel, setExportingListExcel] = useState(false)
 
   // Import
-  type ImportRow = { name: string; category: string | null; talent_level: string | null; email: string | null; phone: string | null; ig_link: string | null; tiktok_link: string | null; ig_followers: string | null; tiktok_followers: string | null; isDuplicate: boolean; similarTo: string | null }
+  type ImportRow = { name: string; category: string | null; talent_level: string | null; email: string | null; phone: string | null; ig_link: string | null; tiktok_link: string | null; ig_followers: string | null; tiktok_followers: string | null; country: string | null; notes: string | null; isDuplicate: boolean; similarTo: string | null }
   const [importOpen, setImportOpen] = useState(false)
   const [importState, setImportState] = useState<'idle' | 'parsed' | 'importing' | 'done'>('idle')
   const [importRows, setImportRows] = useState<ImportRow[]>([])
@@ -315,6 +315,12 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
     const wb = new Workbook()
     const ws = wb.addWorksheet('Talents')
 
+    // Hidden sheet for country dropdown (formula string limit is ~255 chars; 196 countries needs a range ref)
+    const wsCountries = wb.addWorksheet('_Countries')
+    wsCountries.state = 'veryHidden'
+    COUNTRIES.forEach((c, i) => { wsCountries.getCell(`A${i + 1}`).value = c.value })
+    wb.definedNames.add(`_Countries!$A$1:$A$${COUNTRIES.length}`, 'CountryList')
+
     const categoryList = talentCategories.map(c => c.name).join(',')
     const levelList = talentLevels.map(l => l.name).join(',')
 
@@ -328,9 +334,11 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
       { key: 'tiktok_link',      width: 36 },
       { key: 'ig_followers',     width: 16 },
       { key: 'tiktok_followers', width: 18 },
+      { key: 'country',          width: 20 },
+      { key: 'notes',            width: 40 },
     ]
 
-    const headers = ['Name *', 'Category', 'Talent Level', 'Email', 'Phone', 'Instagram URL', 'TikTok URL', 'IG Followers', 'TikTok Followers']
+    const headers = ['Name *', 'Category', 'Talent Level', 'Email', 'Phone', 'Instagram URL', 'TikTok URL', 'IG Followers', 'TikTok Followers', 'Country', 'Notes']
     const headerRow = ws.addRow(headers)
     headerRow.height = 20
     headerRow.eachCell((cell, col) => {
@@ -349,6 +357,7 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
       if (levelList) {
         ws.getCell(`C${row}`).dataValidation = { type: 'list', allowBlank: true, formulae: [`"${levelList}"`], showErrorMessage: false }
       }
+      ws.getCell(`J${row}`).dataValidation = { type: 'list', allowBlank: true, formulae: ['CountryList'], showErrorMessage: false }
       r.eachCell({ includeEmpty: true }, cell => {
         cell.border = { bottom: { style: 'thin', color: { argb: 'FFEEEEEE' } } }
         cell.font = { size: 9 }
@@ -387,6 +396,8 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
         tiktok_link:      cell(7),
         ig_followers:     cell(8),
         tiktok_followers: cell(9),
+        country:          cell(10),
+        notes:            cell(11),
         isDuplicate,
         similarTo:        isDuplicate ? null : closestExistingName(name),
       })
@@ -415,6 +426,8 @@ export function TalentsClient({ talents, talentCategories, allAgents, agentTypes
           tiktok_link: r.tiktok_link || null,
           ig_followers: r.ig_followers || null,
           tiktok_followers: r.tiktok_followers || null,
+          country: r.country || null,
+          notes: r.notes || null,
           created_by: by,
         }))
       )
