@@ -83,6 +83,13 @@ When a feature needs the user's timezone, default to `Intl.DateTimeFormat().reso
 **Why:** Internal app with a small team. Browser timezone is accurate for their device without any setup friction. No travel edge case was a concern.
 **How to apply:** Don't over-engineer per-user timezone storage unless Paul specifically raises a cross-device or travel requirement. Browser timezone first.
 
+## Zero salary means "not yet paid" — never treat it as "no entry"
+
+When a user saves AED 0 as a salary override in Team Earnings, that is an intentional record meaning payment hasn't happened yet this month (e.g. Paul gets paid on the 15th). Do NOT delete the DB row or skip displaying the cell on save.
+
+**Why:** Initial fix deleted the override row when amount was 0. Paul corrected this: "I still need the ability to make a salary zero until it's paid."
+**How to apply:** Always upsert with the given amount, even if 0. Display "AED 0" in the cell, not "—". Only show "—" when no salary record exists at all.
+
 ## Don't show placeholder rows for missing values in data cells
 
 In cells that show multiple data rows (e.g. salary + commission in Team Earnings), only render a row if the value is actually present. Never show "comm. —" or "salary —" placeholders just to pad layout.

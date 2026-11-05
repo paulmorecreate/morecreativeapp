@@ -9,6 +9,15 @@ metadata:
 
 # Roadmap
 
+## Recently completed (2026-11-02)
+
+- **Credit Notes**: full feature on Sales Invoices. Same `invoices` table with `document_type='credit_note'` + `linked_invoice_id`. CN-YYYY-XXXX numbering. Line items copied as negatives — auto-reduces GP/profit totals. Purple badge in list, "CN issued" on originals. PDF renders with purple banner, credit amount in red.
+- **Finance label rename**: Sales Invoice summary bar → "Total Received" / "Total Owed". Purchase tab retains "Total Paid" / "Total Pending". Shared `SummaryBar` component with optional `paidLabel`/`pendingLabel` props.
+- **Talent Pool row numbers**: sequential `#` column left of drag handle in Project → Overview → Talent Pool. `text-gray-500 font-medium tabular-nums`.
+- **Team Earnings zero salary fix**: UNIQUE constraint on `(user_profile_id, month_key)` in `monthly_salary_payments`. Saves use upsert. Zero amount is valid ("not yet paid") — shows "AED 0" not "—". Deduplicated stale rows from DB.
+- **Talent import template**: Country (dropdown via hidden `_Countries` sheet + named range `CountryList`) + Notes columns. Import preview shows "Export flagged (N)" CSV download for duplicates/fuzzy matches.
+- **Talent double-click**: double-clicking a talent row on `/talents` navigates to the talent detail page.
+
 ## Recently completed (2026-10-29)
 
 - **Brand Show status**: `project_brands.status` column (In Conversation / Confirmed / Rejected / Cancelled). Dropdown in header bar; header gradient colour driven by status (default = red).
