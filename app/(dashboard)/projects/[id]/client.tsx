@@ -2594,6 +2594,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-50">
+                  <th className="w-8 px-3 py-2 text-xs font-medium text-gray-300 text-right">#</th>
                   <th className="w-8 px-3 py-2" />
                   <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Talent</th>
                   <th className="text-left px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wide">Status</th>
@@ -2605,10 +2606,11 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                 {[...projectTalents]
                   .filter(pt => poolStatusFilter === 'all' || (pt.status ?? null) === poolStatusFilter)
                   .sort(byStatusThenName)
-                  .map(pt => (
+                  .map((pt, idx) => (
                     <InlineProjectTalentRow
                       key={pt.id}
                       pt={pt}
+                      rowNumber={idx + 1}
                       isDragging={draggingTalentId === pt.talent_id}
                       brandShows={brandShows}
                       onDragStart={() => setDraggingTalentId(pt.talent_id ?? null)}
@@ -3405,6 +3407,7 @@ function TalentStatusBadge({ value }: { value: string | null }) {
 
 function InlineProjectTalentRow({
   pt,
+  rowNumber,
   isDragging,
   brandShows,
   onDragStart,
@@ -3413,6 +3416,7 @@ function InlineProjectTalentRow({
   onRemove,
 }: {
   pt: ProjectTalent
+  rowNumber: number
   isDragging: boolean
   brandShows: BrandShow[]
   onDragStart: () => void
@@ -3475,6 +3479,9 @@ function InlineProjectTalentRow({
         isDragging ? 'opacity-40' : ''
       )}
     >
+      {/* Row number */}
+      <td className="px-3 py-3 w-8 text-right text-xs text-gray-300 tabular-nums">{rowNumber}</td>
+
       {/* Drag handle */}
       <td className="px-3 py-3 w-8">
         <GripVertical className="w-4 h-4 text-gray-300 cursor-grab active:cursor-grabbing" />
