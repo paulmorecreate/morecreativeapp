@@ -3480,7 +3480,7 @@ function InlineProjectTalentRow({
       )}
     >
       {/* Row number */}
-      <td className="px-3 py-3 w-8 text-right text-xs text-gray-300 tabular-nums">{rowNumber}</td>
+      <td className="px-3 py-3 w-8 text-right text-xs text-gray-500 font-medium tabular-nums">{rowNumber}</td>
 
       {/* Drag handle */}
       <td className="px-3 py-3 w-8">
