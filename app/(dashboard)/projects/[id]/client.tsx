@@ -1015,6 +1015,7 @@ function ProjectFinanceTab({
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Billed To</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Due Date</th>
                   <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Amount</th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">AED equiv.</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
                   {canEdit && <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500">In PS</th>}
                   {canEdit && <th className="px-3 py-3 w-10" />}
@@ -1054,6 +1055,11 @@ function ProjectFinanceTab({
                           <span className="text-amber-600">{fmtAmount(inv.currency, lineTotal - inv.amount_paid)} due</span>
                         </div>
                       )}
+                    </td>
+                    <td className="px-5 py-3 text-right text-gray-400 text-xs">
+                      {inv.currency !== 'AED'
+                        ? `AED ${toAED(lineTotal, inv.currency, currencyRates).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+                        : '—'}
                     </td>
                     <td className="px-5 py-3">
                       <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', INVOICE_STATUS_BADGE[inv.status] ?? '')}>
@@ -1122,6 +1128,7 @@ function ProjectFinanceTab({
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Supplier</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Issue Date</th>
                   <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">Gross Amount</th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500">AED equiv.</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
                   {canEdit && <th className="px-3 py-3 w-10" />}
                 </tr>
@@ -1138,6 +1145,11 @@ function ProjectFinanceTab({
                     </td>
                     <td className="px-5 py-3 text-right font-medium text-gray-900">
                       {inv.currency} {inv.gross_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-5 py-3 text-right text-gray-400 text-xs">
+                      {inv.currency !== 'AED'
+                        ? `AED ${(inv.gross_amount * inv.fx_rate).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+                        : '—'}
                     </td>
                     <td className="px-5 py-3">
                       <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium capitalize', PO_STATUS_BADGE[inv.status] ?? '')}>

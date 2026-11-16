@@ -64,8 +64,10 @@ function rateToAed(currency: string, rates: CurrencyRate[]): number {
   return rates.find(r => r.currency === currency)?.rate_to_aed ?? 1
 }
 
-type InvoiceRow = Invoice & { project: { id: string; name: string } | null; line_items?: { rate: number; qty: number }[] }
-type PurchaseInvoiceRow = PurchaseInvoice & { project: { id: string; name: string } | null }
+type InvoiceRow = Invoice & { project: { id: string; name: string; status: string } | null; line_items?: { rate: number; qty: number }[] }
+type PurchaseInvoiceRow = PurchaseInvoice & { project: { id: string; name: string; status: string } | null }
+type ProjectIncomeRow = { id: string; project_id: string; description: string; type: string; amount: number; currency: string; status: string; date: string | null; project: { id: string; name: string; status: string } | null }
+type ProjectExpenseRow = { id: string; project_id: string; description: string; category: string; amount: number; currency: string; date: string | null; project: { id: string; name: string; status: string } | null }
 
 type UserProfile = { id: string; first_name: string | null; surname: string | null; email: string; color: string | null }
 
@@ -77,7 +79,9 @@ type Props = {
   salaries: Salary[]
   operatingCosts: OperatingCost[]
   allUsers: UserProfile[]
-  initialTab: 'overview' | 'sales' | 'purchase' | 'running' | 'vat'
+  projectIncome: ProjectIncomeRow[]
+  projectExpenses: ProjectExpenseRow[]
+  initialTab: 'overview' | 'sales' | 'purchase' | 'running' | 'vat' | 'forecast'
 }
 
 function getQuarterKey(dateStr: string | null): string | null {
@@ -148,8 +152,8 @@ function AnnualStatusBadge({ dueDate }: { dueDate: string | null }) {
   return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">OK</span>
 }
 
-const SALE_STATUS_FILTERS = ['all', 'draft', 'sent', 'partial', 'received', 'cancelled'] as const
-const PO_STATUS_FILTERS = ['all', 'pending', 'partial', 'paid', 'cancelled'] as const
+const SALE_STATUS_FILTERS = ['all', 'outstanding', 'draft', 'sent', 'partial', 'received', 'cancelled'] as const
+const PO_STATUS_FILTERS = ['all', 'outstanding', 'pending', 'partial', 'paid', 'cancelled'] as const
 
 function SummaryBar({ paid, pending, paidLabel = 'Total Received', pendingLabel = 'Total Owed' }: { paid: number; pending: number; paidLabel?: string; pendingLabel?: string }) {
   return (
@@ -170,13 +174,13 @@ const EMPTY_ANNUAL_FORM = { item: '', category: 'Licence', amount_aed: '', recur
 const EMPTY_SALARY_FORM = { employee: '', role: '', monthly_salary_aed: '', payment_due_date: '', notes: '', user_profile_id: '' }
 const EMPTY_OP_FORM = { expense_item: '', category: 'Software', frequency: 'monthly' as OperatingCost['frequency'], cost_aed: '', notes: '' }
 
-export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annualExpenses: initialAnnualExpenses, salaries: initialSalaries, operatingCosts: initialOperatingCosts, allUsers, initialTab }: Props) {
+export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annualExpenses: initialAnnualExpenses, salaries: initialSalaries, operatingCosts: initialOperatingCosts, allUsers, projectIncome, projectExpenses, initialTab }: Props) {
   const router = useRouter()
-  const [tab, setTab] = useState<'overview' | 'sales' | 'purchase' | 'running' | 'vat'>(initialTab)
+  const [tab, setTab] = useState<'overview' | 'sales' | 'purchase' | 'running' | 'vat' | 'forecast'>(initialTab)
   const [expandedVatQuarter, setExpandedVatQuarter] = useState<string | null>(null)
-  const [saleFilter, setSaleFilter] = useState<'all' | 'draft' | 'sent' | 'partial' | 'received' | 'cancelled'>('all')
+  const [saleFilter, setSaleFilter] = useState<'all' | 'outstanding' | 'draft' | 'sent' | 'partial' | 'received' | 'cancelled'>('all')
   const [saleSearch, setSaleSearch] = useState('')
-  const [poFilter, setPoFilter] = useState<'all' | 'pending' | 'partial' | 'paid' | 'cancelled'>('all')
+  const [poFilter, setPoFilter] = useState<'all' | 'outstanding' | 'pending' | 'partial' | 'paid' | 'cancelled'>('all')
   const [poSearch, setPoSearch] = useState('')
   const [saleDueFrom, setSaleDueFrom] = useState('')
   const [saleDueTo, setSaleDueTo] = useState('')
@@ -303,40 +307,49 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
 
   // Sales summaries (all invoices, no date filter applied to summary)
   const saleSummary = useMemo(() => {
-    let paid = 0, pending = 0
+    let paid = 0, pending = 0, owed = 0, partialOnly = 0, creditNoteOutstanding = 0
     for (const inv of invoices) {
       if (inv.status === 'cancelled') continue
       const fx = rateToAed(inv.currency, currencyRates)
       const total = invoiceTotal(inv) * fx
+      if (inv.document_type === 'credit_note') {
+        if (inv.status === 'sent') creditNoteOutstanding += total
+        else if (inv.status === 'partial') creditNoteOutstanding += (invoiceTotal(inv) - inv.amount_paid) * fx
+        continue
+      }
       if (inv.status === 'received') {
         paid += total
-      } else if (inv.status === 'partial' && inv.amount_paid > 0) {
+      } else if (inv.status === 'partial') {
         paid += inv.amount_paid * fx
+        partialOnly += (invoiceTotal(inv) - inv.amount_paid) * fx
         pending += (invoiceTotal(inv) - inv.amount_paid) * fx
+      } else if (inv.status === 'sent') {
+        owed += total
+        pending += total
       } else {
         pending += total
       }
     }
-    return { paid, pending }
+    return { paid, pending, owed: owed + partialOnly, partialOnly, creditNoteOutstanding }
   }, [invoices, currencyRates])
 
   // Purchase summaries (all invoices, no date filter applied to summary)
   const poSummary = useMemo(() => {
-    let paid = 0, pending = 0
+    let paid = 0, pendingOnly = 0, partialOnly = 0
     for (const inv of purchaseInvoices) {
       if (inv.status === 'cancelled') continue
       const fx = inv.currency === 'AED' || inv.fx_rate !== 1 ? inv.fx_rate : rateToAed(inv.currency, currencyRates)
       const aed = inv.gross_amount * fx
       if (inv.status === 'paid') {
         paid += aed
-      } else if (inv.status === 'partial' && inv.amount_paid > 0) {
+      } else if (inv.status === 'partial') {
         paid += inv.amount_paid * fx
-        pending += (inv.gross_amount - inv.amount_paid) * fx
+        partialOnly += (inv.gross_amount - inv.amount_paid) * fx
       } else {
-        pending += aed
+        pendingOnly += aed
       }
     }
-    return { paid, pending }
+    return { paid, pendingOnly, partialOnly, pending: pendingOnly + partialOnly }
   }, [purchaseInvoices, currencyRates])
 
   // Annual expenses summary
@@ -496,7 +509,8 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
   const filteredSales = useMemo(() => {
     const q = saleSearch.toLowerCase().trim()
     const list = invoices.filter(inv => {
-      if (saleFilter !== 'all' && inv.status !== saleFilter) return false
+      if (saleFilter === 'outstanding') { if (inv.status !== 'sent' && inv.status !== 'partial') return false }
+      else if (saleFilter !== 'all' && inv.status !== saleFilter) return false
       if (saleDueFrom && (inv.due_date ?? '') < saleDueFrom) return false
       if (saleDueTo && (inv.due_date ?? '') > saleDueTo) return false
       if (q) {
@@ -529,7 +543,8 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
   const filteredPo = useMemo(() => {
     const q = poSearch.toLowerCase().trim()
     const list = purchaseInvoices.filter(inv => {
-      if (poFilter !== 'all' && inv.status !== poFilter) return false
+      if (poFilter === 'outstanding') { if (inv.status !== 'pending' && inv.status !== 'partial') return false }
+      else if (poFilter !== 'all' && inv.status !== poFilter) return false
       if (poDueFrom && (inv.due_date ?? '') < poDueFrom) return false
       if (poDueTo && (inv.due_date ?? '') > poDueTo) return false
       if (q) {
@@ -838,6 +853,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
           { key: 'purchase', label: 'Purchase Invoices' },
           { key: 'running', label: 'Running Costs' },
           { key: 'vat', label: 'VAT' },
+          { key: 'forecast', label: 'Forecast' },
         ] as { key: typeof tab; label: string }[]).map(({ key, label }) => (
           <button
             key={key}
@@ -866,7 +882,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
             </div>
             <div className="bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
               <p className="text-xs font-medium text-amber-600 mb-0.5">Outstanding</p>
-              <p className="text-base font-semibold text-amber-800">{fmtAed(saleSummary.pending)}</p>
+              <p className="text-base font-semibold text-amber-800">{fmtAed(saleSummary.owed)}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
               <p className="text-xs font-medium text-gray-400 mb-0.5">Collection Rate</p>
@@ -887,7 +903,7 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
               </p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
-              <p className="text-xs font-medium text-gray-400 mb-0.5">Annual Overhead</p>
+              <p className="text-xs font-medium text-gray-400 mb-0.5">Annual One-offs</p>
               <p className="text-base font-semibold text-gray-900">{fmtAed(annualSummary.annualisedTotal)}</p>
               {annualSummary.annualisedTotal !== annualSummary.total && (
                 <p className="text-xs text-gray-400 mt-0.5">Amortised — actual {fmtAedShort(annualSummary.total)}</p>
@@ -899,27 +915,6 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
                 {fmtAed(poSummary.pending)}
               </p>
             </div>
-          </div>
-
-          {/* Net Position */}
-          <div className="bg-white border border-gray-200 rounded-lg px-5 py-3 mb-3 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Net Revenue</p>
-              <p className={cn('text-lg font-semibold', overviewStats.netRevenue < 0 ? 'text-red-700' : 'text-gray-900')}>
-                {fmtAed(overviewStats.netRevenue)}
-              </p>
-              <p className="text-xs text-gray-400 mt-0.5">Sales collected minus purchase invoices paid</p>
-            </div>
-            {overviewStats.monthsCovered !== null && (
-              <div className="text-right pl-5 border-l border-gray-100">
-                <p className="text-xs font-medium text-gray-400 mb-0.5">Burn coverage</p>
-                <p className="text-lg font-semibold text-gray-900">
-                  {overviewStats.monthsCovered.toFixed(1)}
-                  <span className="text-sm font-normal text-gray-400 ml-1">months</span>
-                </p>
-                <p className="text-xs text-gray-400 mt-0.5">at {fmtAed(runningSummary.totalMonthly)}/mo</p>
-              </div>
-            )}
           </div>
 
           {/* Needs Attention */}
@@ -1057,7 +1052,24 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
       {/* Sales Invoices tab */}
       {tab === 'sales' && (
         <>
-          <SummaryBar paid={saleSummary.paid} pending={saleSummary.pending} />
+          <div className="grid grid-cols-4 gap-3 mb-5">
+            <div className="bg-green-50 border border-green-100 rounded-xl px-5 py-3.5">
+              <p className="text-xs font-medium text-green-600 mb-0.5">Total Received</p>
+              <p className="text-lg font-semibold text-green-800">{fmtAed(saleSummary.paid)}</p>
+            </div>
+            <div className={cn('border rounded-xl px-5 py-3.5', saleSummary.owed > 0 ? 'bg-amber-50 border-amber-100' : 'bg-white border-gray-200')}>
+              <p className={cn('text-xs font-medium mb-0.5', saleSummary.owed > 0 ? 'text-amber-600' : 'text-gray-400')}>Total Owed</p>
+              <p className={cn('text-lg font-semibold', saleSummary.owed > 0 ? 'text-amber-800' : 'text-gray-500')}>{fmtAed(saleSummary.owed)}</p>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-xl px-5 py-3.5">
+              <p className="text-xs font-medium text-gray-400 mb-0.5">Total Partial</p>
+              <p className="text-lg font-semibold text-gray-700">{fmtAed(saleSummary.partialOnly)}</p>
+            </div>
+            <div className={cn('border rounded-xl px-5 py-3.5', saleSummary.creditNoteOutstanding > 0 ? 'bg-purple-50 border-purple-100' : 'bg-white border-gray-200')}>
+              <p className={cn('text-xs font-medium mb-0.5', saleSummary.creditNoteOutstanding > 0 ? 'text-purple-600' : 'text-gray-400')}>Outstanding Credit Notes</p>
+              <p className={cn('text-lg font-semibold', saleSummary.creditNoteOutstanding > 0 ? 'text-purple-800' : 'text-gray-500')}>{fmtAed(saleSummary.creditNoteOutstanding)}</p>
+            </div>
+          </div>
 
           {/* Filters row */}
           <div className="flex flex-wrap items-center gap-3 mb-5">
@@ -1281,7 +1293,24 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
       {/* Purchase Invoices tab */}
       {tab === 'purchase' && (
         <>
-          <SummaryBar paid={poSummary.paid} pending={poSummary.pending} paidLabel="Total Paid" pendingLabel="Total Pending" />
+          <div className="grid grid-cols-4 gap-3 mb-5">
+            <div className="bg-green-50 border border-green-100 rounded-xl px-5 py-3.5">
+              <p className="text-xs font-medium text-green-600 mb-0.5">Total Paid</p>
+              <p className="text-lg font-semibold text-green-800">{fmtAed(poSummary.paid)}</p>
+            </div>
+            <div className={cn('border rounded-xl px-5 py-3.5', poSummary.pending > 0 ? 'bg-amber-50 border-amber-100' : 'bg-white border-gray-200')}>
+              <p className={cn('text-xs font-medium mb-0.5', poSummary.pending > 0 ? 'text-amber-600' : 'text-gray-400')}>Total Outstanding</p>
+              <p className={cn('text-lg font-semibold', poSummary.pending > 0 ? 'text-amber-800' : 'text-gray-500')}>{fmtAed(poSummary.pending)}</p>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-xl px-5 py-3.5">
+              <p className="text-xs font-medium text-gray-400 mb-0.5">Total Pending</p>
+              <p className="text-lg font-semibold text-gray-700">{fmtAed(poSummary.pendingOnly)}</p>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-xl px-5 py-3.5">
+              <p className="text-xs font-medium text-gray-400 mb-0.5">Total Partial</p>
+              <p className="text-lg font-semibold text-gray-700">{fmtAed(poSummary.partialOnly)}</p>
+            </div>
+          </div>
 
           {/* Filters row */}
           <div className="flex flex-wrap items-center gap-3 mb-5">
@@ -2258,6 +2287,151 @@ export function FinanceClient({ invoices, purchaseInvoices, currencyRates, annua
           </div>
         )}
       </Modal>
+
+      {/* Forecast tab */}
+      {tab === 'forecast' && (() => {
+        type FcastRow = { id: string; date: string | null; project: string | null; projectId: string | null; description: string; type: string; currency: string; amount: number; aedAmount: number }
+
+        const expectedIn: FcastRow[] = [
+          ...invoices
+            .filter(inv => inv.project !== null && inv.project.status !== 'completed' && inv.status !== 'received' && inv.status !== 'cancelled')
+            .map(inv => {
+              const total = invoiceTotal(inv)
+              const aed = total * rateToAed(inv.currency, currencyRates)
+              const desc = [inv.invoice_number, inv.billed_to_name].filter(Boolean).join(' · ')
+              return { id: inv.id, date: inv.due_date, project: inv.project?.name ?? null, projectId: inv.project?.id ?? null, description: desc || inv.invoice_number, type: 'Sales Invoice', currency: inv.currency, amount: total, aedAmount: aed }
+            }),
+          ...projectIncome.filter(inc => inc.project?.status !== 'completed').map(inc => ({
+            id: inc.id,
+            date: inc.date,
+            project: inc.project?.name ?? null,
+            projectId: inc.project?.id ?? null,
+            description: inc.description,
+            type: 'Income',
+            currency: inc.currency,
+            amount: inc.amount,
+            aedAmount: inc.amount * rateToAed(inc.currency, currencyRates),
+          })),
+        ].sort((a, b) => {
+          if (!a.date && !b.date) return 0
+          if (!a.date) return 1
+          if (!b.date) return -1
+          return a.date.localeCompare(b.date)
+        })
+
+        const expectedOut: FcastRow[] = [
+          ...purchaseInvoices
+            .filter(inv => inv.project !== null && inv.project.status !== 'completed' && inv.status !== 'paid' && inv.status !== 'cancelled')
+            .map(inv => {
+              const liveRate = rateToAed(inv.currency, currencyRates)
+              const fx = liveRate !== 1 || inv.currency === 'AED' ? liveRate : inv.fx_rate
+              const outstanding = inv.status === 'partial' ? inv.gross_amount - inv.amount_paid : inv.gross_amount
+              const desc = [inv.supplier, inv.invoice_number].filter(Boolean).join(' · ')
+              return { id: inv.id, date: inv.due_date, project: inv.project?.name ?? null, projectId: inv.project?.id ?? null, description: desc || 'Purchase Invoice', type: 'Purchase Invoice', currency: inv.currency, amount: outstanding, aedAmount: outstanding * fx }
+            }),
+          ...projectExpenses.filter(exp => exp.project?.status !== 'completed').map(exp => ({
+            id: exp.id,
+            date: exp.date,
+            project: exp.project?.name ?? null,
+            projectId: exp.project?.id ?? null,
+            description: exp.description,
+            type: 'Expense',
+            currency: exp.currency,
+            amount: exp.amount,
+            aedAmount: exp.amount * rateToAed(exp.currency, currencyRates),
+          })),
+        ].sort((a, b) => {
+          if (!a.date && !b.date) return 0
+          if (!a.date) return 1
+          if (!b.date) return -1
+          return a.date.localeCompare(b.date)
+        })
+
+        const totalIn = expectedIn.reduce((s, r) => s + r.aedAmount, 0)
+        const totalOut = expectedOut.reduce((s, r) => s + r.aedAmount, 0)
+        const net = totalIn - totalOut
+
+        const TYPE_STYLES: Record<string, string> = {
+          'Sales Invoice': 'bg-blue-50 text-blue-700',
+          'Income': 'bg-green-50 text-green-700',
+          'Purchase Invoice': 'bg-amber-50 text-amber-700',
+          'Expense': 'bg-orange-50 text-orange-700',
+        }
+
+        const renderTable = (rows: FcastRow[]) => rows.length === 0 ? (
+          <p className="px-5 py-4 text-sm text-gray-400">Nothing to show.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50/50">
+                <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-400">Date</th>
+                <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-400">Project</th>
+                <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-400">Description</th>
+                <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-400">Type</th>
+                <th className="px-5 py-2.5 text-right text-xs font-medium text-gray-400">Amount</th>
+                <th className="px-5 py-2.5 text-right text-xs font-medium text-gray-400">AED equiv.</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {rows.map(row => (
+                <tr key={row.id} className="hover:bg-gray-50/50 transition-colors">
+                  <td className="px-5 py-3 text-gray-500 text-xs whitespace-nowrap">{formatDate(row.date)}</td>
+                  <td className="px-5 py-3 text-xs">
+                    {row.projectId
+                      ? <Link href={`/projects/${row.projectId}`} className="text-gray-700 hover:underline">{row.project ?? '—'}</Link>
+                      : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-5 py-3 text-gray-900">{row.description}</td>
+                  <td className="px-5 py-3">
+                    <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', TYPE_STYLES[row.type] ?? 'bg-gray-100 text-gray-600')}>
+                      {row.type}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-right font-medium text-gray-900">{formatAmount(row.currency, row.amount)}</td>
+                  <td className="px-5 py-3 text-right text-gray-400 text-xs">
+                    {row.currency !== 'AED' ? fmtAed(row.aedAmount) : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )
+
+        return (
+          <>
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              <div className="bg-green-50 border border-green-100 rounded-xl px-5 py-3.5">
+                <p className="text-xs font-medium text-green-600 mb-0.5">Expected In</p>
+                <p className="text-lg font-semibold text-green-800">{fmtAed(totalIn)}</p>
+                <p className="text-xs text-green-600 mt-0.5">{expectedIn.length} item{expectedIn.length !== 1 ? 's' : ''}</p>
+              </div>
+              <div className="bg-red-50 border border-red-100 rounded-xl px-5 py-3.5">
+                <p className="text-xs font-medium text-red-600 mb-0.5">Expected Out</p>
+                <p className="text-lg font-semibold text-red-800">{fmtAed(totalOut)}</p>
+                <p className="text-xs text-red-600 mt-0.5">{expectedOut.length} item{expectedOut.length !== 1 ? 's' : ''}</p>
+              </div>
+              <div className={cn('border rounded-xl px-5 py-3.5', net >= 0 ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100')}>
+                <p className={cn('text-xs font-medium mb-0.5', net >= 0 ? 'text-green-600' : 'text-red-600')}>Net Position</p>
+                <p className={cn('text-lg font-semibold', net >= 0 ? 'text-green-800' : 'text-red-800')}>{fmtAed(net)}</p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 mb-6 overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100">
+                <h3 className="text-sm font-semibold text-gray-900">Expected In</h3>
+              </div>
+              {renderTable(expectedIn)}
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100">
+                <h3 className="text-sm font-semibold text-gray-900">Expected Out</h3>
+              </div>
+              {renderTable(expectedOut)}
+            </div>
+          </>
+        )
+      })()}
     </div>
   )
 }
