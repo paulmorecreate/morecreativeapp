@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag, Trash2, X, CheckCircle2, Circle, CheckCheck, AlertTriangle, Receipt, GripVertical, Loader2, Search, Check, ChevronDown, FileDown, LayoutList, LayoutGrid } from 'lucide-react'
+import { ArrowLeft, MapPin, Calendar, Pencil, Plus, Tag, Trash2, X, CheckCircle2, Circle, CheckCheck, AlertTriangle, Receipt, GripVertical, Loader2, Search, Check, ChevronDown, FileDown, LayoutList, LayoutGrid, FileText, ExternalLink } from 'lucide-react'
 import { Event, ProjectCategory, Invoice, PurchaseInvoice, ProjectIncome, ProjectExpense, ExpenseCategory, CurrencyRate } from '@/lib/supabase/types'
 import { COUNTRIES } from '@/lib/constants/countries'
 import { createClient } from '@/lib/supabase/client'
@@ -137,6 +137,14 @@ type DeleteTarget = {
   warning?: string
 }
 
+type ProjectDocument = {
+  id: string
+  project_id: string
+  title: string
+  url: string
+  created_at: string
+}
+
 type Props = {
   project: Event
   talents: SimpleRecord[]
@@ -153,7 +161,7 @@ type Props = {
   currencyRates: CurrencyRate[]
   canViewFinance: boolean
   canEditFinance: boolean
-  initialTab?: 'overview' | 'finance'
+  initialTab?: 'overview' | 'finance' | 'documents'
   talentCategories: SimpleRecord[]
   talentLevels: SimpleRecord[]
   agents: { id: string; name: string; agent_type: string | null }[]
@@ -164,6 +172,7 @@ type Props = {
   profitShare: ProfitShare | null
   profitShareEmployees: ProfitShareEmployee[]
   allUsers: UserProfile[]
+  documents: ProjectDocument[]
 }
 
 const EMPTY_NEW_TALENT = {
@@ -518,6 +527,148 @@ function ProfitShareSection({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function toDrivePreviewUrl(url: string): string {
+  const fileId = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)?.[1] ?? url.match(/[?&]id=([a-zA-Z0-9_-]+)/)?.[1]
+  return fileId ? `https://drive.google.com/file/d/${fileId}/preview` : url
+}
+
+function ProjectDocumentsTab({ projectId, initialDocuments }: { projectId: string; initialDocuments: ProjectDocument[] }) {
+  const supabase = createClient()
+  const [docs, setDocs] = useState<ProjectDocument[]>(initialDocuments)
+  const [addOpen, setAddOpen] = useState(false)
+  const [title, setTitle] = useState('')
+  const [url, setUrl] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [viewing, setViewing] = useState<ProjectDocument | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<ProjectDocument | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleAdd() {
+    if (!title.trim() || !url.trim()) return
+    setSaving(true)
+    const { data, error } = await supabase
+      .from('project_documents')
+      .insert({ project_id: projectId, title: title.trim(), url: url.trim() })
+      .select()
+      .single()
+    setSaving(false)
+    if (!error && data) {
+      setDocs(d => [...d, data as ProjectDocument])
+      setTitle('')
+      setUrl('')
+      setAddOpen(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    await supabase.from('project_documents').delete().eq('id', deleteTarget.id)
+    setDocs(d => d.filter(doc => doc.id !== deleteTarget.id))
+    setDeleting(false)
+    setDeleteTarget(null)
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-semibold text-gray-900">Documents</h2>
+        <Button variant="secondary" onClick={() => setAddOpen(true)}>
+          <Plus className="w-3.5 h-3.5" /> Add Document
+        </Button>
+      </div>
+
+      {docs.length === 0 ? (
+        <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-sm text-gray-400">
+          No documents yet. Add a Google Drive link to get started.
+        </div>
+      ) : (
+        <div className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
+          {docs.map(doc => (
+            <div key={doc.id} className={cn('group', viewing?.id === doc.id && 'bg-gray-50')}>
+              <div className="flex items-center gap-3 px-4 py-3">
+                <FileText className={cn('w-4 h-4 shrink-0', viewing?.id === doc.id ? 'text-gray-700' : 'text-gray-400')} />
+                <button
+                  className={cn('flex-1 text-sm font-medium text-left truncate transition-colors', viewing?.id === doc.id ? 'text-gray-900' : 'text-gray-700 hover:text-gray-900')}
+                  onClick={() => setViewing(v => v?.id === doc.id ? null : doc)}
+                >
+                  {doc.title}
+                </button>
+                <a
+                  href={doc.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Open in Drive"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+                <button
+                  className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => setDeleteTarget(doc)}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {viewing?.id === doc.id && (
+                <div className="border-t border-gray-100 mx-4 mb-3">
+                  <iframe
+                    src={toDrivePreviewUrl(doc.url)}
+                    className="w-full rounded-lg mt-3"
+                    style={{ height: '75vh' }}
+                    allow="autoplay"
+                  />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add modal */}
+      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Document">
+        <div className="flex flex-col gap-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Title</label>
+            <Input
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="e.g. Talent Agreement — Olga"
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Google Drive URL</label>
+            <Input
+              value={url}
+              onChange={e => setUrl(e.target.value)}
+              placeholder="https://drive.google.com/file/d/…"
+            />
+            <p className="text-xs text-gray-400 mt-1">The file must be set to "Anyone with the link can view"</p>
+          </div>
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={() => setAddOpen(false)} className="flex-1">Cancel</Button>
+            <Button onClick={handleAdd} disabled={saving || !title.trim() || !url.trim()} className="flex-1">
+              {saving ? 'Saving…' : 'Add'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete confirm */}
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Remove Document">
+        <p className="text-sm text-gray-600 mb-5">Remove <span className="font-medium">{deleteTarget?.title}</span>? This only removes the link — the file in Google Drive is not affected.</p>
+        <div className="flex gap-3">
+          <Button variant="secondary" onClick={() => setDeleteTarget(null)} className="flex-1">Cancel</Button>
+          <Button onClick={handleDelete} disabled={deleting} className="flex-1 bg-red-600 hover:bg-red-700 text-white">
+            {deleting ? 'Removing…' : 'Remove'}
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }
@@ -1391,11 +1542,11 @@ function ProjectFinanceTab({
   )
 }
 
-export function ProjectDetailClient({ project, talents, brands, categories, brandShows, stylists, projectTalents, invoices, purchaseInvoices, income, expenses, expenseCategories, currencyRates, canViewFinance, canEditFinance, initialTab = 'overview', talentCategories, talentLevels, agents: allAgents, agentTypes, people: allPeople, industries, brandCategories, profitShare, profitShareEmployees, allUsers }: Props) {
+export function ProjectDetailClient({ project, talents, brands, categories, brandShows, stylists, projectTalents, invoices, purchaseInvoices, income, expenses, expenseCategories, currencyRates, canViewFinance, canEditFinance, initialTab = 'overview', talentCategories, talentLevels, agents: allAgents, agentTypes, people: allPeople, industries, brandCategories, profitShare, profitShareEmployees, allUsers, documents: initialDocuments }: Props) {
   const router = useRouter()
 
   // Tab
-  const [tab, setTab] = useState<'overview' | 'finance'>(initialTab)
+  const [tab, setTab] = useState<'overview' | 'finance' | 'documents'>(initialTab)
 
   // Project edit
   const [open, setOpen] = useState(false)
@@ -2154,24 +2305,22 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
       </div>
 
       {/* ── Tabs ── */}
-      {canViewFinance && (
-        <div className="flex gap-1 mb-6 border-b border-gray-200">
-          {(['overview', 'finance'] as const).map(t => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={cn(
-                'px-4 py-2 text-sm font-medium capitalize border-b-2 -mb-px transition-colors',
-                tab === t
-                  ? 'border-gray-900 text-gray-900'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              )}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="flex gap-1 mb-6 border-b border-gray-200">
+        {(['overview', ...(canViewFinance ? ['finance'] : []), 'documents'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t as any)}
+            className={cn(
+              'px-4 py-2 text-sm font-medium capitalize border-b-2 -mb-px transition-colors',
+              tab === t
+                ? 'border-gray-900 text-gray-900'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            )}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
 
       {tab === 'finance' && canViewFinance && (
         <ProjectFinanceTab
@@ -2189,7 +2338,11 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
         />
       )}
 
-      {(tab === 'overview' || !canViewFinance) && (
+      {tab === 'documents' && (
+        <ProjectDocumentsTab projectId={project.id} initialDocuments={initialDocuments} />
+      )}
+
+      {(tab === 'overview') && (
         <>
       {/* ── Notes ── */}
       {project.notes && (

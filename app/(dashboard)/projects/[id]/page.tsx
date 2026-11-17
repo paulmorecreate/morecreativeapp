@@ -40,6 +40,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     { data: profitShareEmployees },
     { data: allUsers },
     { data: authData },
+    { data: documents },
   ] = await Promise.all([
     supabase.from('events').select('*').eq('id', id).single(),
     supabase.from('talents').select('id, name').order('name'),
@@ -83,6 +84,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       : Promise.resolve({ data: [] }),
     supabase.from('user_profiles').select('id, first_name, surname, email, color').order('first_name'),
     adminSupabase.auth.admin.listUsers(),
+    supabase.from('project_documents').select('*').eq('project_id', id).order('created_at'),
   ])
 
   if (!project) notFound()
@@ -112,7 +114,8 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       currencyRates={currencyRates ?? []}
       canViewFinance={canViewFinance}
       canEditFinance={canEditFinance}
-      initialTab={tabParam === 'finance' ? 'finance' : 'overview'}
+      initialTab={tabParam === 'finance' ? 'finance' : tabParam === 'documents' ? 'documents' : 'overview'}
+      documents={documents ?? []}
       talentCategories={talentCategories ?? []}
       talentLevels={talentLevels ?? []}
       agents={agents ?? []}
