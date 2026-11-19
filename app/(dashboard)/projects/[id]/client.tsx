@@ -1597,6 +1597,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   const [projectTalentModal, setProjectTalentModal] = useState(false)
   const [projectTalentForm, setProjectTalentForm] = useState({ talent_id: '' })
   const [projectTalentMode, setProjectTalentMode] = useState<'existing' | 'new'>('existing')
+  const [projectTalentSearch, setProjectTalentSearch] = useState('')
   const [newTalentForm, setNewTalentForm] = useState(EMPTY_NEW_TALENT)
   const [ntAgentMode, setNtAgentMode] = useState<'' | 'existing' | 'new'>('')
   const [ntSelectedAgentIds, setNtSelectedAgentIds] = useState<string[]>([])
@@ -1623,9 +1624,11 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   // Lineup view + filter
   const [lineupView, setLineupView] = useState<'list' | 'grid'>('list')
   const [brandStatusFilter, setBrandStatusFilter] = useState<string>('all')
+  const [lineupSearch, setLineupSearch] = useState('')
   const [gridDetailShowId, setGridDetailShowId] = useState<string | null>(null)
   const [gridDetailSearchQ, setGridDetailSearchQ] = useState('')
   const [poolStatusFilter, setPoolStatusFilter] = useState<string>('all')
+  const [poolSearch, setPoolSearch] = useState('')
 
   // Collapse state for the entire Lineup section
   const [lineupCollapsed, setLineupCollapsed] = useState(false)
@@ -1790,6 +1793,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
   // Project-level talent handlers
   function openAddProjectTalent() {
     setProjectTalentForm({ talent_id: '' })
+    setProjectTalentSearch('')
     setProjectTalentMode('existing')
     setNewTalentForm(EMPTY_NEW_TALENT)
     setNtAgentMode(''); setNtSelectedAgentIds([]); setNtNewAgentName(''); setNtNewAgentType(''); setNtNewAgentEmail(''); setNtNewAgentPhone('')
@@ -1900,6 +1904,17 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
 
   const linkedProjectTalentIds = new Set(projectTalents.map(pt => pt.talent_id))
   const availableProjectTalents = talents.filter(t => !linkedProjectTalentIds.has(t.id))
+
+  function matchesLineupSearch(show: BrandShow): boolean {
+    const q = lineupSearch.trim().toLowerCase()
+    if (!q) return true
+    if ((show.brand?.name ?? '').toLowerCase().includes(q)) return true
+    if ((show.notes ?? '').toLowerCase().includes(q)) return true
+    return show.project_brand_talents.some(e =>
+      (e.talent?.name ?? '').toLowerCase().includes(q) ||
+      (e.notes ?? '').toLowerCase().includes(q)
+    )
+  }
 
   async function exportShowToExcel(show: BrandShow) {
     const ExcelJS = (await import('exceljs')).default
@@ -2405,9 +2420,24 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
 
         {!lineupCollapsed && (<>
 
-        {/* Status filter pills */}
+        {/* Lineup search + status filter pills */}
         {brandShows.length > 0 && (
-          <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+          <div className="flex items-center gap-3 mb-3 flex-wrap">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+              <input
+                value={lineupSearch}
+                onChange={e => setLineupSearch(e.target.value)}
+                placeholder="Search brand, talent, notes…"
+                className="pl-7 pr-7 py-1 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-black/10 w-52"
+              />
+              {lineupSearch && (
+                <button onClick={() => setLineupSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
             {(['all', 'In Conversation', 'Confirmed', 'Rejected', 'Cancelled'] as const).map(s => {
               const count = s === 'all'
                 ? brandShows.length
@@ -2429,6 +2459,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
               )
             })}
           </div>
+          </div>
         )}
 
         {brandShows.length === 0 && projectTalents.length === 0 && (
@@ -2439,7 +2470,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
 
         {lineupView === 'grid' && brandShows.length > 0 && (() => {
           const filteredForGrid = [...brandShows]
-            .filter(s => brandStatusFilter === 'all' || (showStatuses[s.id] ?? null) === brandStatusFilter)
+            .filter(s => (brandStatusFilter === 'all' || (showStatuses[s.id] ?? null) === brandStatusFilter) && matchesLineupSearch(s))
             .sort((a, b) => (a.brand?.name ?? '').localeCompare(b.brand?.name ?? ''))
           return (
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 mb-3">
@@ -2536,7 +2567,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
         <div className={cn('space-y-3', lineupView === 'grid' && 'hidden')}>
           {/* Brand cards — list view */}
           {[...brandShows]
-            .filter(s => brandStatusFilter === 'all' || (showStatuses[s.id] ?? null) === brandStatusFilter)
+            .filter(s => (brandStatusFilter === 'all' || (showStatuses[s.id] ?? null) === brandStatusFilter) && matchesLineupSearch(s))
             .sort((a, b) => (a.brand?.name ?? '').localeCompare(b.brand?.name ?? '')).map(show => {
             const isCollapsed = collapsedShows.has(show.id)
             return (
@@ -2727,14 +2758,37 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mt-3">
             <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-zinc-900 via-zinc-700 to-zinc-900">
               <span className="text-sm font-semibold text-white tracking-wide">Talent Pool</span>
-              {brandShows.length > 0 && (
-                <span className="text-xs text-zinc-300 flex items-center gap-1">
-                  <GripVertical className="w-3 h-3" /> Drag onto a show to assign
-                </span>
-              )}
+              <div className="flex items-center gap-3">
+                {brandShows.length > 0 && (
+                  <span className="text-xs text-zinc-300 flex items-center gap-1">
+                    <GripVertical className="w-3 h-3" /> Drag onto a show to assign
+                  </span>
+                )}
+                <button
+                  onClick={openAddProjectTalent}
+                  className="flex items-center gap-1 text-xs text-white/90 hover:text-white bg-white/10 hover:bg-white/20 px-2.5 py-1 rounded-lg transition-colors"
+                >
+                  <Plus className="w-3 h-3" /> Add Talent
+                </button>
+              </div>
             </div>
-            {/* Pool status filter */}
-            <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-gray-100 flex-wrap">
+            {/* Pool search + status filter */}
+            <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 flex-wrap">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+                <input
+                  value={poolSearch}
+                  onChange={e => setPoolSearch(e.target.value)}
+                  placeholder="Search talent, notes…"
+                  className="pl-7 pr-7 py-1 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-black/10 w-44"
+                />
+                {poolSearch && (
+                  <button onClick={() => setPoolSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
               {(['all', 'In Conversation', 'Confirmed', 'Rejected', 'Cancelled'] as const).map(s => {
                 const count = s === 'all'
                   ? projectTalents.length
@@ -2756,6 +2810,7 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
                 )
               })}
             </div>
+            </div>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-50">
@@ -2769,7 +2824,14 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {[...projectTalents]
-                  .filter(pt => poolStatusFilter === 'all' || (pt.status ?? null) === poolStatusFilter)
+                  .filter(pt => {
+                    if (poolStatusFilter !== 'all' && (pt.status ?? null) !== poolStatusFilter) return false
+                    if (poolSearch.trim()) {
+                      const q = poolSearch.toLowerCase()
+                      return (pt.talent?.name ?? '').toLowerCase().includes(q) || (pt.notes ?? '').toLowerCase().includes(q)
+                    }
+                    return true
+                  })
                   .sort(byStatusThenName)
                   .map((pt, idx) => (
                     <InlineProjectTalentRow
@@ -3111,12 +3173,46 @@ export function ProjectDetailClient({ project, talents, brands, categories, bran
           {projectTalentMode === 'existing' ? (
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-700">Talent</label>
-              <Select
-                value={projectTalentForm.talent_id}
-                onChange={e => setProjectTalentForm({ talent_id: e.target.value })}
-                options={availableProjectTalents.map(t => ({ value: t.id, label: t.name }))}
-                placeholder="Select talent…"
-              />
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                <input
+                  autoFocus
+                  value={projectTalentSearch}
+                  onChange={e => { setProjectTalentSearch(e.target.value); setProjectTalentForm({ talent_id: '' }) }}
+                  placeholder="Search talents…"
+                  className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-black/10"
+                />
+              </div>
+              {projectTalentSearch.trim() && (
+                <div className="border border-gray-200 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                  {availableProjectTalents
+                    .filter(t => t.name.toLowerCase().includes(projectTalentSearch.toLowerCase()))
+                    .length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-gray-400">No matching talents</p>
+                  ) : (
+                    availableProjectTalents
+                      .filter(t => t.name.toLowerCase().includes(projectTalentSearch.toLowerCase()))
+                      .map(t => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => { setProjectTalentForm({ talent_id: t.id }); setProjectTalentSearch(t.name) }}
+                          className={cn(
+                            'w-full text-left px-3 py-2 text-sm transition-colors',
+                            projectTalentForm.talent_id === t.id
+                              ? 'bg-gray-900 text-white'
+                              : 'hover:bg-gray-50 text-gray-700'
+                          )}
+                        >
+                          {t.name}
+                        </button>
+                      ))
+                  )}
+                </div>
+              )}
+              {projectTalentForm.talent_id && !projectTalentSearch.trim() && (
+                <p className="text-xs text-gray-400">Type to search for a talent</p>
+              )}
             </div>
           ) : (
             <>
