@@ -45,10 +45,11 @@ function parseDate(val: unknown): string | null {
   if (parts.length === 3 && MONTH_MAP[parts[1]]) {
     return `${parts[2]}-${MONTH_MAP[parts[1]]}-${parts[0].padStart(2, '0')}`
   }
-  // "DD-Mon-YYYY" format from ADCB exports
+  // "DD-Mon-YYYY" or "DD-Mon-YYYY HH:MM:SS" format from ADCB exports
   const hparts = s.split('-')
   if (hparts.length === 3 && MONTH_MAP[hparts[1]]) {
-    return `${hparts[2]}-${MONTH_MAP[hparts[1]]}-${hparts[0].padStart(2, '0')}`
+    const year = hparts[2].split(/[\sT]/)[0]  // strip any trailing time component
+    return `${year}-${MONTH_MAP[hparts[1]]}-${hparts[0].padStart(2, '0')}`
   }
   // Fallback: force UTC parse to avoid timezone shift
   const d = new Date(s + 'T00:00:00Z')
