@@ -473,6 +473,21 @@ export async function POST(req: NextRequest) {
       const toInsert: Record<string, unknown>[] = []
       let autoCatCount = 0
 
+      // Read column positions from the header row (row 15) — ADCB has added/shifted columns over time
+      const adcbHeader = (rows[15] as unknown[]).map(h => str(h).toLowerCase().trim())
+      const col = (name: string) => adcbHeader.findIndex(h => h.includes(name))
+      const colDate     = col('transaction date')
+      const colValueDate = col('posting date')    // "Posting Date and Time" or fall back to value date
+      const colRef      = col('bank reference')
+      const colDesc     = col('description')
+      const colDebit    = col('debit amount')
+      const colCredit   = col('credit amount')
+      const colBalance  = col('running balance')
+
+      if (colDate === -1 || colRef === -1 || colDesc === -1 || colDebit === -1 || colCredit === -1) {
+        return NextResponse.json({ error: 'Unrecognised ADCB column layout — please contact support.' }, { status: 422 })
+      }
+
       // Data rows start at index 16 (row 17)
       for (let i = 16; i < rows.length; i++) {
         const row = rows[i]
@@ -481,14 +496,14 @@ export async function POST(req: NextRequest) {
         const srNo = str(row[0])
         if (!srNo || isNaN(Number(srNo))) continue
 
-        const dateStr = parseDate(row[1])
-        const reference = str(row[3])   // Bank Reference No
-        const description = str(row[5]) // Description
+        const dateStr = parseDate(row[colDate])
+        const reference = str(row[colRef])
+        const description = str(row[colDesc])
         if (!dateStr || !reference || !description) continue
 
-        const debit = parseAmount(row[6])   // Debit Amount ("-" parses to 0)
-        const credit = parseAmount(row[7])  // Credit Amount ("-" parses to 0)
-        const balance = parseBalance(row[8]) ?? 0
+        const debit = parseAmount(row[colDebit])
+        const credit = parseAmount(row[colCredit])
+        const balance = colBalance !== -1 ? (parseBalance(row[colBalance]) ?? 0) : 0
         const fxRate = getFxRate(dateStr)
         const aedEquivalent = credit > 0 ? credit * fxRate : debit > 0 ? -(debit * fxRate) : 0
 
@@ -497,7 +512,7 @@ export async function POST(req: NextRequest) {
 
         toInsert.push({
           date: dateStr,
-          value_date: parseDate(row[2]),
+          value_date: colValueDate !== -1 ? parseDate(row[colValueDate]) : null,
           currency,
           account_number: accountNumber,
           account_type: uploadAccountType,
