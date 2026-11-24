@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import * as XLSX from 'xlsx'
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
+
+// Point worker to local file — required for server-side Node.js usage
+pdfjsLib.GlobalWorkerOptions.workerSrc = `file://${process.cwd()}/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs`
 
 // ── Value parsers ─────────────────────────────────────────────────────────────
 
@@ -181,6 +185,87 @@ function autoCategorize(
   return null
 }
 
+// ── ADCB Credit Card PDF parser ───────────────────────────────────────────────
+
+async function parseAdcbCcPdf(buffer: Buffer): Promise<{
+  accountNumber: string
+  rows: Array<{ date: string; description: string; credit: number; debit: number; seq: number }>
+} | { error: string }> {
+  const data = new Uint8Array(buffer)
+  const pdfDoc = await pdfjsLib.getDocument({ data }).promise
+
+  // Collect all text items from all pages, sorted by page → y desc → x asc
+  const allItems: Array<{ str: string; x: number; y: number }> = []
+  for (let p = 1; p <= pdfDoc.numPages; p++) {
+    const page = await pdfDoc.getPage(p)
+    const content = await page.getTextContent()
+    for (const item of content.items as Array<{ str: string; transform: number[] }>) {
+      if (!item.str.trim()) continue
+      allItems.push({ str: item.str.trim(), x: item.transform[4], y: item.transform[5] })
+    }
+  }
+
+  // Build a flat token list in reading order (top→bottom, left→right within each line)
+  allItems.sort((a, b) => b.y - a.y || a.x - b.x)
+  const tokens = allItems.map(i => i.str)
+
+  // Extract masked card number: e.g. "5552XXXXXXXX7823"
+  const fullText = tokens.join(' ')
+  const cardMatch = fullText.match(/Primary Card Number[:\s]+(\S+)\s+-\s+ADCB/i)
+  const accountNumber = cardMatch ? cardMatch[1] : 'CC-UNKNOWN'
+
+  // Find where the transaction data starts — after "Amount in AED" column header
+  const headerIdx = tokens.findIndex(t => /Amount in AED/i.test(t))
+  if (headerIdx === -1) return { error: 'Could not find transaction table in PDF' }
+
+  const dataTokens = tokens.slice(headerIdx + 1)
+
+  // Token-based row parser: date anchors each row, description runs until DR/CR, amount follows
+  const rows: Array<{ date: string; description: string; credit: number; debit: number; seq: number }> = []
+  let seq = 0
+  let cur: { dateStr: string; descParts: string[]; crdr: string | null } | null = null
+
+  function flushRow(amount: number) {
+    if (!cur || cur.crdr === null) return
+    const [d, m, y] = cur.dateStr.split('/')
+    const isoDate = `${y}-${m}-${d}`
+    const description = cur.descParts.join(' ')
+    seq++
+    rows.push({
+      date: isoDate,
+      description,
+      debit: cur.crdr === 'DR' ? amount : 0,
+      credit: cur.crdr === 'CR' ? amount : 0,
+      seq,
+    })
+    cur = null
+  }
+
+  for (const token of dataTokens) {
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(token)) {
+      // New row — flush previous if any (but we need the amount first, so store pending)
+      // Amount comes right after DR/CR so flushing happens in the amount branch below
+      if (cur && cur.crdr !== null) {
+        // Shouldn't happen in normal flow — guard only
+      }
+      cur = { dateStr: token, descParts: [], crdr: null }
+    } else if (cur) {
+      if (/^(DR|CR)$/.test(token)) {
+        cur.crdr = token
+      } else if (cur.crdr !== null && /^[\d,]+\.\d{2}$/.test(token)) {
+        const amount = parseFloat(token.replace(/,/g, ''))
+        flushRow(amount)
+      } else if (cur.crdr === null) {
+        cur.descParts.push(token)
+      }
+      // Tokens after the amount (before the next date) are ignored
+    }
+  }
+
+  if (rows.length === 0) return { error: 'No transactions found in credit card PDF' }
+  return { accountNumber, rows }
+}
+
 // ── Main handler ──────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -190,8 +275,72 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData()
     const file = formData.get('file') as File | null
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+    const uploadAccountType = (formData.get('account_type') as string | null) === 'credit_card' ? 'credit_card' : 'bank'
 
     const buffer = Buffer.from(await file.arrayBuffer())
+
+    // ── ADCB Credit Card PDF ─────────────────────────────────────────────────
+    if (file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf') {
+      const parsed = await parseAdcbCcPdf(buffer)
+      if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 422 })
+
+      const { accountNumber, rows } = parsed
+      const { data: userRules } = await supabase
+        .from('bank_categorisation_rules')
+        .select('pattern,accounting_category,transaction_type,document_required')
+
+      const toInsert: Record<string, unknown>[] = []
+      let autoCatCount = 0
+      const now2 = new Date().toISOString()
+
+      for (const row of rows) {
+        const cat = autoCategorize(row.description, row.credit, row.debit, userRules ?? [])
+        if (cat) autoCatCount++
+        toInsert.push({
+          date: row.date,
+          value_date: null,
+          currency: 'AED',
+          account_number: accountNumber,
+          account_type: 'credit_card',
+          reference: `CC-${row.seq}`,
+          description: row.description,
+          credit: row.credit,
+          debit: row.debit,
+          balance: 0,
+          fx_rate_to_aed: 1,
+          aed_equivalent: row.credit > 0 ? row.credit : -row.debit,
+          transaction_type: cat?.transaction_type ?? null,
+          accounting_category: cat?.accounting_category ?? null,
+          document_required: cat?.document_required ?? null,
+          document_status: 'Missing',
+          sort_order: row.seq,
+          updated_at: now2,
+        })
+      }
+
+      const { data: inserted, error } = await supabase
+        .from('bank_transactions')
+        .upsert(toInsert, {
+          onConflict: 'date,account_number,reference,description,credit,debit,balance',
+          ignoreDuplicates: true,
+        })
+        .select('id')
+
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+      return NextResponse.json({
+        format: 'cc_pdf',
+        imported: inserted?.length ?? 0,
+        skipped: toInsert.length - (inserted?.length ?? 0),
+        total: toInsert.length,
+        autoCategorized: autoCatCount,
+        needsReview: toInsert.length - autoCatCount,
+        account: accountNumber,
+        currency: 'AED',
+      })
+    }
+
+    // ── Excel formats ─────────────────────────────────────────────────────────
     const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true })
     const ws = wb.Sheets[wb.SheetNames[0]]
     const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, {
@@ -231,6 +380,7 @@ export async function POST(req: NextRequest) {
           value_date: parseDate(row[1]),
           currency: str(row[2]) || 'AED',
           account_number: str(row[3]),
+          account_type: uploadAccountType,
           reference,
           description,
           credit,
@@ -349,6 +499,7 @@ export async function POST(req: NextRequest) {
           value_date: parseDate(row[2]),
           currency,
           account_number: accountNumber,
+          account_type: uploadAccountType,
           reference,
           description,
           credit,
@@ -460,6 +611,7 @@ export async function POST(req: NextRequest) {
         value_date: parseDate(row[1]),
         currency,
         account_number: accountNumber,
+        account_type: uploadAccountType,
         reference,
         description,
         credit,

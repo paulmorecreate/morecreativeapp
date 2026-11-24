@@ -529,6 +529,7 @@ export interface BankTransaction {
   value_date: string | null
   currency: string
   account_number: string
+  account_type: 'bank' | 'credit_card'
   reference: string
   description: string
   credit: number
@@ -569,6 +570,7 @@ export interface BankOpeningBalance {
   account_name: string
   debit_aed: number
   credit_aed: number
+  is_credit_card: boolean
   sort_order: number
   created_at: string
   updated_at: string

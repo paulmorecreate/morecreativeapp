@@ -101,7 +101,7 @@ function shortDesc(s: string, max = 60) {
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = 'upload' | 'aed' | 'eur' | 'expenses' | 'income' | 'shareholder' | 'monthly-pl' | 'trial-balance'
+type Tab = 'upload' | 'aed' | 'eur' | 'credit-card' | 'expenses' | 'income' | 'shareholder' | 'monthly-pl' | 'trial-balance'
 
 type SortDir = 'asc' | 'desc'
 
@@ -266,6 +266,7 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
   const [uploadResult, setUploadResult] = useState<Record<string, unknown> | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
+  const [uploadAccountType, setUploadAccountType] = useState<'bank' | 'credit_card'>('bank')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Transactions filter/sort state
@@ -304,16 +305,20 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
   // ── Upload handler ─────────────────────────────────────────────────────────
 
   async function handleUpload(file: File) {
-    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-      setUploadError('Please upload an .xlsx or .xls file from your bank.')
+    const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf'
+    const isXlsx = file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
+    if (!isPdf && !isXlsx) {
+      setUploadError('Please upload an .xlsx, .xls, or .pdf file.')
       return
     }
+    if (isPdf) setUploadAccountType('credit_card')
     setUploading(true)
     setUploadResult(null)
     setUploadError(null)
 
     const fd = new FormData()
     fd.append('file', file)
+    fd.append('account_type', uploadAccountType)
 
     try {
       const supabase = createClient()
@@ -377,10 +382,11 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
     return Array.from(s).sort()
   }, [transactions])
 
-  const aedAccounts = useMemo(() => [...new Set(transactions.filter(t => t.currency === 'AED').map(t => t.account_number))].sort(), [transactions])
-  const eurAccounts = useMemo(() => [...new Set(transactions.filter(t => t.currency === 'EUR').map(t => t.account_number))].sort(), [transactions])
+  const aedAccounts = useMemo(() => [...new Set(transactions.filter(t => t.currency === 'AED' && t.account_type !== 'credit_card').map(t => t.account_number))].sort(), [transactions])
+  const eurAccounts = useMemo(() => [...new Set(transactions.filter(t => t.currency === 'EUR' && t.account_type !== 'credit_card').map(t => t.account_number))].sort(), [transactions])
+  const ccAccounts = useMemo(() => [...new Set(transactions.filter(t => t.account_type === 'credit_card').map(t => t.account_number))].sort(), [transactions])
 
-  const aedNeedsReviewCount = useMemo(() => transactions.filter(t => t.currency === 'AED' && !t.accounting_category).length, [transactions])
+  const aedNeedsReviewCount = useMemo(() => transactions.filter(t => t.currency === 'AED' && t.account_type !== 'credit_card' && !t.accounting_category).length, [transactions])
 
   // Months that have EUR transactions but no proper FX rate (rate=1 means missing)
   const eurMissingRateMonths = useMemo(() => {
@@ -396,10 +402,12 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
     }
     return Array.from(monthsWithBadRate.values()).sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month)
   }, [transactions])
-  const eurNeedsReviewCount = useMemo(() => transactions.filter(t => t.currency === 'EUR' && !t.accounting_category).length, [transactions])
-  const aedMissingDocCount = useMemo(() => transactions.filter(t => t.currency === 'AED' && t.accounting_category && t.document_status === 'Missing').length, [transactions])
-  const eurMissingDocCount = useMemo(() => transactions.filter(t => t.currency === 'EUR' && t.accounting_category && t.document_status === 'Missing').length, [transactions])
-  const needsReviewCount = aedNeedsReviewCount + eurNeedsReviewCount
+  const eurNeedsReviewCount = useMemo(() => transactions.filter(t => t.currency === 'EUR' && t.account_type !== 'credit_card' && !t.accounting_category).length, [transactions])
+  const ccNeedsReviewCount = useMemo(() => transactions.filter(t => t.account_type === 'credit_card' && !t.accounting_category).length, [transactions])
+  const aedMissingDocCount = useMemo(() => transactions.filter(t => t.currency === 'AED' && t.account_type !== 'credit_card' && t.accounting_category && t.document_status === 'Missing').length, [transactions])
+  const eurMissingDocCount = useMemo(() => transactions.filter(t => t.currency === 'EUR' && t.account_type !== 'credit_card' && t.accounting_category && t.document_status === 'Missing').length, [transactions])
+  const ccMissingDocCount = useMemo(() => transactions.filter(t => t.account_type === 'credit_card' && t.accounting_category && t.document_status === 'Missing').length, [transactions])
+  const needsReviewCount = aedNeedsReviewCount + eurNeedsReviewCount + ccNeedsReviewCount
 
   // Running AED equivalent balance for EUR transactions (sorted oldest→newest)
   const eurRunningAedMap = useMemo(() => {
@@ -461,8 +469,9 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
     })
   }
 
-  const aedTxFiltered = useMemo(() => sortTx(filterTx(transactions.filter(t => t.currency === 'AED'))), [transactions, txSearch, txAccount, txCategories, txDocStatus, txNeedsReview, txMissingDoc, txSortCol, txSortDir])
-  const eurTxFiltered = useMemo(() => sortTx(filterTx(transactions.filter(t => t.currency === 'EUR'))), [transactions, txSearch, txAccount, txCategories, txDocStatus, txNeedsReview, txMissingDoc, txSortCol, txSortDir])
+  const aedTxFiltered = useMemo(() => sortTx(filterTx(transactions.filter(t => t.currency === 'AED' && t.account_type !== 'credit_card'))), [transactions, txSearch, txAccount, txCategories, txDocStatus, txNeedsReview, txMissingDoc, txSortCol, txSortDir])
+  const eurTxFiltered = useMemo(() => sortTx(filterTx(transactions.filter(t => t.currency === 'EUR' && t.account_type !== 'credit_card'))), [transactions, txSearch, txAccount, txCategories, txDocStatus, txNeedsReview, txMissingDoc, txSortCol, txSortDir])
+  const ccTxFiltered = useMemo(() => sortTx(filterTx(transactions.filter(t => t.account_type === 'credit_card'))), [transactions, txSearch, txAccount, txCategories, txDocStatus, txNeedsReview, txMissingDoc, txSortCol, txSortDir])
   const expenseTx = useMemo(() => sortTx(transactions.filter(t => t.debit > 0 && t.accounting_category !== 'Own-account transfer' && !shareholderCategorySet.has(t.accounting_category ?? ''))), [transactions, txSortCol, txSortDir, shareholderCategorySet])
   const incomeTx = useMemo(() => sortTx(transactions.filter(t => t.credit > 0 && t.accounting_category !== 'Own-account transfer' && !shareholderCategorySet.has(t.accounting_category ?? ''))), [transactions, txSortCol, txSortDir, shareholderCategorySet])
   const shareholderTx = useMemo(() => sortTx(transactions.filter(t => shareholderCategorySet.has(t.accounting_category ?? ''))), [transactions, txSortCol, txSortDir, shareholderCategorySet])
@@ -1013,8 +1022,9 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
       <div className="flex gap-1 mb-6 border-b border-gray-200 overflow-x-auto">
         {([
           { key: 'upload', label: 'Upload', badge: 0, count: null },
-          { key: 'aed', label: 'AED Transactions', badge: aedNeedsReviewCount, count: transactions.filter(t => t.currency === 'AED').length },
-          { key: 'eur', label: 'EUR Transactions', badge: eurNeedsReviewCount, count: transactions.filter(t => t.currency === 'EUR').length },
+          { key: 'aed', label: 'AED Transactions', badge: aedNeedsReviewCount, count: transactions.filter(t => t.currency === 'AED' && t.account_type !== 'credit_card').length },
+          { key: 'eur', label: 'EUR Transactions', badge: eurNeedsReviewCount, count: transactions.filter(t => t.currency === 'EUR' && t.account_type !== 'credit_card').length },
+          { key: 'credit-card', label: 'Credit Card', badge: ccNeedsReviewCount, count: transactions.filter(t => t.account_type === 'credit_card').length },
           { key: 'expenses', label: 'Expense Ledger', badge: 0, count: null },
           { key: 'income', label: 'Income Ledger', badge: 0, count: null },
           { key: 'shareholder', label: 'Shareholder Account', badge: 0, count: null },
@@ -1052,6 +1062,27 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
             Transactions already in the system are skipped — safe to upload the same file twice.
           </p>
 
+          {/* Statement type selector */}
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Statement Type</p>
+            <div className="flex gap-2">
+              {(['bank', 'credit_card'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setUploadAccountType(t)}
+                  className={cn(
+                    'px-4 py-2 text-sm font-medium rounded-lg border transition-colors',
+                    uploadAccountType === t
+                      ? 'bg-gray-900 text-white border-gray-900'
+                      : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                  )}
+                >
+                  {t === 'bank' ? 'Bank Statement' : 'Credit Card Statement'}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Drop zone */}
           <div
             onDragOver={e => { e.preventDefault(); setDragOver(true) }}
@@ -1071,13 +1102,13 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
           >
             <Upload className="w-8 h-8 text-gray-300 mx-auto mb-3" />
             <p className="text-sm font-medium text-gray-600">
-              {uploading ? 'Importing…' : 'Drop .xlsx file here or click to browse'}
+              {uploading ? 'Importing…' : 'Drop file here or click to browse'}
             </p>
-            <p className="text-xs text-gray-400 mt-1">AED account · EUR account · both accepted</p>
+            <p className="text-xs text-gray-400 mt-1">Bank: .xlsx or .xls · Credit card: .pdf</p>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".xlsx,.xls"
+              accept=".xlsx,.xls,.pdf"
               className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f); e.target.value = '' }}
             />
@@ -1089,7 +1120,13 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
               <CheckCircle className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-medium text-green-800">Import complete</p>
-                {uploadResult.format === 'master' ? (
+                {uploadResult.format === 'cc_pdf' ? (
+                  <p className="text-xs text-green-600 mt-0.5">
+                    Credit card — <strong>{uploadResult.imported as number}</strong> of {uploadResult.total as number} transactions imported
+                    {(uploadResult.skipped as number) > 0 && `, ${uploadResult.skipped as number} already existed`}
+                    {(uploadResult.autoCategorized as number) > 0 && ` · ${uploadResult.autoCategorized as number} auto-categorised`}
+                  </p>
+                ) : uploadResult.format === 'master' ? (
                   <>
                     <p className="text-xs text-green-600 mt-0.5">
                       Master spreadsheet — <strong>{uploadResult.imported as number}</strong> of {uploadResult.total as number} transactions imported with full categorisation ({uploadResult.categorized as number} categorised)
@@ -1442,6 +1479,67 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
         </div>
       )}
 
+      {/* ── Credit Card tab ─────────────────────────────────────────────────── */}
+      {tab === 'credit-card' && (
+        <div>
+          {ccAccounts.length === 0 ? (
+            <div className="bg-white border border-gray-200 rounded-xl px-8 py-14 text-center max-w-xl">
+              <p className="text-sm font-medium text-gray-600 mb-1">No credit card transactions yet</p>
+              <p className="text-xs text-gray-400">
+                Go to the <button onClick={() => switchTab('upload')} className="underline hover:text-gray-600">Upload tab</button>, select <strong>Credit Card Statement</strong>, and import your statement file.
+              </p>
+            </div>
+          ) : (
+            <div>
+              {/* Outstanding balance summary */}
+              {(() => {
+                const ccObs = openingBalances.filter(b => b.is_credit_card)
+                const obOwed = ccObs.reduce((s, b) => s + b.debit_aed - b.credit_aed, 0)
+                const txNet = transactions
+                  .filter(t => t.account_type === 'credit_card')
+                  .reduce((s, t) => s + (t.aed_equivalent ?? 0), 0)
+                // On CC: purchases are debits (aed_equivalent negative), payments are credits (positive)
+                // Amount owed = opening owed - net movements (since payments are positive aed_equivalent)
+                const totalOwed = obOwed - txNet
+                return (
+                  <div className="grid grid-cols-3 gap-3 mb-5">
+                    <div className="bg-orange-50 border border-orange-100 rounded-xl px-5 py-3.5">
+                      <p className="text-xs font-medium text-orange-600 mb-0.5">Outstanding Balance</p>
+                      <p className="text-lg font-semibold text-orange-800">AED {Math.abs(totalOwed).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                      <p className="text-xs text-orange-500 mt-0.5">Total owed on card</p>
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded-xl px-5 py-3.5">
+                      <p className="text-xs font-medium text-gray-500 mb-0.5">Total Spend</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        AED {transactions.filter(t => t.account_type === 'credit_card' && t.debit > 0).reduce((s, t) => s + (t.aed_equivalent != null ? Math.abs(t.aed_equivalent) : t.debit), 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">All purchases</p>
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded-xl px-5 py-3.5">
+                      <p className="text-xs font-medium text-gray-500 mb-0.5">Total Payments</p>
+                      <p className="text-lg font-semibold text-green-700">
+                        AED {transactions.filter(t => t.account_type === 'credit_card' && t.credit > 0).reduce((s, t) => s + (t.aed_equivalent != null ? t.aed_equivalent : t.credit), 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">Bank clearance payments</p>
+                    </div>
+                  </div>
+                )
+              })()}
+              <TxTable
+                rows={ccTxFiltered}
+                showFilters
+                showBalance
+                balanceCurrency="AED"
+                showAedEquiv={false}
+                availableAccounts={ccAccounts}
+                needsReview={ccNeedsReviewCount}
+                missingDoc={ccMissingDocCount}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Expense Ledger tab ──────────────────────────────────────────────── */}
       {tab === 'expenses' && (
         <div>
@@ -1492,7 +1590,7 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
             return uncatCount > 0 ? (
               <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                 <p className="text-sm text-amber-800">
-                  <strong>{uncatCount} uncategorised transaction{uncatCount !== 1 ? 's' : ''}</strong> in {plYear} are excluded — categorise them in the AED or EUR tabs to include them here.
+                  <strong>{uncatCount} uncategorised transaction{uncatCount !== 1 ? 's' : ''}</strong> in {plYear} are excluded — categorise them in the AED, EUR, or Credit Card tabs to include them here.
                 </p>
               </div>
             ) : null
