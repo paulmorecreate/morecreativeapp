@@ -303,7 +303,7 @@ export async function POST(req: NextRequest) {
           currency: 'AED',
           account_number: accountNumber,
           account_type: 'credit_card',
-          reference: `CC-${row.seq}`,
+          reference: 'CC',
           description: row.description,
           credit: row.credit,
           debit: row.debit,
