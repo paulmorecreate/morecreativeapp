@@ -55,6 +55,8 @@ const DOCUMENT_REQUIRED_OPTIONS = [
   'Not Required',
 ]
 
+const CC_LIMIT_AED = 25000
+
 // Categories that flow through P&L as expenses (debits in trial balance)
 const EXPENSE_CATEGORIES = new Set([
   'Advertising/Marketing',
@@ -1501,12 +1503,18 @@ export function BankingClient({ transactions: initialTransactions, openingBalanc
                 // On CC: purchases are debits (aed_equivalent negative), payments are credits (positive)
                 // Amount owed = opening owed - net movements (since payments are positive aed_equivalent)
                 const totalOwed = obOwed - txNet
+                const availableBalance = CC_LIMIT_AED - Math.abs(totalOwed)
                 return (
-                  <div className="grid grid-cols-3 gap-3 mb-5">
+                  <div className="grid grid-cols-4 gap-3 mb-5">
                     <div className="bg-orange-50 border border-orange-100 rounded-xl px-5 py-3.5">
                       <p className="text-xs font-medium text-orange-600 mb-0.5">Outstanding Balance</p>
                       <p className="text-lg font-semibold text-orange-800">AED {Math.abs(totalOwed).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
                       <p className="text-xs text-orange-500 mt-0.5">Total owed on card</p>
+                    </div>
+                    <div className={cn('border rounded-xl px-5 py-3.5', availableBalance >= 0 ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100')}>
+                      <p className={cn('text-xs font-medium mb-0.5', availableBalance >= 0 ? 'text-green-600' : 'text-red-600')}>Available Balance</p>
+                      <p className={cn('text-lg font-semibold', availableBalance >= 0 ? 'text-green-800' : 'text-red-800')}>AED {Math.abs(availableBalance).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                      <p className={cn('text-xs mt-0.5', availableBalance >= 0 ? 'text-green-500' : 'text-red-500')}>of AED {CC_LIMIT_AED.toLocaleString()} limit</p>
                     </div>
                     <div className="bg-white border border-gray-200 rounded-xl px-5 py-3.5">
                       <p className="text-xs font-medium text-gray-500 mb-0.5">Total Spend</p>

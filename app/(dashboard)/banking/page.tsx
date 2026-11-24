@@ -47,7 +47,7 @@ export default async function BankingPage({ searchParams }: { searchParams: Prom
     supabase
       .from('bank_accounting_categories')
       .select('*')
-      .order('sort_order'),
+      .order('name'),
   ])
 
   const validTabs = ['upload', 'aed', 'eur', 'credit-card', 'expenses', 'income', 'shareholder', 'monthly-pl', 'trial-balance']
